@@ -1,6 +1,6 @@
 # Change Log
 
-All notable changes to the "swatplus_vscode_dataselector" extension will be documented in this file.
+All notable changes to the "swatplus-vscode-dataset-selector" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 

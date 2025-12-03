@@ -71,7 +71,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Variable resolver for launch.json
 	const datasetFolderProvider = vscode.commands.registerCommand('swat-dataset-selector.getDatasetFolder', () => {
-		return swatProvider.getSelectedDataset() || '${workspaceFolder}/debug_folder';
+		return swatProvider.getSelectedDataset() || undefined;
 	});
 
 	// Command to select a recent dataset
