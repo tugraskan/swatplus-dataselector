@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <!-- Mask where white = visible, black = transparent (hole for S+) -->
+    <mask id="splus-cutout">
+      <rect width="128" height="128" fill="white"/>
+      <text x="50%" y="68"
+            text-anchor="middle"
+            font-family="Segoe UI, system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif"
+            font-size="72"
+            font-weight="700"
+            fill="black">S+</text>
+    </mask>
+  </defs>
+  <!-- Solid square that will be tinted by VS Code; S+ becomes transparent -->
+  <rect width="128" height="128" fill="black" mask="url(#splus-cutout)"/>
+</svg>
