@@ -1,5 +1,20 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as crypto from 'crypto';
+
+/**
+ * Escapes HTML special characters to prevent XSS attacks
+ */
+function escapeHtml(text: string): string {
+    const map: { [key: string]: string } = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, char => map[char]);
+}
 
 export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'swatDatasetView';
@@ -77,6 +92,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
     }
 
     private _getHtmlForWebview(webview: vscode.Webview): string {
+        // Generate nonce for CSP
+        const nonce = crypto.randomBytes(16).toString('base64');
+
         const selectedHtml = this.selectedDataset
             ? `<div class="section">
                 <div class="section-header">
@@ -84,8 +102,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     <span class="section-title">Current Dataset</span>
                 </div>
                 <div class="selected-dataset">
-                    <div class="dataset-name">${path.basename(this.selectedDataset)}</div>
-                    <div class="dataset-path" title="${this.selectedDataset}">${this.selectedDataset}</div>
+                    <div class="dataset-name">${escapeHtml(path.basename(this.selectedDataset))}</div>
+                    <div class="dataset-path" title="${escapeHtml(this.selectedDataset)}">${escapeHtml(this.selectedDataset)}</div>
                 </div>
                </div>`
             : `<div class="section">
@@ -109,13 +127,13 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 </div>
                 <div class="section-content" id="recent-content">
                     ${this.recentDatasets.slice(0, 5).map(dataset => `
-                        <div class="recent-item" data-path="${dataset}">
+                        <div class="recent-item" data-path="${escapeHtml(dataset)}">
                             <span class="codicon codicon-folder"></span>
                             <div class="recent-item-info">
-                                <div class="recent-item-name">${path.basename(dataset)}</div>
-                                <div class="recent-item-path" title="${dataset}">${dataset}</div>
+                                <div class="recent-item-name">${escapeHtml(path.basename(dataset))}</div>
+                                <div class="recent-item-path" title="${escapeHtml(dataset)}">${escapeHtml(dataset)}</div>
                             </div>
-                            <button class="icon-button remove-btn" data-path="${dataset}" title="Remove from recent">
+                            <button class="icon-button remove-btn" data-path="${escapeHtml(dataset)}" title="Remove from recent">
                                 <span class="codicon codicon-close"></span>
                             </button>
                         </div>
@@ -129,7 +147,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource};">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}'; font-src ${webview.cspSource};">
     <title>SWAT+ Dataset Selector</title>
     <style>
         :root {
@@ -240,6 +258,15 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         .action-button.secondary:hover {
             background-color: var(--vscode-button-secondaryHoverBackground);
+        }
+
+        .action-button.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .action-button.disabled:hover {
+            background-color: var(--vscode-button-secondaryBackground);
         }
 
         .button-row {
@@ -404,7 +431,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     <span class="codicon codicon-folder-opened"></span>
                     Select Folder
                 </button>
-                <button class="action-button secondary" id="launchDebugBtn" ${!this.selectedDataset ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>
+                <button class="action-button secondary${!this.selectedDataset ? ' disabled' : ''}" id="launchDebugBtn" ${!this.selectedDataset ? 'disabled' : ''}>
                     <span class="codicon codicon-debug-alt"></span>
                     Debug
                 </button>
@@ -425,7 +452,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         </div>
     </div>
 
-    <script>
+    <script nonce="${nonce}">
         (function() {
             const vscode = acquireVsCodeApi();
 
