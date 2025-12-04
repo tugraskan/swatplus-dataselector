@@ -27,7 +27,8 @@
       "swat-dataset-selector": [
         {
           "id": "swatDatasetView",
-          "name": "Dataset Selector"
+          "name": "Dataset Selector",
+          "type": "webview"
         }
       ]
     },

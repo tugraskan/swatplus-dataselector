@@ -1,8 +1,7 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
-import * as path from 'path';
-import { SwatDatasetProvider } from './swatView';
+import { SwatDatasetWebviewProvider } from './swatWebviewProvider';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -10,12 +9,12 @@ export function activate(context: vscode.ExtensionContext) {
 
 	console.log('SWAT+ Dataset Selector extension is now active!');
 
-	// Create and register the tree view
-	const swatProvider = new SwatDatasetProvider(context);
-	const treeView = vscode.window.createTreeView('swatDatasetView', {
-		treeDataProvider: swatProvider,
-		showCollapseAll: false
-	});
+	// Create and register the webview view provider
+	const swatProvider = new SwatDatasetWebviewProvider(context);
+	const webviewViewProvider = vscode.window.registerWebviewViewProvider(
+		SwatDatasetWebviewProvider.viewType,
+		swatProvider
+	);
 
 	// Command to select dataset folder
 	const selectDataset = vscode.commands.registerCommand('swat-dataset-selector.selectDataset', async () => {
@@ -86,7 +85,7 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	context.subscriptions.push(
-		treeView,
+		webviewViewProvider,
 		selectDataset,
 		selectAndDebug,
 		launchWithSelected,
