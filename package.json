@@ -28,7 +28,8 @@
         {
           "id": "swatDatasetView",
           "name": "Dataset Selector",
-          "type": "webview"
+          "type": "webview",
+          "icon": "resources/splus-activitybar-cutout.svg"
         }
       ]
     },
