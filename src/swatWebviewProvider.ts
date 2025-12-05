@@ -165,27 +165,73 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             star: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 .587l3.668 7.431L23 9.75l-5.5 5.367L18.335 24 12 20.202 5.665 24l1.835-8.883L1 9.75l7.332-1.732L12 .587z" fill="currentColor"/></svg>`
         };
 
-        const selectedHtml = this.selectedDataset
-            ? `<div class="section">
+        // Combined Selected Dataset + TXTINOUT section: lives below Recent Datasets
+        let combinedHtml = '';
+        if (!this.selectedDataset) {
+            combinedHtml = `<div class="section">
                 <div class="section-header">
                     ${svgs.folder}
-                    <span class="section-title">Current Dataset</span>
-                </div>
-                <div class="selected-dataset">
-                    <div class="dataset-name">${escapeHtml(path.basename(this.selectedDataset))}</div>
-                    <div class="dataset-path" title="${escapeHtml(this.selectedDataset)}">${escapeHtml(this.selectedDataset)}</div>
-                </div>
-               </div>`
-            : `<div class="section">
-                <div class="section-header">
-                    ${svgs.folder}
-                    <span class="section-title">Current Dataset</span>
+                    <span class="section-title">Selected dataset: </span>
+                    <div class="dataset-header-path">No dataset selected</div>
                 </div>
                 <div class="no-dataset">
                     ${svgs.info}
                     <span>No dataset selected</span>
                 </div>
                </div>`;
+        } else {
+            try {
+                const fileCioPath = path.join(this.selectedDataset, 'File.cio');
+                const entries = fs.existsSync(this.selectedDataset) ? fs.readdirSync(this.selectedDataset, { withFileTypes: true }) : [];
+                const itemsHtml = entries.map(ent => {
+                    const full = path.join(this.selectedDataset || '', ent.name);
+                    const icon = ent.isDirectory() ? svgs.folder : svgs.file;
+                    return `
+                            <div class="txt-item" data-path="${escapeHtml(full)}">
+                                    ${icon}
+                                    <div class="recent-item-info">
+                                        <div class="recent-item-name">${escapeHtml(ent.name)}</div>
+                                        <div class="recent-item-path" title="${escapeHtml(full)}">${escapeHtml(full)}</div>
+                                    </div>
+                                    <button class="icon-button txt-close-btn" data-path="${escapeHtml(full)}" title="Close file">
+                                        ${svgs.close}
+                                    </button>
+                                </div>
+                        `;
+                }).join('');
+
+                combinedHtml = `<div class="selected-window">
+                        <div class="selected-window-header">
+                            <div class="selected-window-header-left">
+                                ${svgs.folder}
+                                <span class="section-title">Selected dataset:</span>
+                                <div class="dataset-header-path" title="${escapeHtml(this.selectedDataset)}">${escapeHtml(path.basename(this.selectedDataset))} — ${escapeHtml(this.selectedDataset)}</div>
+                            </div>
+                            <div class="selected-window-header-right">
+                                <button class="icon-button close-txt-btn" title="Close all files">
+                                    ${svgs.close}
+                                </button>
+                            </div>
+                        </div>
+                        <div class="selected-window-body">
+                            <div class="section-content" id="selected-files-content">
+                                ${itemsHtml}
+                            </div>
+                        </div>
+                       </div>`;
+            } catch (e) {
+                combinedHtml = `<div class="section">
+                    <div class="section-header">
+                        ${svgs.folder}
+                        <span class="section-title">Selected dataset</span>
+                    </div>
+                    <div class="no-dataset">
+                        ${svgs.info}
+                        <span>Error reading dataset folder</span>
+                    </div>
+                   </div>`;
+            }
+        }
 
         const recentDatasetsHtml = this.recentDatasets.length > 0
             ? `<div class="section">
@@ -212,79 +258,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                </div>`
             : '';
 
-        // TXTINOUT section: check for File.cio in selected dataset and render an explorer if present
-        let txtSectionHtml = '';
-        if (!this.selectedDataset) {
-            txtSectionHtml = `<div class="section">
-                <div class="section-header">
-                    ${svgs.folder}
-                    <span class="section-title">TXTINOUT</span>
-                </div>
-                <div class="no-dataset">
-                    ${svgs.info}
-                    <span>No dataset selected</span>
-                </div>
-               </div>`;
-        } else {
-            try {
-                const fileCioPath = path.join(this.selectedDataset, 'File.cio');
-                if (!fs.existsSync(fileCioPath)) {
-                    txtSectionHtml = `<div class="section">
-                        <div class="section-header">
-                            ${svgs.folder}
-                            <span class="section-title">TXTINOUT</span>
-                        </div>
-                        <div class="no-dataset">
-                            ${svgs.info}
-                            <span>File.cio not found in selected dataset</span>
-                        </div>
-                       </div>`;
-                } else {
-                    const entries = fs.readdirSync(this.selectedDataset, { withFileTypes: true });
-                    const itemsHtml = entries.map(ent => {
-                        const full = path.join(this.selectedDataset || '', ent.name);
-                        const icon = ent.isDirectory() ? svgs.folder : svgs.file;
-                        return `
-                            <div class="txt-item" data-path="${escapeHtml(full)}">
-                                    ${icon}
-                                    <div class="recent-item-info">
-                                        <div class="recent-item-name">${escapeHtml(ent.name)}</div>
-                                        <div class="recent-item-path" title="${escapeHtml(full)}">${escapeHtml(full)}</div>
-                                    </div>
-                                    <button class="icon-button txt-close-btn" data-path="${escapeHtml(full)}" title="Close file">
-                                        ${svgs.close}
-                                    </button>
-                                </div>
-                        `;
-                    }).join('');
-
-                    txtSectionHtml = `<div class="section">
-                        <div class="section-header collapsible" data-section="txtinout">
-                            ${svgs.chevronDown}
-                            ${svgs.file}
-                            <span class="section-title">TXTINOUT</span>
-                            <button class="icon-button close-txt-btn" title="Close TXTINOUT">
-                                ${svgs.close}
-                            </button>
-                        </div>
-                        <div class="section-content" id="txtinout-content">
-                            ${itemsHtml}
-                        </div>
-                       </div>`;
-                }
-            } catch (e) {
-                txtSectionHtml = `<div class="section">
-                    <div class="section-header">
-                        ${svgs.folder}
-                        <span class="section-title">TXTINOUT</span>
-                    </div>
-                    <div class="no-dataset">
-                        ${svgs.info}
-                        <span>Error reading dataset folder</span>
-                    </div>
-                   </div>`;
-            }
-        }
+        // The combinedHtml above now replaces the separate TXTINOUT block.
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -461,6 +435,49 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             font-size: 12px;
         }
 
+        /* Selected-window: visually distinct subsection that contains header and scrollable body */
+        .selected-window {
+            background-color: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 6px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 1px 0 rgba(0,0,0,0.04);
+        }
+
+        .selected-window-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 8px 10px;
+            background-color: var(--vscode-sideBarSectionHeader-background);
+            border-bottom: 1px solid var(--vscode-panel-border);
+        }
+
+        .selected-window-header-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .dataset-header-path {
+            font-size: 12px;
+            color: var(--vscode-descriptionForeground);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+        }
+
+        .selected-window-body {
+            padding: 8px;
+            max-height: 360px;
+            overflow: hidden;
+        }
+
         /* Recent items */
         .recent-item {
             display: flex;
@@ -482,26 +499,23 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             transition: background-color 0.1s ease;
         }
 
-        /* TXTINOUT specific content area — make scrollable when large */
-        #txtinout-content {
+        /* Selected files specific content area — make scrollable when large */
+        #selected-files-content {
             overflow: auto;
             padding-right: 6px;
+            max-height: 360px;
         }
 
-        /* Recent fixed height for ~4 items */
+        /* Recent fixed height for ~4 items (reduced ~20%) */
         #recent-content {
-            height: 168px; /* ~4 items */
+            height: 136px; /* ~4 items, slightly smaller */
             overflow: auto;
         }
 
-        /* Close button in section header (hidden when collapsed) */
+        /* Close button in section header */
         .close-txt-btn {
             margin-left: auto;
             opacity: 0.9;
-            display: none;
-        }
-
-        .section-header:not(.collapsed) .close-txt-btn {
             display: inline-flex;
         }
 
@@ -671,16 +685,12 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         <div class="divider"></div>
 
         <div class="middle">
-            ${selectedHtml}
-
             ${recentDatasetsHtml}
 
-            <!-- Divider separating Recent Datasets from TXTINOUT (non-interactive) -->
-            <div class="divider" id="recent-divider" title="Recent / TXTINOUT separator"><div class="handle"></div></div>
+            <!-- Divider separating Recent Datasets from Selected dataset window -->
+            <div class="divider" id="recent-divider" title="Recent / Selected separator"><div class="handle"></div></div>
 
-            ${txtSectionHtml}
-
-            <!-- TXTINOUT fills remaining middle area; small static area removed -->
+            ${combinedHtml}
         </div>
 
         <div class="help-text">
@@ -753,14 +763,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     e.stopPropagation();
                     // ask host to close all open files for the current dataset
                     vscode.postMessage({ type: 'closeAllDatasetFiles' });
-                    // collapse the section in the UI
-                    const header = btn.closest('.section-header');
-                    if (header && !header.classList.contains('collapsed')) {
-                        header.classList.add('collapsed');
-                        const sectionId = header.dataset.section;
-                        const content = document.getElementById(sectionId + '-content');
-                        if (content) content.classList.add('hidden');
-                    }
                 });
             });
 
@@ -781,7 +783,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             function setInitialMiddleHeights() {
                 const container = document.querySelector('.middle');
                 const recentContent = document.getElementById('recent-content');
-                const txtContentLocal = document.getElementById('txtinout-content');
+                const txtContentLocal = document.getElementById('selected-files-content');
                 if (!container || !recentContent || !txtContentLocal) return;
                 const total = container.clientHeight;
                 if (total <= 0) return;
