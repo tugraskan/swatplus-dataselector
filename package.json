@@ -4,6 +4,10 @@
   "description": "Browse and select SWAT+ dataset folders for debugging",
   "version": "0.0.1",
   "publisher": "taciugraskan",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tugraskan/swatplus-dataselector"
+  },
   "icon": "resources/splus-icon-light-128.png",
   "engines": {
     "vscode": "^1.106.1"
