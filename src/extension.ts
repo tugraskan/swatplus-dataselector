@@ -85,13 +85,14 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	// Command to open a file from the webview explorer
+	// Opens the file in the left editor group (ViewColumn.One) equivalent to "move left" action
 	const openFile = vscode.commands.registerCommand('swat-dataset-selector.openFile', async (filePath: string) => {
 		if (!filePath || typeof filePath !== 'string') {
 			return;
 		}
 		try {
 			const doc = await vscode.workspace.openTextDocument(filePath);
-			await vscode.window.showTextDocument(doc, { preview: false });
+			await vscode.window.showTextDocument(doc, { preview: false, viewColumn: vscode.ViewColumn.One });
 		} catch (err) {
 			console.error('Failed to open file', err);
 			vscode.window.showErrorMessage('Failed to open file: ' + (err instanceof Error ? err.message : String(err)));
