@@ -164,8 +164,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             file: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="currentColor" stroke-width="1" fill="none"/></svg>`,
             star: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 .587l3.668 7.431L23 9.75l-5.5 5.367L18.335 24 12 20.202 5.665 24l1.835-8.883L1 9.75l7.332-1.732L12 .587z" fill="currentColor"/></svg>`
         };
-
-        // Combined Selected Dataset + TXTINOUT section: lives below Recent Datasets
         let combinedHtml = '';
         if (!this.selectedDataset) {
             combinedHtml = `<div class="section">
@@ -188,14 +186,13 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     const icon = ent.isDirectory() ? svgs.folder : svgs.file;
                     return `
                             <div class="txt-item" data-path="${escapeHtml(full)}">
-                                    ${icon}
-                                    <div class="recent-item-info">
-                                        <div class="recent-item-name">${escapeHtml(ent.name)}</div>
-                                        <div class="recent-item-path" title="${escapeHtml(full)}">${escapeHtml(full)}</div>
-                                    </div>
                                     <button class="icon-button txt-close-btn" data-path="${escapeHtml(full)}" title="Close file">
                                         ${svgs.close}
                                     </button>
+                                    ${icon}
+                                    <div class="recent-item-info">
+                                        <div class="recent-item-name">${escapeHtml(ent.name)}</div>
+                                    </div>
                                 </div>
                         `;
                 }).join('');
@@ -204,14 +201,20 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         <div class="selected-window-header">
                             <div class="selected-window-header-left">
                                 ${svgs.folder}
-                                <span class="section-title">Selected dataset:</span>
-                                <div class="dataset-header-path" title="${escapeHtml(this.selectedDataset)}">${escapeHtml(path.basename(this.selectedDataset))} — ${escapeHtml(this.selectedDataset)}</div>
+                                <div style="display:flex;flex-direction:column;gap:2px;width:100%">
+                                    <span class="section-title">Selected dataset:</span>
+                                    <div class="dataset-header-info">
+                                        <div class="dataset-header-name">${escapeHtml(path.basename(this.selectedDataset))}</div>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="selected-window-header-right">
-                                <button class="icon-button close-txt-btn" title="Close all files">
-                                    ${svgs.close}
-                                </button>
-                            </div>
+                            <button class="icon-button close-txt-btn close-all-btn" title="Close all files">
+                                ${svgs.close}
+                            </button>
+                        </div>
+                        <!-- Dedicated horizontal scroller for the full dataset path -->
+                        <div class="selected-window-path-scroll" title="${escapeHtml(this.selectedDataset)}">
+                            <div class="dataset-header-path">${escapeHtml(this.selectedDataset)}</div>
                         </div>
                         <div class="selected-window-body">
                             <div class="section-content" id="selected-files-content">
@@ -396,6 +399,17 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             flex: 1;
         }
 
+        /* Restyle specific buttons: Select Folder (blue) and Debug (green) */
+        #selectDatasetBtn {
+            background-color: #0A84FF;
+            color: white;
+        }
+
+        #launchDebugBtn {
+            background-color: #16a34a;
+            color: white;
+        }
+
         /* Selected dataset */
         .selected-dataset {
             background-color: var(--vscode-editor-background);
@@ -454,6 +468,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             padding: 8px 10px;
             background-color: var(--vscode-sideBarSectionHeader-background);
             border-bottom: 1px solid var(--vscode-panel-border);
+            position: relative;
         }
 
         .selected-window-header-left {
@@ -461,21 +476,95 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             align-items: center;
             gap: 8px;
             min-width: 0;
+            flex: 1;
         }
 
         .dataset-header-path {
             font-size: 12px;
             color: var(--vscode-descriptionForeground);
+            white-space: nowrap; /* keep path on a single line */
             overflow: hidden;
             text-overflow: ellipsis;
+            display: inline-block;
+        }
+
+        .selected-window-path-scroll {
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding: 6px 10px;
+            background-color: var(--vscode-editor-background);
+            border-top: 1px solid var(--vscode-panel-border);
+            border-bottom: 1px solid var(--vscode-panel-border);
+        }
+
+        .selected-window-path-scroll .dataset-header-path {
+            display: inline-block;
+            min-width: 100%;
             white-space: nowrap;
-            min-width: 0;
+        }
+
+        .dataset-header-name {
+            font-weight: 700;
+            font-size: 12px;
+            color: var(--vscode-foreground);
+        }
+
+        .dataset-header-info { max-width: calc(100% - 120px); }
+
+        .close-all-btn {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: #b91c1c;
+            color: white;
+            border: none;
+            padding: 8px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            opacity: 1 !important; /* ensure always visible even though .icon-button defaults to hidden */
+            pointer-events: auto !important;
+        }
+
+        .dataset-header-path-wrap {
+            overflow-x: hidden; /* hide header scrollbar; files area controls scrolling */
+            max-width: 100%;
         }
 
         .selected-window-body {
             padding: 8px;
             max-height: 360px;
             overflow: hidden;
+            position: relative; /* for absolute overlay positioning */
+        }
+
+        /* Per-row close button: positioned at the right edge of each row */
+        .txt-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.1s ease;
+            justify-content: flex-start;
+        }
+
+        .txt-item .recent-item-info { flex: 1; min-width: 0; }
+
+        .txt-close-btn {
+            opacity: 1 !important;
+            pointer-events: auto !important;
+            background: transparent;
+            border: none;
+            color: var(--vscode-foreground);
+            margin-right: 8px;
+            margin-left: 0;
         }
 
         /* Recent items */
@@ -497,13 +586,16 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             border-radius: 4px;
             cursor: pointer;
             transition: background-color 0.1s ease;
+            min-width: 480px; /* allow horizontal scrolling when names/paths are long */
         }
 
         /* Selected files specific content area — make scrollable when large */
         #selected-files-content {
-            overflow: auto;
+            overflow-x: auto; /* horizontal scrollbar used to scroll header path */
+            overflow-y: auto;
             padding-right: 6px;
             max-height: 360px;
+            white-space: normal;
         }
 
         /* Recent fixed height for ~4 items (reduced ~20%) */
@@ -597,6 +689,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             text-overflow: ellipsis;
         }
 
+
         .icon-button {
             background: transparent;
             border: none;
@@ -604,8 +697,14 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             padding: 4px;
             border-radius: 4px;
             color: var(--vscode-foreground);
-            opacity: 0;
+            opacity: 0; /* default hidden for general toolbar buttons */
             transition: opacity 0.1s ease, background-color 0.1s ease;
+        }
+
+        /* Always show per-file close buttons and recent remove buttons */
+        .txt-close-btn, .remove-btn {
+            opacity: 1 !important;
+            display: inline-flex;
         }
 
         .recent-item:hover .icon-button {
@@ -666,10 +765,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 <body>
     <div class="container">
         <div class="actions">
-            <button class="action-button primary" id="selectAndDebugBtn">
-                ${svgs.debugPlay}
-                Select Dataset & Debug
-            </button>
             <div class="button-row">
                 <button class="action-button secondary" id="selectDatasetBtn">
                     ${svgs.folderOpened}
@@ -703,16 +798,19 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         (function() {
             const vscode = acquireVsCodeApi();
 
-            // Button click handlers
-            document.getElementById('selectDatasetBtn').addEventListener('click', () => {
+            // Safe lookup to avoid null errors in webview script
+            const $ = id => document.getElementById(id);
+
+            // Button click handlers (guarded)
+            const selectBtn = $('selectDatasetBtn');
+            if (selectBtn) selectBtn.addEventListener('click', () => {
                 vscode.postMessage({ type: 'selectDataset' });
             });
 
-            document.getElementById('selectAndDebugBtn').addEventListener('click', () => {
-                vscode.postMessage({ type: 'selectAndDebug' });
-            });
+            // 'Select Dataset & Debug' button removed; no handler required.
 
-            document.getElementById('launchDebugBtn').addEventListener('click', () => {
+            const launchBtn = $('launchDebugBtn');
+            if (launchBtn) launchBtn.addEventListener('click', () => {
                 vscode.postMessage({ type: 'launchDebug' });
             });
 
@@ -766,7 +864,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 });
             });
 
-            // Per-file close buttons: close a single file in the editor (if open)
+            // Per-file close buttons: use inline buttons present in each row (left-most now)
             document.querySelectorAll('.txt-close-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -797,6 +895,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             // Apply initial heights now and on resize
             setInitialMiddleHeights();
             window.addEventListener('resize', () => setInitialMiddleHeights());
+
+            // No extra header/files scroll syncing — header path has its own horizontal scroller now.
 
             // No bottom draggable divider in the simplified layout; nothing to resize here.
         })();
