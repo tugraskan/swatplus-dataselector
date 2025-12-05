@@ -84,6 +84,69 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.showInformationMessage(`Current dataset: ${datasetPath}`);
 	});
 
+	// Command to open a file from the webview explorer
+	const openFile = vscode.commands.registerCommand('swat-dataset-selector.openFile', async (filePath: string) => {
+		if (!filePath || typeof filePath !== 'string') return;
+		try {
+			const doc = await vscode.workspace.openTextDocument(filePath);
+			await vscode.window.showTextDocument(doc, { preview: false });
+		} catch (err) {
+			console.error('Failed to open file', err);
+			vscode.window.showErrorMessage('Failed to open file: ' + (err instanceof Error ? err.message : String(err)));
+		}
+	});
+
+	// Command to close a specific open file (if open)
+	const closeFile = vscode.commands.registerCommand('swat-dataset-selector.closeFile', async (filePath: string) => {
+		if (!filePath || typeof filePath !== 'string') return;
+		try {
+			// Find if the document is open
+			const doc = vscode.workspace.textDocuments.find(d => d.fileName === filePath || d.uri.fsPath === filePath);
+			if (!doc) return;
+			// Reveal the document without taking focus, then close active editor
+			await vscode.window.showTextDocument(doc, { preview: false, preserveFocus: true });
+			await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+		} catch (err) {
+			console.error('Failed to close file', err);
+		}
+	});
+
+	// Command to close all open editors whose path starts with the given dataset folder
+	const closeAllDatasetFiles = vscode.commands.registerCommand('swat-dataset-selector.closeAllDatasetFiles', async (datasetFolder: string | undefined) => {
+		if (!datasetFolder) return;
+		try {
+			// Find open documents that belong to this dataset
+			const docs = vscode.workspace.textDocuments.filter(d => d.uri && d.uri.fsPath && d.uri.fsPath.startsWith(datasetFolder));
+			for (const doc of docs) {
+				try {
+					await vscode.window.showTextDocument(doc, { preview: false, preserveFocus: true });
+					await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+				} catch (inner) {
+					console.error('Error closing document', doc.uri.fsPath, inner);
+				}
+			}
+		} catch (err) {
+			console.error('Failed to close dataset files', err);
+		}
+	});
+
+	// Debug helper: seed test data so the webview shows content for troubleshooting
+	const seedTestData = vscode.commands.registerCommand('swat-dataset-selector.seedTestData', async () => {
+		try {
+			// create a couple fake dataset paths (they don't need to exist)
+			const demo1 = `${vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || 'C:/workspace' }/data/test_dataset_1`;
+			const demo2 = `${vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || 'C:/workspace' }/data/test_dataset_2`;
+			swatProvider.setSelectedDataset(demo1);
+			// directly update recent list in storage so UI shows multiple entries
+			context.globalState.update('recentDatasets', [demo1, demo2]);
+			swatProvider.setSelectedDataset(demo1);
+			vscode.window.showInformationMessage('SWAT+ Dataset test data seeded');
+		} catch (err) {
+			console.error('Failed to seed test data', err);
+			vscode.window.showErrorMessage('Failed to seed test data: ' + (err instanceof Error ? err.message : String(err)));
+		}
+	});
+
 	context.subscriptions.push(
 		webviewViewProvider,
 		selectDataset,
@@ -92,6 +155,10 @@ export function activate(context: vscode.ExtensionContext) {
 		datasetFolderProvider,
 		selectRecentDataset,
 		showDatasetInfo
+		,openFile
+		,closeFile
+		,closeAllDatasetFiles
+		,seedTestData
 	);
 }
 
