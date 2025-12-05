@@ -494,12 +494,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             overflow: auto;
         }
 
-        /* Small static area below TXTINOUT */
-        .small-static .section-content {
-            height: 84px; /* half of recent */
-            overflow: auto;
-        }
-
         /* Close button in section header (hidden when collapsed) */
         .close-txt-btn {
             margin-left: auto;
@@ -546,7 +540,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         .divider:hover .handle { background-color: rgba(128,128,128,0.18); }
 
-        .divider-toggle { cursor: pointer; }
+        .divider-toggle { cursor: default; }
         .drag-divider { cursor: row-resize; }
 
         /* Middle area: contains Recent and TXTINOUT; constrained height so sections don't overlap */
@@ -681,21 +675,12 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
             ${recentDatasetsHtml}
 
-            <!-- Divider that toggles Recent Datasets (click) and separates Recent from TXTINOUT -->
-            <div class="divider divider-toggle" id="recent-toggle-divider" title="Drag to resize TXTINOUT or click to toggle Recent"><div class="handle"></div></div>
+            <!-- Divider separating Recent Datasets from TXTINOUT (non-interactive) -->
+            <div class="divider" id="recent-divider" title="Recent / TXTINOUT separator"><div class="handle"></div></div>
 
             ${txtSectionHtml}
 
-            <!-- Small static section below TXTINOUT (half the height of Recent) -->
-            <div class="section small-static" id="post-txt-static">
-                <div class="section-header">
-                    ${svgs.folder}
-                    <span class="section-title">Info</span>
-                </div>
-                <div class="section-content" id="post-txt-content">
-                    <div style="padding:8px; font-size:11px; color:var(--vscode-descriptionForeground);">Additional static area</div>
-                </div>
-            </div>
+            <!-- TXTINOUT fills remaining middle area; small static area removed -->
         </div>
 
         <div class="help-text">
@@ -790,67 +775,20 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 });
             });
 
-            // Divider between Recent and TXTINOUT: supports click-to-toggle Recent and drag-to-resize TXT only (Recent is fixed)
-            const recentToggle = document.getElementById('recent-toggle-divider');
-            if (recentToggle) {
-                recentToggle.addEventListener('mousedown', (e) => {
-                    let dragging = false;
-                    const startY = e.clientY;
-                    const container = document.querySelector('.middle');
-                    const recentContent = document.getElementById('recent-content');
-                    const txtContentLocal = document.getElementById('txtinout-content');
-                    const postStatic = document.getElementById('post-txt-content');
-                    if (!container || !recentContent || !txtContentLocal || !postStatic) return;
+            // Non-interactive divider between Recent and TXTINOUT: intentionally no click handler
 
-                    const recentH = recentContent.clientHeight; // fixed
-                    const staticH = postStatic.clientHeight; // fixed small area
-                    const startTxtH = txtContentLocal.clientHeight;
-
-                    const parentH = container.clientHeight;
-                    const maxTxt = parentH - recentH - staticH - 20; // leave some padding
-                    const minTxt = 40;
-
-                    const onMove = (ev) => {
-                        dragging = true;
-                        const delta = ev.clientY - startY; // positive -> mouse moved down -> increase TXT
-                        let desired = startTxtH + delta;
-                        desired = Math.max(minTxt, Math.min(maxTxt, desired));
-                        txtContentLocal.style.height = desired + 'px';
-                    };
-
-                    const onUp = () => {
-                        document.removeEventListener('mousemove', onMove);
-                        document.removeEventListener('mouseup', onUp);
-                        if (!dragging) {
-                            // treat as click: toggle recent section
-                            const recentHeader = document.querySelector('.section-header[data-section="recent"]');
-                            if (recentHeader) {
-                                recentHeader.classList.toggle('collapsed');
-                                const content = document.getElementById('recent-content');
-                                if (content) content.classList.toggle('hidden');
-                            }
-                        }
-                    };
-
-                    document.addEventListener('mousemove', onMove);
-                    document.addEventListener('mouseup', onUp);
-                });
-            }
-
-            // Set initial heights: recent fixed (~4 items), small static half of recent, txt fills remaining
+            // Set initial heights: recent fixed (~4 items), txt fills remaining
             function setInitialMiddleHeights() {
                 const container = document.querySelector('.middle');
                 const recentContent = document.getElementById('recent-content');
                 const txtContentLocal = document.getElementById('txtinout-content');
-                const postStatic = document.getElementById('post-txt-content');
-                if (!container || !recentContent || !txtContentLocal || !postStatic) return;
+                if (!container || !recentContent || !txtContentLocal) return;
                 const total = container.clientHeight;
                 if (total <= 0) return;
-                const recentH = 168; // fixed
-                const staticH = Math.floor(recentH / 2);
-                const txtH = Math.max(40, total - recentH - staticH - 20);
+                const recentH = 136; // fixed (~20% smaller than previous 168)
+                const padding = 20;
+                const txtH = Math.max(40, total - recentH - padding);
                 recentContent.style.height = recentH + 'px';
-                postStatic.style.height = staticH + 'px';
                 txtContentLocal.style.height = txtH + 'px';
             }
 
@@ -858,7 +796,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             setInitialMiddleHeights();
             window.addEventListener('resize', () => setInitialMiddleHeights());
 
-            // (Bottom resize handle removed) top divider handles TXT resizing now.
+            // No bottom draggable divider in the simplified layout; nothing to resize here.
         })();
     </script>
 </body>

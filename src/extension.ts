@@ -86,7 +86,9 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Command to open a file from the webview explorer
 	const openFile = vscode.commands.registerCommand('swat-dataset-selector.openFile', async (filePath: string) => {
-		if (!filePath || typeof filePath !== 'string') return;
+		if (!filePath || typeof filePath !== 'string') {
+			return;
+		}
 		try {
 			const doc = await vscode.workspace.openTextDocument(filePath);
 			await vscode.window.showTextDocument(doc, { preview: false });
@@ -98,11 +100,15 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Command to close a specific open file (if open)
 	const closeFile = vscode.commands.registerCommand('swat-dataset-selector.closeFile', async (filePath: string) => {
-		if (!filePath || typeof filePath !== 'string') return;
+		if (!filePath || typeof filePath !== 'string') {
+			return;
+		}
 		try {
 			// Find if the document is open
 			const doc = vscode.workspace.textDocuments.find(d => d.fileName === filePath || d.uri.fsPath === filePath);
-			if (!doc) return;
+			if (!doc) {
+				return;
+			}
 			// Reveal the document without taking focus, then close active editor
 			await vscode.window.showTextDocument(doc, { preview: false, preserveFocus: true });
 			await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
@@ -113,7 +119,9 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Command to close all open editors whose path starts with the given dataset folder
 	const closeAllDatasetFiles = vscode.commands.registerCommand('swat-dataset-selector.closeAllDatasetFiles', async (datasetFolder: string | undefined) => {
-		if (!datasetFolder) return;
+		if (!datasetFolder) {
+			return;
+		}
 		try {
 			// Find open documents that belong to this dataset
 			const docs = vscode.workspace.textDocuments.filter(d => d.uri && d.uri.fsPath && d.uri.fsPath.startsWith(datasetFolder));
