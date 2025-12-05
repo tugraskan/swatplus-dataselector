@@ -19,13 +19,13 @@ function escapeHtml(text: string): string {
 }
 
 function normalizeToPath(value: any): string | undefined {
-    if (value == null) return undefined;
-    if (typeof value === 'string') return value;
+    if (value == null) {return undefined;}
+    if (typeof value === 'string') {return value;}
     if (typeof value === 'object') {
-        if (typeof (value as any).path === 'string') return (value as any).path;
-        if (typeof (value as any).fsPath === 'string') return (value as any).fsPath;
-        if (typeof (value as any).uri === 'string') return (value as any).uri;
-        if ((value as any).toString && typeof (value as any).toString === 'function') return (value as any).toString();
+        if (typeof (value as any).path === 'string') {return (value as any).path;}
+        if (typeof (value as any).fsPath === 'string') {return (value as any).fsPath;}
+        if (typeof (value as any).uri === 'string') {return (value as any).uri;}
+        if ((value as any).toString && typeof (value as any).toString === 'function') {return (value as any).toString();}
     }
     return String(value);
 }
@@ -53,6 +53,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         _token: vscode.CancellationToken
     ): void {
         try {
+            console.log('SWAT: resolveWebviewView called');
             this._view = webviewView;
 
             webviewView.webview.options = {
@@ -64,6 +65,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
             // Handle messages from the webview
             webviewView.webview.onDidReceiveMessage(data => {
+                console.log('SWAT: webview message received', data);
                 try {
                     if (!data || !data.type) {
                         return;
@@ -180,12 +182,43 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         } else {
             try {
                 const fileCioPath = path.join(this.selectedDataset, 'File.cio');
-                const entries = fs.existsSync(this.selectedDataset) ? fs.readdirSync(this.selectedDataset, { withFileTypes: true }) : [];
-                const itemsHtml = entries.map(ent => {
+                // If File.cio is missing, show a friendly message instead of the directory listing
+                if (!fs.existsSync(fileCioPath)) {
+                    combinedHtml = `<div class="selected-window">
+                        <div class="selected-window-header">
+                            <div class="selected-window-header-left">
+                                ${svgs.folder}
+                                <div style="display:flex;flex-direction:column;gap:2px;width:100%">
+                                    <span class="section-title">Selected dataset:</span>
+                                    <div class="dataset-header-info">
+                                        <div class="dataset-header-name">${escapeHtml(path.basename(this.selectedDataset))}</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <button class="icon-button close-txt-btn close-all-btn" title="Close all files">
+                                ${svgs.close}
+                            </button>
+                        </div>
+                        <div class="selected-window-path-scroll" title="${escapeHtml(this.selectedDataset)}">
+                            <div class="dataset-header-path">${escapeHtml(this.selectedDataset)}</div>
+                        </div>
+                        <div class="selected-window-body">
+                            <div class="section-content" id="selected-files-content">
+                                <div class="no-dataset">
+                                    ${svgs.info}
+                                    <span>No file.cio found in dir</span>
+                                </div>
+                            </div>
+                        </div>
+                       </div>`;
+                } else {
+                    const entries = fs.existsSync(this.selectedDataset) ? fs.readdirSync(this.selectedDataset, { withFileTypes: true }) : [];
+                    const itemsHtml = entries.map(ent => {
                     const full = path.join(this.selectedDataset || '', ent.name);
                     const icon = ent.isDirectory() ? svgs.folder : svgs.file;
+                    const ext = path.extname(ent.name).toLowerCase();
                     return `
-                            <div class="txt-item" data-path="${escapeHtml(full)}">
+                            <div class="txt-item" data-path="${escapeHtml(full)}" data-ext="${escapeHtml(ext)}">
                                     <button class="icon-button txt-close-btn" data-path="${escapeHtml(full)}" title="Close file">
                                         ${svgs.close}
                                     </button>
@@ -197,7 +230,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         `;
                 }).join('');
 
-                combinedHtml = `<div class="selected-window">
+                    combinedHtml = `<div class="selected-window">
                         <div class="selected-window-header">
                             <div class="selected-window-header-left">
                                 ${svgs.folder}
@@ -220,8 +253,20 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                             <div class="section-content" id="selected-files-content">
                                 ${itemsHtml}
                             </div>
+                            <div class="filter-toolbar" id="selected-filter-toolbar">
+                                <label><input type="checkbox" id="filter-model" class="filter-checkbox" data-cat="model"> Model setup/control (.bsn, .con, .ini)</label>
+                                <label><input type="checkbox" id="filter-climate" class="filter-checkbox" data-cat="climate"> Climate/forcing (.cli, .pcp, .tmp, .wnd)</label>
+                                <label><input type="checkbox" id="filter-land" class="filter-checkbox" data-cat="land"> Land/HRU definitions (.lum, .ele, .sol, .hru)</label>
+                                <label><input type="checkbox" id="filter-mgmt" class="filter-checkbox" data-cat="mgmt"> Management/operations (.ops, .sch)</label>
+                                <label><input type="checkbox" id="filter-routing" class="filter-checkbox" data-cat="routing"> Routing/structures (.str, .hyd, .swf, .res)</label>
+                                <div class="filter-toggle">
+                                    <div>No Outputs (exclude .txt, .out)</div>
+                                    <label class="toggle"><input type="checkbox" id="filter-no-outputs" class="filter-checkbox" data-cat="no-outputs" checked /> <span class="slider"></span></label>
+                                </div>
+                            </div>
                         </div>
                        </div>`;
+                }
             } catch (e) {
                 combinedHtml = `<div class="section">
                     <div class="section-header">
@@ -538,7 +583,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         .selected-window-body {
             padding: 8px;
-            max-height: 360px;
+            max-height: 432px; /* increased 20% from 360px */
+            display: flex;
+            flex-direction: column;
             overflow: hidden;
             position: relative; /* for absolute overlay positioning */
         }
@@ -594,8 +641,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             overflow-x: auto; /* horizontal scrollbar used to scroll header path */
             overflow-y: auto;
             padding-right: 6px;
-            max-height: 360px;
             white-space: normal;
+            flex: 1 1 auto;
         }
 
         /* Recent fixed height for ~4 items (reduced ~20%) */
@@ -760,6 +807,49 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         .help-text a:hover {
             text-decoration: underline;
         }
+
+        /* Filter toolbar at the bottom of the selected-window */
+        .filter-toolbar {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            padding: 8px 10px;
+            border-top: 1px solid var(--vscode-panel-border);
+            background-color: var(--vscode-editor-background);
+            flex-wrap: wrap;
+        }
+
+        .filter-toolbar label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--vscode-foreground);
+        }
+
+        .filter-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            justify-content: space-between;
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px dashed var(--vscode-panel-border);
+        }
+
+        /* simple toggle switch */
+        .toggle { display: inline-block; position: relative; width: 46px; height: 24px; }
+        .toggle input { display: none; }
+        .toggle .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--vscode-input-background); border-radius: 24px; border: 1px solid var(--vscode-panel-border); }
+        .toggle .slider:before { content: ''; position: absolute; height: 20px; width: 20px; left: 2px; top: 1px; background: var(--vscode-sideBar-background); border-radius: 50%; transition: transform 0.12s ease; }
+        .toggle input:checked + .slider { background: var(--vscode-button-background); border-color: var(--vscode-button-hoverBackground); }
+        .toggle input:checked + .slider:before { transform: translateX(22px); }
+
+        .filter-checkbox {
+            width: 14px;
+            height: 14px;
+        }
     </style>
 </head>
 <body>
@@ -796,7 +886,25 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
     <script nonce="${nonce}">
         (function() {
-            const vscode = acquireVsCodeApi();
+            document.addEventListener('DOMContentLoaded', () => {
+                try {
+                    const vscode = acquireVsCodeApi();
+                    // Wrapper that logs outgoing messages so we can trace them in the webview console
+                    const swatHost = {
+                        postMessage: (msg) => {
+                            try { console.log('SWAT webview: sending', msg); } catch (e) { }
+                            try { vscode.postMessage(msg); } catch (e) { try { console.error('SWAT webview: failed to postMessage', e); } catch (ee) {} }
+                        }
+                    };
+
+                    try { console.log('SWAT webview: DOMContentLoaded - init'); } catch (e) { }
+
+                    // Log any messages sent from the extension host into the webview
+                    try {
+                        window.addEventListener('message', (ev) => {
+                            try { console.log('SWAT webview: received message from host', ev && ev.data); } catch (e) { }
+                        });
+                    } catch (e) { }
 
             // Safe lookup to avoid null errors in webview script
             const $ = id => document.getElementById(id);
@@ -804,23 +912,25 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             // Button click handlers (guarded)
             const selectBtn = $('selectDatasetBtn');
             if (selectBtn) selectBtn.addEventListener('click', () => {
-                vscode.postMessage({ type: 'selectDataset' });
+                swatHost.postMessage({ type: 'selectDataset' });
             });
 
             // 'Select Dataset & Debug' button removed; no handler required.
 
             const launchBtn = $('launchDebugBtn');
             if (launchBtn) launchBtn.addEventListener('click', () => {
-                vscode.postMessage({ type: 'launchDebug' });
+                swatHost.postMessage({ type: 'launchDebug' });
             });
 
             // Recent dataset click handlers
             document.querySelectorAll('.recent-item').forEach(item => {
                 item.addEventListener('click', (e) => {
-                    // Don't trigger if clicking the remove button
-                    if (e.target.closest('.remove-btn')) return;
+                    // Don't trigger if clicking the remove button (guard for text nodes)
+                    const tgt = e.target;
+                    if (tgt && typeof tgt.closest === 'function' && tgt.closest('.remove-btn')) return;
                     const path = item.dataset.path;
-                    vscode.postMessage({ type: 'selectRecentDataset', path });
+                    try { console.log('SWAT webview: recent-item clicked', path); } catch (e) {}
+                    swatHost.postMessage({ type: 'selectRecentDataset', path });
                 });
             });
 
@@ -829,7 +939,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const path = btn.dataset.path;
-                    vscode.postMessage({ type: 'removeRecentDataset', path });
+                    try { console.log('SWAT webview: remove-btn clicked', path); } catch (e) {}
+                    swatHost.postMessage({ type: 'removeRecentDataset', path });
                 });
             });
 
@@ -838,7 +949,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 item.addEventListener('click', (e) => {
                     const p = item.dataset.path;
                     if (p) {
-                        vscode.postMessage({ type: 'openFile', path: p });
+                        try { console.log('SWAT webview: txt-item clicked', p); } catch (e) {}
+                        swatHost.postMessage({ type: 'openFile', path: p });
                     }
                 });
             });
@@ -860,7 +972,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     // ask host to close all open files for the current dataset
-                    vscode.postMessage({ type: 'closeAllDatasetFiles' });
+                    try { console.log('SWAT webview: close-all clicked'); } catch (e) {}
+                    swatHost.postMessage({ type: 'closeAllDatasetFiles' });
                 });
             });
 
@@ -870,9 +983,69 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     e.stopPropagation();
                     const p = btn.dataset.path;
                     if (p) {
-                        vscode.postMessage({ type: 'closeFile', path: p });
+                        try { console.log('SWAT webview: txt-close clicked', p); } catch (e) {}
+                        swatHost.postMessage({ type: 'closeFile', path: p });
                     }
                 });
+            });
+
+            // Delegated click handler fallback so clicks are handled even if direct listeners fail
+            document.addEventListener('click', (e) => {
+                try {
+                    const tgt = e.target;
+                    if (!tgt) return;
+                    const closest = (sel) => (tgt.closest ? tgt.closest(sel) : null);
+
+                    if (closest && closest('#selectDatasetBtn')) {
+                        try { console.log('SWAT webview: delegated selectDataset click'); } catch (e) {}
+                        swatHost.postMessage({ type: 'selectDataset' });
+                        return;
+                    }
+                    if (closest && closest('#launchDebugBtn')) {
+                        try { console.log('SWAT webview: delegated launchDebug click'); } catch (e) {}
+                        swatHost.postMessage({ type: 'launchDebug' });
+                        return;
+                    }
+                    if (closest && closest('.remove-btn')) {
+                        const container = tgt.closest('.recent-item');
+                        const path = container ? container.dataset.path : (tgt.closest('.remove-btn')?.dataset?.path);
+                        try { console.log('SWAT webview: delegated remove click', path); } catch (e) {}
+                        swatHost.postMessage({ type: 'removeRecentDataset', path });
+                        return;
+                    }
+                    if (closest && closest('.txt-close-btn')) {
+                        const btn = tgt.closest('.txt-close-btn');
+                        const p = btn ? btn.dataset.path : undefined;
+                        try { console.log('SWAT webview: delegated txt-close click', p); } catch (e) {}
+                        if (p) swatHost.postMessage({ type: 'closeFile', path: p });
+                        e.stopPropagation();
+                        return;
+                    }
+                    if (closest && closest('.close-txt-btn')) {
+                        try { console.log('SWAT webview: delegated close-all click'); } catch (e) {}
+                        swatHost.postMessage({ type: 'closeAllDatasetFiles' });
+                        return;
+                    }
+                    if (closest && closest('.recent-item')) {
+                        if (tgt && typeof tgt.closest === 'function' && tgt.closest('.remove-btn')) return;
+                        const container = tgt.closest('.recent-item');
+                        const path = container ? container.dataset.path : undefined;
+                        try { console.log('SWAT webview: delegated recent-item click', path); } catch (e) {}
+                        if (path) swatHost.postMessage({ type: 'selectRecentDataset', path });
+                        return;
+                    }
+                    if (closest && closest('.txt-item')) {
+                        const container = tgt.closest('.txt-item');
+                        const p = container ? container.dataset.path : undefined;
+                        if (p) {
+                            try { console.log('SWAT webview: delegated txt-item click', p); } catch (e) {}
+                            swatHost.postMessage({ type: 'openFile', path: p });
+                        }
+                        return;
+                    }
+                } catch (dd) {
+                    try { console.error('SWAT delegated click error', dd); } catch (e) { }
+                }
             });
 
             // Non-interactive divider between Recent and TXTINOUT: intentionally no click handler
@@ -886,19 +1059,70 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 const total = container.clientHeight;
                 if (total <= 0) return;
                 const recentH = 136; // fixed (~20% smaller than previous 168)
-                const padding = 20;
-                const txtH = Math.max(40, total - recentH - padding);
+                // leave the files pane flexible via CSS flexbox; only set recent pane height
                 recentContent.style.height = recentH + 'px';
-                txtContentLocal.style.height = txtH + 'px';
+                // Ensure files pane flexes naturally - clear any previously assigned height
+                try { txtContentLocal.style.height = ''; } catch (e) { }
             }
 
             // Apply initial heights now and on resize
             setInitialMiddleHeights();
             window.addEventListener('resize', () => setInitialMiddleHeights());
 
-            // No extra header/files scroll syncing — header path has its own horizontal scroller now.
+            // Filter toolbar behavior: map extensions to categories and filter displayed rows
+            (function setupFilterToolbar() {
+                const extToCategory = {
+                    '.bsn': 'model', '.con': 'model', '.ini': 'model',
+                    '.cli': 'climate', '.pcp': 'climate', '.tmp': 'climate', '.wnd': 'climate',
+                    '.lum': 'land', '.ele': 'land', '.sol': 'land', '.hru': 'land',
+                    '.ops': 'mgmt', '.sch': 'mgmt',
+                    '.str': 'routing', '.hyd': 'routing', '.swf': 'routing', '.res': 'routing'
+                };
 
-            // No bottom draggable divider in the simplified layout; nothing to resize here.
+                const filterNoOutputs = document.getElementById('filter-no-outputs');
+                const checkboxes = Array.from(document.querySelectorAll('.filter-checkbox'));
+                if (!checkboxes.length) return;
+
+                function applyFilter() {
+                    const noOutputsChecked = filterNoOutputs && filterNoOutputs.checked;
+                    const activeCats = checkboxes.filter(cb => cb.id !== 'filter-no-outputs' && cb.checked)
+                        .map(cb => cb.dataset.cat);
+
+                    document.querySelectorAll('.txt-item').forEach(it => {
+                        const item = it;
+                        const ext = (item.dataset.ext || '').toLowerCase();
+                        const cat = extToCategory[ext] || null;
+                        // If 'No Outputs' is checked, hide .txt and .out files regardless of category selection
+                        if (noOutputsChecked && (ext === '.txt' || ext === '.out')) {
+                            item.style.display = 'none';
+                            return;
+                        }
+                        if (activeCats.length === 0) {
+                            // no specific categories selected -> show all (unless noTxt hides .txt)
+                            item.style.display = '';
+                        } else {
+                            item.style.display = (cat && activeCats.indexOf(cat) >= 0) ? '' : 'none';
+                        }
+                    });
+                }
+
+                // Wire up events: categories are independent; 'No txt' toggles exclusion of .txt files
+                checkboxes.forEach(cb => {
+                    cb.addEventListener('change', () => {
+                        applyFilter();
+                    });
+                });
+
+                // ensure starting state
+                applyFilter();
+            })();
+
+                    // No bottom draggable divider in the simplified layout; nothing to resize here.
+                } catch (err) {
+                    // Catch any initialization errors in the webview script so they don't stop other handlers
+                    try { console.error('SWAT webview script error', err); } catch (e) { /* ignore */ }
+                }
+            });
         })();
     </script>
 </body>
