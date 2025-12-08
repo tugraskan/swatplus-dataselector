@@ -48,6 +48,21 @@ This replaces the need to manually edit `launch.json` and change the `cwd` param
 - C/C++ extension (for gdb debugging)
 - Properly configured CMake project
 
+## Compatibility with SWAT+ Editor
+
+This extension works with dataset folders created by [SWAT+ Editor](https://github.com/swat-model/swatplus-editor). While the extension itself is version-agnostic and works at the file-system level, it's important to understand how schema and script changes in SWAT+ Editor may affect your workflow.
+
+**📖 Documentation:**
+- [Detailed explanation](./SCHEMA_AND_SCRIPTS.md) - What happens when SWAT+ Editor schemas and scripts change
+- [Quick reference guide](./docs/QUICK_REFERENCE.md) - Quick lookup for common scenarios and compatibility issues
+
+### Quick Compatibility Notes
+
+- ✅ **File viewing/editing:** Works with datasets from any SWAT+ Editor version
+- ⚠️ **Debugging:** Your compiled SWAT+ model version must match the dataset version
+- 💡 **Best practice:** Keep SWAT+ Editor, model version, and datasets synchronized
+- 🔄 **Upgrading datasets:** Use SWAT+ Editor to migrate datasets when schema changes occur
+
 ## Extension Settings
 
 This extension does not add any VS Code settings.
@@ -56,6 +71,7 @@ This extension does not add any VS Code settings.
 
 - Ensure CMake Tools is properly configured before using this extension
 - The debug configuration assumes gdb is available on your system
+- Dataset file formats must match your compiled SWAT+ model version (see [compatibility guide](./SCHEMA_AND_SCRIPTS.md))
 
 ## Release Notes
 
