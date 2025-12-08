@@ -873,7 +873,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 ${svgs.database}
                 Import to Database
             </button>` : ''}
-            </div>
         </div>
 
         <div class="divider"></div>
@@ -934,8 +933,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             const importBtn = $('importToDbBtn');
             if (importBtn) importBtn.addEventListener('click', () => {
                 swatHost.postMessage({ type: 'importTextFilesToDatabase' });
-            });
-                swatHost.postMessage({ type: 'launchDebug' });
             });
 
             // Recent dataset click handlers
@@ -1025,10 +1022,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     if (closest && closest('#importToDbBtn')) {
                         try { console.log('SWAT webview: delegated importToDb click'); } catch (e) {}
                         swatHost.postMessage({ type: 'importTextFilesToDatabase' });
-                        return;
-                    }
-                        try { console.log('SWAT webview: delegated launchDebug click'); } catch (e) {}
-                        swatHost.postMessage({ type: 'launchDebug' });
                         return;
                     }
                     if (closest && closest('.remove-btn')) {
