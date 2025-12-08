@@ -2,6 +2,7 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { SwatDatasetWebviewProvider } from './swatWebviewProvider';
+import { ImportHelper } from './importHelper';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -155,6 +156,23 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
+	// Command to import text files to database
+	const importHelper = new ImportHelper(context);
+	const importTextFilesToDatabase = vscode.commands.registerCommand('swat-dataset-selector.importTextFilesToDatabase', async () => {
+		const selectedPath = swatProvider.getSelectedDataset();
+		if (!selectedPath) {
+			vscode.window.showWarningMessage('No dataset folder selected. Please select a folder first.');
+			return;
+		}
+
+		try {
+			await importHelper.importTextFiles(selectedPath);
+		} catch (err) {
+			console.error('Failed to import text files', err);
+			vscode.window.showErrorMessage('Failed to import text files: ' + (err instanceof Error ? err.message : String(err)));
+		}
+	});
+
 	context.subscriptions.push(
 		webviewViewProvider,
 		selectDataset,
@@ -167,6 +185,7 @@ export function activate(context: vscode.ExtensionContext) {
 		,closeFile
 		,closeAllDatasetFiles
 		,seedTestData
+		,importTextFilesToDatabase
 	);
 }
 

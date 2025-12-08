@@ -52,8 +52,22 @@
         "command": "swat-dataset-selector.launchDebug",
         "title": "SWAT+: Debug with Selected Dataset",
         "icon": "$(debug-alt)"
+      },
+      {
+        "command": "swat-dataset-selector.importTextFilesToDatabase",
+        "title": "SWAT+: Import Text Files to Database",
+        "icon": "$(database)"
       }
-    ]
+    ],
+    "configuration": {
+      "properties": {
+        "swat-dataset-selector.pythonPath": {
+          "type": "string",
+          "default": "python",
+          "description": "Path to Python executable for running import scripts"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
