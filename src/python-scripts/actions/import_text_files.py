@@ -1,10 +1,29 @@
+"""
+Import SWAT+ Text Files into Database
+
+SIMPLE EXPLANATION:
+This file contains the ImportTextFiles class that does the actual work of
+converting text files into database format.
+
+HOW IT WORKS:
+1. Creates a new database file
+2. Reads each text file one by one
+3. Converts the data and saves it in the database
+4. Files are read in a specific order (some files need others to exist first)
+
+WHY THE ORDER MATTERS:
+Think of it like building a house - you need the foundation before the walls.
+Some data files reference other data files, so we import the "foundation" files first.
+"""
+
 from helpers.executable_api import ExecutableApi, Unbuffered
 from database.project.setup import SetupProjectDatabase
 from database.project import base as project_base
 from database.project.config import Project_config
 from helpers import utils
 
-# Import all fileio modules
+# Import all the different file type handlers
+# Each of these knows how to read a specific type of SWAT+ text file
 from fileio import (
 	connect, exco, dr, recall, climate, channel, aquifer, hydrology, 
 	reservoir, hru, lum, soils, init, routing_unit, regions, salts, 
@@ -20,16 +39,34 @@ import os
 
 class ImportTextFiles(ExecutableApi):
 	"""
-	Import SWAT+ text files from a TxtInOut directory into a project SQLite database.
-	This allows users to recreate a project database from existing text files.
+	The main class that imports SWAT+ text files into a database.
+	
+	WHAT IT DOES:
+	- Takes a folder of text files (TxtInOut)
+	- Creates a SQLite database
+	- Reads each text file and stores the data in the database
+	
+	HOW TO USE IT:
+	importer = ImportTextFiles(database_path, txtinout_path)
+	importer.import_files()
 	"""
 	
-	# Default version constants
+	# Default versions to use if not specified
 	DEFAULT_EDITOR_VERSION = '3.0.0'
 	DEFAULT_SWAT_VERSION = '60.5.4'
 	DATABASE_TYPE_PROJECT = 'project'
 	
 	def __init__(self, project_db_file, txtinout_dir, editor_version=None, swat_version=None):
+		"""
+		Set up the importer.
+		
+		PARAMETERS:
+		- project_db_file: Where to save the database (e.g., "myproject.sqlite")
+		- txtinout_dir: Where your text files are (e.g., "C:/Projects/TxtInOut")
+		- editor_version: SWAT+ Editor version (optional)
+		- swat_version: SWAT+ version (optional)
+		"""
+		# Create/connect to the database
 		SetupProjectDatabase.init(project_db_file)
 		self.project_db_file = project_db_file
 		self.project_db = project_base.db
@@ -37,140 +74,129 @@ class ImportTextFiles(ExecutableApi):
 		self.editor_version = editor_version or self.DEFAULT_EDITOR_VERSION
 		self.swat_version = swat_version or self.DEFAULT_SWAT_VERSION
 		
+		# Make sure the TxtInOut folder exists
 		if not os.path.exists(txtinout_dir):
 			sys.exit('The TxtInOut directory {dir} does not exist. Please verify the path exists and try again.'.format(dir=txtinout_dir))
 	
 	def __del__(self):
+		"""Clean up - close the database when we're done."""
 		SetupProjectDatabase.close()
 	
 	def import_files(self):
 		"""
-		Import all supported text files from the TxtInOut directory into the database.
-		Files are imported in a specific order to satisfy foreign key dependencies.
+		Main import function - this does all the work!
+		
+		HOW IT WORKS:
+		1. Goes through different categories of files (simulation, climate, soils, etc.)
+		2. For each category, tries to read the files
+		3. Saves the data to the database
+		4. Updates progress as it goes
+		
+		THE ORDER IS IMPORTANT:
+		Files are imported in dependency order - basic settings first,
+		then reference data, then specific location data.
 		"""
 		try:
-			total = 0
-			step = 5
+			total = 0  # Track progress (0 to 100)
+			step = 5   # Each step is worth 5%
 			
-			# Import files in dependency order
+			# Start the import process
 			self.emit_progress(total, "Starting import from text files...")
 			
-			# 1. Import simulation configuration files
-			total = self.import_simulation(total, step)
+			# Import each category in order
+			# Each import_* function handles a group of related files
+			total = self.import_simulation(total, step)      # Time settings, print options
+			total = self.import_climate(total, step)         # Weather data
+			total = self.import_parm_db(total, step)         # Plant types, fertilizers, etc.
+			total = self.import_soils(total, step)           # Soil information
+			total = self.import_decision_table(total, step)  # Decision tables
+			total = self.import_connect(total, step)         # Connection files
+			total = self.import_channel(total, step)         # River/stream channels
+			total = self.import_reservoir(total, step)       # Reservoirs and wetlands
+			total = self.import_routing_unit(total, step)    # Routing units
+			total = self.import_aquifer(total, step)         # Groundwater
+			total = self.import_hru(total, step)             # Hydrologic Response Units
+			total = self.import_hydrology(total, step)       # Hydrology parameters
+			total = self.import_init(total, step)            # Initial conditions
+			total = self.import_lum(total, step)             # Land use management
+			total = self.import_ops(total, step)             # Operations (harvest, graze, etc.)
+			total = self.import_recall(total, step)          # Recall data
+			total = self.import_basin(total, step)           # Basin settings
+			total = self.import_change(total, step)          # Calibration parameters
+			total = self.import_regions(total, step)         # Region definitions
 			
-			# 2. Import climate/weather files  
-			total = self.import_climate(total, step)
-			
-			# 3. Import parameter database files (needed before HRU, channel, etc.)
-			total = self.import_parm_db(total, step)
-			
-			# 4. Import soil files
-			total = self.import_soils(total, step)
-			
-			# 5. Import decision tables
-			total = self.import_decision_table(total, step)
-			
-			# 6. Import connection files
-			total = self.import_connect(total, step)
-			
-			# 7. Import channel files
-			total = self.import_channel(total, step)
-			
-			# 8. Import reservoir files
-			total = self.import_reservoir(total, step)
-			
-			# 9. Import routing unit files
-			total = self.import_routing_unit(total, step)
-			
-			# 10. Import aquifer files
-			total = self.import_aquifer(total, step)
-			
-			# 11. Import HRU files
-			total = self.import_hru(total, step)
-			
-			# 12. Import hydrology files
-			total = self.import_hydrology(total, step)
-			
-			# 13. Import initialization files
-			total = self.import_init(total, step)
-			
-			# 14. Import land use management files
-			total = self.import_lum(total, step)
-			
-			# 15. Import operations files
-			total = self.import_ops(total, step)
-			
-			# 16. Import recall files
-			total = self.import_recall(total, step)
-			
-			# 17. Import basin files
-			total = self.import_basin(total, step)
-			
-			# 18. Import change/calibration files
-			total = self.import_change(total, step)
-			
-			# 19. Import regions files
-			total = self.import_regions(total, step)
-			
-			# Update project config
+			# Update the project configuration
 			Project_config.update(
 				input_files_last_written=None,
 				swat_last_run=None,
 				output_last_imported=None
 			).execute()
 			
+			# All done!
 			self.emit_progress(100, "Import complete!")
 			
 		except Exception as err:
 			sys.exit("Error during import: {err}".format(err=str(err)))
 	
 	def get_file_path(self, filename):
-		"""Get the full path to a file in the TxtInOut directory."""
+		"""
+		Get the full path to a file.
+		Example: "soil.txt" becomes "C:/Projects/TxtInOut/soil.txt"
+		"""
 		return os.path.join(self.txtinout_dir, filename)
 	
 	def file_exists(self, filename):
-		"""Check if a file exists in the TxtInOut directory."""
+		"""Check if a specific file exists in the TxtInOut folder."""
 		return os.path.exists(self.get_file_path(filename))
 	
 	def import_simulation(self, start_prog, allocated_prog):
-		"""Import simulation configuration files."""
+		"""
+		Import simulation configuration files.
+		
+		FILES HANDLED:
+		- time.sim: When to start/stop the simulation
+		- print.prt: What output to print
+		- object.prt: Which objects to print data for
+		"""
 		self.emit_progress(start_prog, "Importing simulation files...")
 		
-		# Import time.sim if it exists
+		# Try to import each file (if it exists)
 		if self.file_exists("time.sim"):
 			try:
 				simulation.Time_sim(self.get_file_path("time.sim"), self.editor_version, self.swat_version).read()
 			except NotImplementedError:
-				pass  # Read not implemented for this file type
+				pass  # This file type can't be read yet - skip it
 		
-		# Import print.prt if it exists
 		if self.file_exists("print.prt"):
 			try:
 				simulation.Print_prt(self.get_file_path("print.prt"), self.editor_version, self.swat_version).read()
 			except NotImplementedError:
 				pass
 		
-		# Import object.prt if it exists
 		if self.file_exists("object.prt"):
 			try:
 				simulation.Object_prt(self.get_file_path("object.prt"), self.editor_version, self.swat_version).read()
 			except NotImplementedError:
 				pass
 		
-		return start_prog + allocated_prog
+		return start_prog + allocated_prog  # Update progress
 	
 	def import_climate(self, start_prog, allocated_prog):
-		"""Import climate/weather files."""
+		"""
+		Import climate and weather files.
+		
+		FILES HANDLED:
+		- weather-sta.cli: Weather station locations
+		- weather-wgn.cli: Weather generator parameters
+		"""
 		self.emit_progress(start_prog, "Importing climate files...")
 		
-		# Import weather station file
 		if self.file_exists("weather-sta.cli"):
 			try:
 				climate.Weather_sta_cli(self.get_file_path("weather-sta.cli"), self.editor_version, self.swat_version).read()
 			except NotImplementedError:
 				pass
 		
-		# Import weather generator file
 		if self.file_exists("weather-wgn.cli"):
 			try:
 				climate.Weather_wgn_cli(self.get_file_path("weather-wgn.cli"), self.editor_version, self.swat_version).read()
@@ -180,7 +206,19 @@ class ImportTextFiles(ExecutableApi):
 		return start_prog + allocated_prog
 	
 	def import_parm_db(self, start_prog, allocated_prog):
-		"""Import parameter database files."""
+		"""
+		Import parameter database files.
+		These are "reference" files that define types of things (plant types, fertilizer types, etc.)
+		
+		FILES HANDLED:
+		- plants.plt: Different plant/crop types
+		- fertilizer.frt: Different fertilizer types
+		- tillage.til: Different tillage operations
+		- pesticide.pst: Different pesticide types
+		- urban.urb: Urban area parameters
+		- septic.sep: Septic system parameters
+		- snow.sno: Snow parameters
+		"""
 		self.emit_progress(start_prog, "Importing parameter database files...")
 		
 		# Import plants
