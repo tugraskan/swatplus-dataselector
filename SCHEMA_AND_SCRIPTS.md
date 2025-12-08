@@ -400,3 +400,129 @@ function checkCompatibility(datasetPath: string, modelVersion: string) {
 ---
 
 *This document was created to help developers understand the relationship between SWAT+ Editor schema/script changes and the SWAT+ Dataset Selector VS Code extension.*
+
+## Appendix: Architecture Diagram
+
+### Relationship Between Components
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        SWAT+ Ecosystem                          │
+└─────────────────────────────────────────────────────────────────┘
+
+┌──────────────────┐         ┌──────────────────┐
+│   QSWAT+ (GIS)   │────────>│  SWAT+ Editor    │
+│  ArcGIS/QGIS     │ Import  │  (Desktop App)   │
+└──────────────────┘         └────────┬─────────┘
+                                      │
+                                      │ Creates/Manages
+                                      │
+                              ┌───────▼────────┐
+                              │  Dataset Folder│
+                              │  ├─ project.db │
+                              │  ├─ File.cio   │
+                              │  ├─ *.bsn      │
+                              │  ├─ *.con      │
+                              │  └─ ...        │
+                              └───────┬────────┘
+                                      │
+                    ┌─────────────────┼─────────────────┐
+                    │                 │                 │
+                    ▼                 ▼                 ▼
+         ┌──────────────────┐ ┌─────────────┐ ┌──────────────┐
+         │ SWAT+ Model      │ │ This        │ │ SWAT+ Editor │
+         │ (C++ Executable) │ │ Extension   │ │ (Validation) │
+         │                  │ │ (VS Code)   │ │              │
+         │ Reads: Text files│ │ Manages:    │ │ Validates:   │
+         │ Writes: Outputs  │ │ - Selection │ │ - Schema     │
+         └──────────────────┘ │ - Debugging │ │ - Data       │
+                              │ - Editing   │ └──────────────┘
+                              └─────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                   Schema Change Impact Flow                     │
+└─────────────────────────────────────────────────────────────────┘
+
+    SWAT+ Editor Update (v3.0 → v3.1)
+            │
+            ├─> Database Schema Changes
+            │   ├─> New tables (e.g., GWFLOW)
+            │   ├─> Modified columns
+            │   └─> Updated constraints
+            │
+            ├─> Script Changes
+            │   ├─> File writing format changes
+            │   ├─> New parameters
+            │   └─> Validation rules
+            │
+            └─> Impact on Dataset
+                ├─> File.cio structure changes
+                ├─> Text file format updates
+                └─> New required files
+                        │
+                        ▼
+        ┌───────────────────────────────┐
+        │   Dataset Migration Options   │
+        ├───────────────────────────────┤
+        │ 1. Open in new SWAT+ Editor   │◄── Recommended
+        │    → Auto-migration           │
+        │                               │
+        │ 2. Manual file editing        │◄── Advanced users
+        │    → Requires documentation   │
+        │                               │
+        │ 3. Keep old version           │◄── Temporary
+        │    → Match model version      │
+        └───────────────────────────────┘
+                        │
+                        ▼
+        ┌───────────────────────────────┐
+        │  This Extension's Role        │
+        ├───────────────────────────────┤
+        │ ✓ Browse any version dataset  │
+        │ ✓ Edit text files             │
+        │ ✓ Launch debugging            │
+        │ ✗ No schema validation        │
+        │ ✗ No automatic migration      │
+        └───────────────────────────────┘
+```
+
+### Version Synchronization
+
+```
+                Ideal Development Setup
+                
+    ┌──────────────────┐
+    │ SWAT+ Editor     │
+    │ Version: 3.1.0   │
+    └─────────┬────────┘
+              │
+              │ creates
+              ▼
+    ┌──────────────────┐
+    │ Dataset Files    │
+    │ Schema: 3.1      │
+    └─────────┬────────┘
+              │
+    ┌─────────┴──────────┐
+    │                    │
+    ▼                    ▼
+┌────────────┐    ┌──────────────┐
+│ SWAT+ Model│    │ This Extension│
+│ v61.0.2+   │    │ (any version) │
+│ (compiled) │    └──────────────┘
+└────────────┘
+    │
+    │ reads dataset files
+    │ runs simulation
+    ▼
+┌────────────┐
+│ Output     │
+│ Files      │
+└────────────┘
+
+    ⚠️ Version mismatch leads to:
+    - File format errors
+    - Missing parameters
+    - Unexpected behavior
+    - Failed model runs
+```
