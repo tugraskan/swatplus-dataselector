@@ -1,4 +1,4 @@
-!/usr/bin/env python
+#!/usr/bin/env python
 """
 Standalone SWAT+ Text Files Importer - Simple Version
 
