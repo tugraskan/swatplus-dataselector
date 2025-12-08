@@ -193,7 +193,7 @@ Options:
 - Linux: Help → About
 
 ### Check dataset schema version
-```python
+```bash
 # If project.db exists
 sqlite3 project.db "SELECT version FROM metadata;"
 ```

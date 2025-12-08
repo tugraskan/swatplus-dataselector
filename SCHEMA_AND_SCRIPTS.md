@@ -1,5 +1,26 @@
 # Understanding SWAT+ Editor Schema and Scripts Changes
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Background](#background)
+  - [What is SWAT+ Editor?](#what-is-swat-editor)
+  - [What is SWAT+ Dataset Selector?](#what-is-swat-dataset-selector)
+- [Database Schema in SWAT+ Editor](#database-schema-in-swat-editor)
+  - [Schema Structure](#schema-structure)
+  - [What Happens When Schema Changes?](#what-happens-when-schema-changes)
+- [Scripts in SWAT+ Editor](#scripts-in-swat-editor)
+  - [Types of Scripts](#types-of-scripts)
+  - [What Happens When Scripts Change?](#what-happens-when-scripts-change)
+- [Version Compatibility Matrix](#version-compatibility-matrix)
+- [Impact on Different Workflows](#impact-on-different-workflows)
+- [Best Practices](#best-practices)
+- [File.cio: The Central Configuration File](#filecio-the-central-configuration-file)
+- [Handling Migration and Compatibility](#handling-migration-and-compatibility)
+- [Developer Considerations](#developer-considerations)
+- [Resources](#resources)
+- [Summary](#summary)
+
 ## Overview
 
 This document explains what happens when the schema and scripts from the SWAT+ Editor application change, and how it impacts the SWAT+ Dataset Selector VS Code extension.
