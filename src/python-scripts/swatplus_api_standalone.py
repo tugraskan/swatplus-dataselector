@@ -1,4 +1,4 @@
-!/usr/bin/env python
+#!/usr/bin/env python
 """
 Standalone SWAT+ Text Files Importer
 Comment viewBundled version for use with VS Code extension
@@ -20,9 +20,35 @@ if script_dir not in sys.path:
 try:
     from actions.import_text_files import ImportTextFiles
 except ImportError as e:
-    print(f"Error: Unable to import required modules. {e}", file=sys.stderr)
+    # Provide a clearer, actionable error when the bundled package is incomplete
+    err_str = str(e)
+    print(f"Error: Unable to import required modules. {err_str}", file=sys.stderr)
     print(f"Script directory: {script_dir}", file=sys.stderr)
     print(f"Python path: {sys.path}", file=sys.stderr)
+
+    # Check for common missing components in the bundled package
+    missing = []
+    try:
+        import database.lib  # type: ignore
+    except Exception:
+        missing.append('database.lib (expected at python-scripts/database/lib.py)')
+
+    try:
+        import database.datasets  # type: ignore
+    except Exception:
+        missing.append('database.datasets (expected at python-scripts/database/datasets)')
+
+    if missing:
+        print('\nThe bundled `python-scripts` directory appears to be incomplete. The following components are missing:', file=sys.stderr)
+        for m in missing:
+            print(f" - {m}", file=sys.stderr)
+
+        print('\nResolution options:', file=sys.stderr)
+        print('  1) Copy the missing files/folders from the full `swatplus-editor` repository into `src/python-scripts/database`.', file=sys.stderr)
+        print('     Required items typically include `database/lib.py` and the `database/datasets/` folder.', file=sys.stderr)
+        print('  2) Use the full swatplus-editor checkout and run the script from there (ensure the script directory contains a complete `database` package).', file=sys.stderr)
+        print('  3) If you prefer, open an issue or provide the `SWAT Import` output here and I can help diagnose further.', file=sys.stderr)
+
     sys.exit(1)
 
 

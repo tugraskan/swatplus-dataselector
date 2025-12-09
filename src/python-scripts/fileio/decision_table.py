@@ -93,7 +93,8 @@ class D_table_dtl(BaseFileModel):
 		max_cond_lines = i + num_conds
 		while i < max_cond_lines:
 			cond_vals = lines[i].strip().split()
-			self.check_cols(cond_vals, cond_cols + num_alts, 'decision table condition line {}'.format(i))
+			# Require at least the fixed condition columns; optional alt columns may be missing
+			self.check_cols(cond_vals, cond_cols, 'decision table condition line {}'.format(i))
 
 			cond_description = None
 			cond_header_vals = lines[i].strip().split('!')
@@ -114,7 +115,10 @@ class D_table_dtl(BaseFileModel):
 			for j in range(0, num_alts):
 				alt = self.d_table_dtl_cond_alt()
 				alt.cond = cond
-				alt.alt = cond_vals[j + cond_cols]
+				# Use alt value if present, otherwise default to empty string
+				idx = j + cond_cols
+				alt_val = cond_vals[idx] if idx < len(cond_vals) else ''
+				alt.alt = alt_val
 				alt.save()
 
 			i += 1

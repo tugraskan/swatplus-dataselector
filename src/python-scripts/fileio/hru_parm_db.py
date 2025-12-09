@@ -117,8 +117,11 @@ class Septic_sep(BaseFileModel):
 		for line in file:
 			if i > 2:
 				val = line.split()
-				self.check_cols(val, 13, 'septic')
+				# Accept files with either 11 columns (no extra numeric + no description)
+				# or 13 columns (extra numeric before description). Require at least 11 cols.
+				self.check_cols(val, 11, 'septic')
 
+				# Map fixed fields (first 11 columns)
 				sep = {
 					'name': val[0].lower(),
 					'q_rate': val[1],
@@ -131,7 +134,8 @@ class Septic_sep(BaseFileModel):
 					'min_p': val[8],
 					'org_p': val[9],
 					'fcoli': val[10],
-					'description': val[12] if val[12] != 'null' else None  # 12 index because extra column
+					# If a description column exists (column 12 in 13-col format), use the last column as description.
+					'description': (val[-1] if len(val) > 11 and val[-1] != 'null' else None)
 				}
 				septics.append(sep)
 			i += 1
@@ -152,10 +156,41 @@ class Snow_sno(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self, database='project'):
+		"""
+		Read `snow.sno` into the database. Some datasets may omit the final
+		snow_init column; to avoid NOT NULL constraint failures we pad missing
+		columns with 0.0 (safe default).
+		"""
+		file = open(self.file_name, 'r')
+
+		i = 1
+		rows = []
+		for line in file:
+			if i > 2:
+				val = line.split()
+				# Expecting 9 columns: name + 8 numeric values. Pad missing with '0'.
+				if len(val) < 9:
+					val = val + ['0'] * (9 - len(val))
+
+				row = {
+					'name': val[0].lower(),
+					'fall_tmp': val[1],
+					'melt_tmp': val[2],
+					'melt_max': val[3],
+					'melt_min': val[4],
+					'tmp_lag': val[5],
+					'snow_h2o': val[6],
+					'cov50': val[7],
+					# Use provided value or 0.0 default when missing/null
+					'snow_init': (val[8] if val[8] != 'null' else 0)
+				}
+				rows.append(row)
+			i += 1
+
 		if database == 'project':
-			self.read_default_table(project_parmdb.Snow_sno, project_base.db, 0, ignore_id_col=True)
+			db_lib.bulk_insert(project_base.db, project_parmdb.Snow_sno, rows)
 		else:
-			self.read_default_table(datasets_parmdb.Snow_sno, datasets_base.db, 0, ignore_id_col=True)
+			db_lib.bulk_insert(datasets_base.db, datasets_parmdb.Snow_sno, rows)
 
 	def write(self):
 		self.write_default_table(db.Snow_sno, True)

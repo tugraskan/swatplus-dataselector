@@ -45,40 +45,64 @@ export class ImportHelper {
                 '--txtinout_dir', txtinoutDir
             ];
 
+            const pythonCwd = path.join(this.context.extensionPath, 'src', 'python-scripts');
+            const outputChannel = vscode.window.createOutputChannel('SWAT Import');
+
             return new Promise<void>((resolve, reject) => {
                 progress.report({ message: 'Starting import...' });
                 
-                const proc = spawn(this.pythonPath, args);
-                
+                const proc = spawn(this.pythonPath, args, { cwd: pythonCwd });
+
                 // Real-time progress updates
                 proc.stdout.on('data', (data) => {
                     const msg = data.toString().trim();
+                    outputChannel.appendLine(`[stdout] ${msg}`);
                     console.log('[Import]', msg);
                     progress.report({ message: msg });
                 });
 
+                let stderrBuffer = '';
                 proc.stderr.on('data', (data) => {
                     const errMsg = data.toString();
+                    stderrBuffer += errMsg;
+                    outputChannel.appendLine(`[stderr] ${errMsg}`);
                     console.error('[Import Error]', errMsg);
-                    // Some libraries output warnings to stderr, so we just log them
                 });
 
                 proc.on('close', (code) => {
                     if (code === 0) {
+                        outputChannel.appendLine(`Import finished with exit code 0. DB: ${dbPath}`);
                         vscode.window.showInformationMessage(
                             `Database created successfully: ${dbPath}`
                         );
                         resolve();
                     } else {
-                        const errorMsg = `Import failed with exit code ${code}`;
-                        vscode.window.showErrorMessage(errorMsg);
-                        reject(new Error(errorMsg));
+                        const shortMsg = `Import failed with exit code ${code}`;
+                        outputChannel.appendLine(shortMsg);
+                        if (stderrBuffer) {
+                            outputChannel.appendLine('--- STDERR ---');
+                            outputChannel.appendLine(stderrBuffer);
+                        }
+
+                        // Show error with option to view details
+                        vscode.window.showErrorMessage(shortMsg, 'Show details').then((sel) => {
+                            if (sel === 'Show details') {
+                                outputChannel.show(true);
+                            }
+                        });
+
+                        reject(new Error(`${shortMsg}\n${stderrBuffer}`));
                     }
                 });
 
                 proc.on('error', (err) => {
                     const errorMsg = `Failed to start Python process: ${err.message}`;
-                    vscode.window.showErrorMessage(errorMsg);
+                    outputChannel.appendLine(errorMsg);
+                    vscode.window.showErrorMessage(errorMsg, 'Show details').then((sel) => {
+                        if (sel === 'Show details') {
+                            outputChannel.show(true);
+                        }
+                    });
                     reject(err);
                 });
             });

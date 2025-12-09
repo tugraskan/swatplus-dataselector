@@ -30,7 +30,10 @@ class ImportTextFiles(ExecutableApi):
 	DATABASE_TYPE_PROJECT = 'project'
 	
 	def __init__(self, project_db_file, txtinout_dir, editor_version=None, swat_version=None):
+		# Initialize the project database connection and ensure required tables exist
 		SetupProjectDatabase.init(project_db_file)
+		# Create tables (safe=True) so the importer can write into expected tables
+		SetupProjectDatabase.create_tables()
 		self.project_db_file = project_db_file
 		self.project_db = project_base.db
 		self.txtinout_dir = txtinout_dir

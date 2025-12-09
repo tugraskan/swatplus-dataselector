@@ -2,6 +2,12 @@ from .base import BaseFileModel
 from helpers import utils, table_mapper
 from database.project import connect
 import database.project.routing_unit as db
+from database.project import base as project_base
+from database.datasets import base as datasets_base
+try:
+	import database.datasets.routing_unit as db_datasets
+except Exception:
+	db_datasets = None
 
 from peewee import *
 
@@ -40,6 +46,28 @@ class Rout_unit(BaseFileModel):
 					file.write(utils.key_name_pad(row.topo))
 					file.write(utils.key_name_pad(row.field))
 					file.write("\n")
+
+
+class Rout_unit_rtu(BaseFileModel):
+	def __init__(self, file_name, version=None, swat_version=None):
+		self.file_name = file_name
+		self.version = version
+		self.swat_version = swat_version
+
+	def read(self, database='project'):
+		# Read rout_unit.rtu into the project or datasets DB
+		if database == 'project':
+			self.read_default_table(db.Rout_unit_rtu, project_base.db, 0, ignore_id_col=True)
+		else:
+			if db_datasets is not None:
+				self.read_default_table(db_datasets.Rout_unit_rtu, datasets_base.db, 0, ignore_id_col=True)
+			else:
+				# Fallback: read into project DB if datasets routing_unit is not available
+				self.read_default_table(db.Rout_unit_rtu, project_base.db, 0, ignore_id_col=True)
+
+	def write(self):
+		# Reuse existing write logic from Rout_unit for writing
+		return Rout_unit(self.file_name, self.version, self.swat_version).write()
 
 
 class Rout_unit_ele(BaseFileModel):
