@@ -80,7 +80,7 @@ def exp_pad(val, decimals=4, default_pad=DEFAULT_NUM_PAD, direction=DEFAULT_DIRE
 	return string_pad(val_text, default_pad, direction, text_if_null)
 
 def get_num_format(val, precision=5):
-	if not is_number: 
+	if not is_number(val): 
 		return val
 	
 	min_val = 1 / (10**precision)
