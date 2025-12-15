@@ -1,6 +1,8 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import * as cp from 'child_process';
+import * as path from 'path';
 import { SwatDatasetWebviewProvider } from './swatWebviewProvider';
 
 // This method is called when your extension is activated
@@ -77,6 +79,50 @@ export function activate(context: vscode.ExtensionContext) {
 	const selectRecentDataset = vscode.commands.registerCommand('swat-dataset-selector.selectRecentDataset', async (datasetPath: string) => {
 		swatProvider.setSelectedDataset(datasetPath);
 		vscode.window.showInformationMessage(`SWAT+ Dataset folder selected: ${datasetPath}`);
+	});
+
+	// Command to import SWAT+ text files into a project database using the bundled python script
+	const importTextFiles = vscode.commands.registerCommand('swat-dataset-selector.importTextFiles', async () => {
+		const selected = swatProvider.getSelectedDataset();
+		if (!selected) {
+			vscode.window.showWarningMessage('No dataset selected. Please select a dataset folder first.');
+			return;
+		}
+
+		// Path to the standalone python script inside the extension (development mode)
+		const scriptPath = path.join(context.extensionPath, 'src', 'python-scripts', 'swatplus_api_standalone.py');
+		// Build arguments for the import_text_files action. Use project DB file inside the dataset folder by default.
+		const projectDb = path.join(selected, 'project.db');
+		// Use underscore-style option names to match the standalone script's argparse definitions
+		const args = [scriptPath, 'import_text_files', '--txtinout_dir', selected, '--project_db_file', projectDb];
+
+		await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Importing SWAT+ text files', cancellable: false }, () => {
+			return new Promise<void>((resolve) => {
+				try {
+					const py = 'python';
+					const proc = cp.spawn(py, args, { cwd: context.extensionPath, shell: false });
+
+					proc.stdout.on('data', d => console.log('[swat-import]', d.toString()));
+					proc.stderr.on('data', d => console.error('[swat-import]', d.toString()));
+					proc.on('close', code => {
+						if (code === 0) {
+							vscode.window.showInformationMessage('SWAT+ import completed successfully.');
+						} else {
+							vscode.window.showErrorMessage(`SWAT+ import failed (exit ${code}). See output for details.`);
+						}
+						resolve();
+					});
+					proc.on('error', err => {
+						vscode.window.showErrorMessage('Failed to start Python process: ' + String(err));
+						resolve();
+					});
+				} catch (err) {
+					console.error('Error running import', err);
+					vscode.window.showErrorMessage('Error running import: ' + (err instanceof Error ? err.message : String(err)));
+					resolve();
+				}
+			});
+		});
 	});
 
 	// Command to show dataset info
@@ -162,6 +208,7 @@ export function activate(context: vscode.ExtensionContext) {
 		launchWithSelected,
 		datasetFolderProvider,
 		selectRecentDataset,
+		importTextFiles,
 		showDatasetInfo
 		,openFile
 		,closeFile

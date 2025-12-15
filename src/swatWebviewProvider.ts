@@ -74,6 +74,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         case 'selectDataset':
                             vscode.commands.executeCommand('swat-dataset-selector.selectDataset');
                             break;
+                        case 'importTextFiles':
+                            vscode.commands.executeCommand('swat-dataset-selector.importTextFiles');
+                            break;
                         case 'selectAndDebug':
                             vscode.commands.executeCommand('swat-dataset-selector.selectAndDebug');
                             break;
@@ -860,6 +863,10 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     ${svgs.folderOpened}
                     Select Folder
                 </button>
+                <button class="action-button primary${!this.selectedDataset ? ' disabled' : ''}" id="importConvertBtn" ${!this.selectedDataset ? 'disabled' : ''} title="Import/Convert dataset to project DB">
+                    ${svgs.star}
+                    Import / Convert DB
+                </button>
                 <button class="action-button secondary${!this.selectedDataset ? ' disabled' : ''}" id="launchDebugBtn" ${!this.selectedDataset ? 'disabled' : ''}>
                     ${svgs.debugPlay}
                     Debug
@@ -913,6 +920,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             const selectBtn = $('selectDatasetBtn');
             if (selectBtn) selectBtn.addEventListener('click', () => {
                 swatHost.postMessage({ type: 'selectDataset' });
+            });
+
+            const importBtn = $('importConvertBtn');
+            if (importBtn) importBtn.addEventListener('click', () => {
+                swatHost.postMessage({ type: 'importTextFiles' });
             });
 
             // 'Select Dataset & Debug' button removed; no handler required.

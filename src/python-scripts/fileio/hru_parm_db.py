@@ -6,6 +6,7 @@ from database.datasets import hru_parm_db as datasets_parmdb
 from database import lib as db_lib
 
 from helpers import utils
+import re
 import database.project.hru_parm_db as db
 
 
@@ -117,7 +118,32 @@ class Septic_sep(BaseFileModel):
 		for line in file:
 			if i > 2:
 				val = line.split()
-				self.check_cols(val, 13, 'septic')
+				# If the line has fewer tokens than expected, try to auto-split a trailing
+				# concatenated numeric+text token (e.g. '1Generic' -> '1', 'Generic').
+				if len(val) < 13:
+					# Try splitting the last token first
+					m = re.match(r'^(\d+)(\D.*)$', val[-1]) if len(val) > 0 else None
+					if m:
+						val[-1] = m.group(1)
+						val.append(m.group(2))
+						print(f"Info: Auto-fixed septic.sep line {i}: split '{m.group(0)}' -> '{m.group(1)}','{m.group(2)}'")
+					else:
+						# As a fallback, search earlier tokens for a concatenated token and split it
+						for idx, tok in enumerate(val):
+							m2 = re.match(r'^(\d+)(\D.*)$', tok)
+							if m2:
+								val[idx] = m2.group(1)
+								val.insert(idx+1, m2.group(2))
+								print(f"Info: Auto-fixed septic.sep line {i}: split token at col {idx} '{m2.group(0)}' -> '{m2.group(1)}','{m2.group(2)}'")
+								break
+
+				# After attempting auto-fix, validate columns; if still short, skip the line
+				try:
+					self.check_cols(val, 13, 'septic')
+				except IndexError as e:
+					print(f"Warning: Skipping malformed septic.sep line {i}: '{line.strip()}'. Reason: {e}")
+					i += 1
+					continue
 
 				sep = {
 					'name': val[0].lower(),
