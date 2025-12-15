@@ -10,3 +10,7 @@ __pycache__/
 *$py.class
 *.so
 .Python
+
+# Database files (generated during testing)
+*.db
+*.sqlite
