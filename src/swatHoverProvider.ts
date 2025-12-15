@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { SwatDatabaseHelper } from './swatDatabaseHelper';
+import { parseLineTokens, findTokenAtPosition, findHeaderLine, MAX_HOVER_FIELDS } from './swatFileParser';
 
 /**
  * Provides hover information for SWAT+ text files
@@ -64,15 +65,7 @@ export class SwatHoverProvider implements vscode.HoverProvider {
             const lines = fileContent.split('\n');
             
             // Find the header line
-            let headerLineIndex = -1;
-            for (let i = 0; i < Math.min(5, lines.length); i++) {
-                const trimmed = lines[i].trim();
-                if (trimmed.length > 0 && !trimmed.startsWith('#')) {
-                    headerLineIndex = i;
-                    break;
-                }
-            }
-
+            const headerLineIndex = findHeaderLine(lines);
             if (headerLineIndex === -1) {
                 return undefined;
             }
@@ -80,31 +73,23 @@ export class SwatHoverProvider implements vscode.HoverProvider {
             const headerLine = lines[headerLineIndex];
             const currentLine = lines[position.line];
             
-            // Split header and current line by whitespace
-            const headers = headerLine.trim().split(/\s+/);
-            const values = currentLine.trim().split(/\s+/);
+            // Parse header and current line using improved tokenizer
+            const headerTokens = parseLineTokens(headerLine);
+            const valueTokens = parseLineTokens(currentLine);
             
-            // Find which column the cursor is on
-            let columnIndex = -1;
-            let charCount = 0;
-            
-            for (let i = 0; i < values.length; i++) {
-                const valueStart = currentLine.indexOf(values[i], charCount);
-                const valueEnd = valueStart + values[i].length;
-                
-                if (position.character >= valueStart && position.character <= valueEnd) {
-                    columnIndex = i;
-                    break;
-                }
-                charCount = valueEnd;
-            }
-
-            if (columnIndex === -1 || columnIndex >= headers.length) {
+            // Find which token the cursor is on
+            const cursorToken = findTokenAtPosition(valueTokens, position.character);
+            if (!cursorToken) {
                 return undefined;
             }
 
-            const columnName = headers[columnIndex];
-            const columnValue = values[columnIndex];
+            const columnIndex = cursorToken.index;
+            if (columnIndex >= headerTokens.length) {
+                return undefined;
+            }
+
+            const columnName = headerTokens[columnIndex].value;
+            const columnValue = cursorToken.token.value;
 
             // Check if this column is a foreign key
             const foreignKeys = this.dbHelper.getForeignKeyColumns(dbPath, tableName);
@@ -162,8 +147,8 @@ export class SwatHoverProvider implements vscode.HoverProvider {
             }
         });
         
-        // Show a few other fields (limit to 5 total)
-        const otherFields = allFields.filter(f => !displayFields.includes(f)).slice(0, 3);
+        // Show a few other fields (limit to MAX_HOVER_FIELDS total)
+        const otherFields = allFields.filter(f => !displayFields.includes(f)).slice(0, MAX_HOVER_FIELDS - 2);
         otherFields.forEach(field => {
             const val = record[field];
             if (val !== undefined && val !== null) {
@@ -171,8 +156,8 @@ export class SwatHoverProvider implements vscode.HoverProvider {
             }
         });
         
-        if (allFields.length > 5) {
-            markdown.appendMarkdown(`\n*...and ${allFields.length - 5} more fields*\n\n`);
+        if (allFields.length > MAX_HOVER_FIELDS) {
+            markdown.appendMarkdown(`\n*...and ${allFields.length - MAX_HOVER_FIELDS} more fields*\n\n`);
         }
         
         markdown.appendMarkdown('\n---\n\n');

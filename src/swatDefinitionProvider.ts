@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { SwatDatabaseHelper } from './swatDatabaseHelper';
+import { parseLineTokens, findTokenAtPosition, findHeaderLine } from './swatFileParser';
 
 /**
  * Provides "Go to Definition" functionality for SWAT+ text files
@@ -44,11 +45,6 @@ export class SwatDefinitionProvider implements vscode.DefinitionProvider {
         const word = document.getText(wordRange);
         
         // Parse the current line to determine context
-        const line = document.lineAt(position.line);
-        const lineText = line.text;
-        
-        // Try to parse the SWAT+ file format
-        // Most SWAT+ files are space-delimited with a header row
         const result = this.parseSwatFileLine(document, position, word, tableName, dbPath, datasetPath);
         
         return result;
@@ -70,17 +66,8 @@ export class SwatDefinitionProvider implements vscode.DefinitionProvider {
             const fileContent = document.getText();
             const lines = fileContent.split('\n');
             
-            // Find the header line (usually line 1 or 2, after any comment lines)
-            let headerLineIndex = -1;
-            for (let i = 0; i < Math.min(5, lines.length); i++) {
-                const trimmed = lines[i].trim();
-                // Skip empty lines and comment lines
-                if (trimmed.length > 0 && !trimmed.startsWith('#')) {
-                    headerLineIndex = i;
-                    break;
-                }
-            }
-
+            // Find the header line
+            const headerLineIndex = findHeaderLine(lines);
             if (headerLineIndex === -1) {
                 return undefined;
             }
@@ -88,32 +75,23 @@ export class SwatDefinitionProvider implements vscode.DefinitionProvider {
             const headerLine = lines[headerLineIndex];
             const currentLine = lines[position.line];
             
-            // Split header and current line by whitespace
-            const headers = headerLine.trim().split(/\s+/);
-            const values = currentLine.trim().split(/\s+/);
+            // Parse header and current line using improved tokenizer
+            const headerTokens = parseLineTokens(headerLine);
+            const valueTokens = parseLineTokens(currentLine);
             
-            // Find which column the cursor is on
-            let columnIndex = -1;
-            let charCount = 0;
-            const lineStart = currentLine.search(/\S/); // First non-whitespace character
-            
-            for (let i = 0; i < values.length; i++) {
-                const valueStart = currentLine.indexOf(values[i], charCount);
-                const valueEnd = valueStart + values[i].length;
-                
-                if (position.character >= valueStart && position.character <= valueEnd) {
-                    columnIndex = i;
-                    break;
-                }
-                charCount = valueEnd;
-            }
-
-            if (columnIndex === -1 || columnIndex >= headers.length) {
+            // Find which token the cursor is on
+            const cursorToken = findTokenAtPosition(valueTokens, position.character);
+            if (!cursorToken) {
                 return undefined;
             }
 
-            const columnName = headers[columnIndex];
-            const columnValue = values[columnIndex];
+            const columnIndex = cursorToken.index;
+            if (columnIndex >= headerTokens.length) {
+                return undefined;
+            }
+
+            const columnName = headerTokens[columnIndex].value;
+            const columnValue = cursorToken.token.value;
 
             // Check if this column is a foreign key
             const foreignKeys = this.dbHelper.getForeignKeyColumns(dbPath, tableName);
@@ -210,14 +188,13 @@ export class SwatDefinitionProvider implements vscode.DefinitionProvider {
             // Skip header lines and find the data section
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i].trim();
-                // Check if this line starts with the name (first column)
-                if (line.startsWith(name + ' ') || line === name) {
-                    return i;
+                if (line.length === 0 || line.startsWith('#')) {
+                    continue;
                 }
                 
-                // Also check if name is the first token when split by whitespace
-                const tokens = line.split(/\s+/);
-                if (tokens.length > 0 && tokens[0] === name) {
+                // Parse the line to get the first column value
+                const tokens = parseLineTokens(line);
+                if (tokens.length > 0 && tokens[0].value === name) {
                     return i;
                 }
             }

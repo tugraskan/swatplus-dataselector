@@ -15,6 +15,7 @@ export class SwatDatabaseHelper {
         } catch (e) {
             // SQLite not available - features will be disabled
             this.sqlite3 = null;
+            console.warn('better-sqlite3 not available. Database navigation will use file-based fallback only.');
         }
     }
 
@@ -37,6 +38,22 @@ export class SwatDatabaseHelper {
     }
 
     /**
+     * Validate table name to prevent SQL injection
+     */
+    private isValidTableName(tableName: string): boolean {
+        // Only allow alphanumeric characters and underscores
+        return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tableName);
+    }
+
+    /**
+     * Validate column name to prevent SQL injection
+     */
+    private isValidColumnName(columnName: string): boolean {
+        // Only allow alphanumeric characters and underscores
+        return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(columnName);
+    }
+
+    /**
      * Resolve a foreign key reference to get the target table and record
      * @param dbPath Path to project.db
      * @param sourceTable Source table name (e.g., 'hru_data_hru')
@@ -46,6 +63,12 @@ export class SwatDatabaseHelper {
      */
     resolveForeignKey(dbPath: string, sourceTable: string, sourceColumn: string, sourceValue: string | number): any {
         if (!this.sqlite3) {
+            return null;
+        }
+
+        // Validate inputs to prevent SQL injection
+        if (!this.isValidTableName(sourceTable) || !this.isValidColumnName(sourceColumn)) {
+            console.error('Invalid table or column name');
             return null;
         }
 
@@ -65,6 +88,12 @@ export class SwatDatabaseHelper {
 
             const targetTable = fk.table;
             const targetColumn = fk.to || 'id';
+
+            // Validate target table name
+            if (!this.isValidTableName(targetTable) || !this.isValidColumnName(targetColumn)) {
+                db.close();
+                return null;
+            }
 
             // Query the target table for the record
             const query = `SELECT * FROM ${targetTable} WHERE ${targetColumn} = ?`;
@@ -98,6 +127,12 @@ export class SwatDatabaseHelper {
      */
     findRecordByName(dbPath: string, tableName: string, recordName: string): any {
         if (!this.sqlite3) {
+            return null;
+        }
+
+        // Validate table name to prevent SQL injection
+        if (!this.isValidTableName(tableName)) {
+            console.error('Invalid table name');
             return null;
         }
 
@@ -168,6 +203,12 @@ export class SwatDatabaseHelper {
      */
     getForeignKeyColumns(dbPath: string, tableName: string): string[] {
         if (!this.sqlite3) {
+            return [];
+        }
+
+        // Validate table name to prevent SQL injection
+        if (!this.isValidTableName(tableName)) {
+            console.error('Invalid table name');
             return [];
         }
 
