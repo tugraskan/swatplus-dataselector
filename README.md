@@ -89,3 +89,28 @@ After running the importer/conversion, the project SQLite database for a dataset
 	3. Browse tables (e.g. `plants_plt`, `fertilizer_frt`, `codes_bsn`) and run SQL queries.
 
 You can also view the DB using DB Browser for SQLite or the VS Code SQLite extensions if you prefer an integrated editor experience.
+
+## Development
+
+### Git Submodules
+
+This extension uses a git submodule to reference the upstream `swatplus-editor` repository for file I/O and database handling code.
+
+To initialize the submodule after cloning:
+
+```bash
+git submodule update --init --recursive
+```
+
+For more information about the upstream integration and syncing updates, see `src/python-scripts/COPIED_FILES.md`.
+
+### Python Dependencies
+
+The Python importer requires:
+- Python 3.x
+- `peewee` - Database ORM
+
+Install dependencies:
+```bash
+pip install peewee
+```

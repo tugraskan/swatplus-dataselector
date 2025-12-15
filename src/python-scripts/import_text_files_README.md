@@ -7,6 +7,17 @@ The `import_text_files` action allows you to import existing SWAT+ text files fr
 - Text files from another source that you want to import into the SWAT+ Editor
 - A need to recreate the database from a backup of text files
 
+## Code Architecture
+
+This extension uses a **git submodule** approach to integrate code from the upstream `swatplus-editor` repository:
+
+- **Vendor Submodule**: `vendor/swatplus-editor/` contains the full upstream codebase
+- **Copied Modules**: `fileio/`, `database/`, `helpers/` are synced from the vendor with local modifications
+- **Custom Actions**: `actions/import_text_files.py` is unique to this extension
+- **Sync Tool**: `tools/sync_from_upstream.py` updates copied modules from vendor
+
+For details, see `COPIED_FILES.md`.
+
 ## Two Versions Available
 
 ### 1. Standard Version (`swatplus_api.py`)

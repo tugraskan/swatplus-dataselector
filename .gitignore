@@ -10,3 +10,9 @@ __pycache__/
 *$py.class
 *.so
 .Python
+
+# Test/temporary database files (generated during testing)
+test_*.db
+test_*.sqlite
+temp_*.db
+temp_*.sqlite
