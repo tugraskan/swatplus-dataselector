@@ -14,8 +14,14 @@ export const SWAT_FILE_EXTENSIONS = [
 
 /**
  * Maximum number of fields to display in hover preview
+ * Set to a high number to show all fields by default
  */
-export const MAX_HOVER_FIELDS = 5;
+export const MAX_HOVER_FIELDS = 20;
+
+/**
+ * Number of fields to show before collapsing
+ */
+export const PREVIEW_FIELDS_COUNT = 8;
 
 /**
  * Parse a whitespace-delimited line into tokens with their positions

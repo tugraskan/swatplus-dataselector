@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { SwatDatabaseHelper } from './swatDatabaseHelper';
-import { parseLineTokens, findTokenAtPosition, findHeaderLine, MAX_HOVER_FIELDS } from './swatFileParser';
+import { parseLineTokens, findTokenAtPosition, findHeaderLine, MAX_HOVER_FIELDS, PREVIEW_FIELDS_COUNT } from './swatFileParser';
 
 /**
  * Provides hover information for SWAT+ text files
@@ -132,46 +132,114 @@ export class SwatHoverProvider implements vscode.HoverProvider {
         const markdown = new vscode.MarkdownString();
         markdown.isTrusted = true;
         
-        markdown.appendMarkdown(`**${columnName}**: \`${value}\`\n\n`);
-        markdown.appendMarkdown(`*Linked to: ${targetTable}*\n\n`);
+        // Header with the relationship
+        markdown.appendMarkdown(`### 🔗 ${this.getDisplayName(columnName)}\n\n`);
+        markdown.appendMarkdown(`**Value**: \`${value}\`\n\n`);
+        markdown.appendMarkdown(`**Referenced Table**: ${this.formatTableName(targetTable)}\n\n`);
         markdown.appendMarkdown('---\n\n');
         
-        // Display key fields from the record
-        const displayFields = ['name', 'description'];
+        // Display fields in a more organized way
         const allFields = Object.keys(record).filter(k => k !== 'id');
         
-        // Count how many fields we've shown
-        let fieldsShown = 0;
+        // Priority fields to show first
+        const priorityFields = ['name', 'description'];
+        const shownFields: string[] = [];
         
-        // Show name and description first if they exist
-        displayFields.forEach(field => {
+        // Show priority fields
+        markdown.appendMarkdown('**Key Information:**\n\n');
+        priorityFields.forEach(field => {
             if (record[field] !== undefined && record[field] !== null) {
-                markdown.appendMarkdown(`**${field}**: ${record[field]}\n\n`);
-                fieldsShown++;
+                const displayValue = this.formatFieldValue(record[field]);
+                markdown.appendMarkdown(`• **${this.formatFieldName(field)}**: ${displayValue}\n`);
+                shownFields.push(field);
             }
         });
         
-        // Show a few other fields (limit to MAX_HOVER_FIELDS total)
-        const remainingSlots = MAX_HOVER_FIELDS - fieldsShown;
-        const otherFields = allFields.filter(f => !displayFields.includes(f)).slice(0, remainingSlots);
-        otherFields.forEach(field => {
-            const val = record[field];
-            if (val !== undefined && val !== null) {
-                markdown.appendMarkdown(`**${field}**: ${val}\n\n`);
-                fieldsShown++;
-            }
-        });
+        // Show other important fields
+        const otherFields = allFields.filter(f => !priorityFields.includes(f));
+        const fieldsToShow = otherFields.slice(0, PREVIEW_FIELDS_COUNT);
         
-        // Calculate remaining fields
-        const remainingFields = allFields.length - fieldsShown;
-        if (remainingFields > 0) {
-            markdown.appendMarkdown(`\n*...and ${remainingFields} more field${remainingFields === 1 ? '' : 's'}*\n\n`);
+        if (fieldsToShow.length > 0) {
+            markdown.appendMarkdown('\n**Additional Fields:**\n\n');
+            fieldsToShow.forEach(field => {
+                const val = record[field];
+                if (val !== undefined && val !== null) {
+                    const displayValue = this.formatFieldValue(val);
+                    markdown.appendMarkdown(`• **${this.formatFieldName(field)}**: ${displayValue}\n`);
+                    shownFields.push(field);
+                }
+            });
         }
         
+        // Show remaining field count
+        const remainingFields = allFields.length - shownFields.length;
+        if (remainingFields > 0) {
+            markdown.appendMarkdown(`\n*...and ${remainingFields} more field${remainingFields === 1 ? '' : 's'}*\n`);
+        }
+        
+        // Add helpful actions
         markdown.appendMarkdown('\n---\n\n');
-        markdown.appendMarkdown('*Click to go to definition (F12)*');
+        markdown.appendMarkdown('**Actions:**\n');
+        markdown.appendMarkdown('• Press **F12** to go to definition\n');
+        markdown.appendMarkdown('• Press **Alt+F12** (Peek Definition) to view inline\n');
+        markdown.appendMarkdown('• Right-click for more options\n');
         
         return new vscode.Hover(markdown);
+    }
+
+    /**
+     * Format field name for display
+     */
+    private formatFieldName(fieldName: string): string {
+        // Convert snake_case to Title Case
+        return fieldName
+            .split('_')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+    }
+
+    /**
+     * Format field value for display
+     */
+    private formatFieldValue(value: any): string {
+        if (typeof value === 'number') {
+            // Format numbers with appropriate precision
+            if (Number.isInteger(value)) {
+                return value.toString();
+            } else {
+                return value.toFixed(4).replace(/\.?0+$/, '');
+            }
+        }
+        return String(value);
+    }
+
+    /**
+     * Get a friendly display name for a column
+     */
+    private getDisplayName(columnName: string): string {
+        const nameMap: { [key: string]: string } = {
+            'hydro': 'Hydrology',
+            'topo': 'Topography',
+            'field': 'Field',
+            'soil': 'Soil',
+            'lu_mgt': 'Land Use Management',
+            'soil_plant_init': 'Soil Plant Initialization',
+            'surf_stor': 'Surface Storage',
+            'snow': 'Snow',
+            'plnt_typ': 'Plant Type',
+            'soil_text': 'Soil Texture'
+        };
+        
+        return nameMap[columnName] || this.formatFieldName(columnName);
+    }
+
+    /**
+     * Format table name for display
+     */
+    private formatTableName(tableName: string): string {
+        // Remove _hyd, _fld, etc. suffixes and format
+        const baseName = tableName.replace(/_(hyd|fld|sol|lum|ini|wet|sno|plt|dtl|hru)$/, '');
+        return this.formatFieldName(baseName);
     }
 
     /**

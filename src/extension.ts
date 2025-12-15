@@ -7,6 +7,9 @@ import { SwatDatasetWebviewProvider } from './swatWebviewProvider';
 import { SwatDatabaseHelper } from './swatDatabaseHelper';
 import { SwatDefinitionProvider } from './swatDefinitionProvider';
 import { SwatHoverProvider } from './swatHoverProvider';
+import { SwatCodeLensProvider } from './swatCodeLensProvider';
+import { SwatDatabaseBrowserProvider } from './swatDatabaseBrowserProvider';
+import { SwatCodeActionProvider } from './swatCodeActionProvider';
 import { SWAT_FILE_EXTENSIONS } from './swatFileParser';
 
 // This method is called when your extension is activated
@@ -26,17 +29,38 @@ export function activate(context: vscode.ExtensionContext) {
 	const dbHelper = new SwatDatabaseHelper();
 	const getSelectedDataset = () => swatProvider.getSelectedDataset();
 
-	// Register Definition Provider for SWAT+ files
+	// Create database browser provider
+	const browserProvider = new SwatDatabaseBrowserProvider(context, dbHelper, getSelectedDataset);
+
+	// Register Definition Provider, Hover Provider, CodeLens Provider, and Code Action Provider for SWAT+ files
 	const definitionProvider = new SwatDefinitionProvider(dbHelper, getSelectedDataset);
 	const hoverProvider = new SwatHoverProvider(dbHelper, getSelectedDataset);
+	const codeLensProvider = new SwatCodeLensProvider(dbHelper, getSelectedDataset);
+	const codeActionProvider = new SwatCodeActionProvider(dbHelper, getSelectedDataset, browserProvider);
 
 	const definitionProviderDisposables = SWAT_FILE_EXTENSIONS.map(ext => {
 		const selector = { scheme: 'file', pattern: `**/*.${ext}` };
 		return [
 			vscode.languages.registerDefinitionProvider(selector, definitionProvider),
-			vscode.languages.registerHoverProvider(selector, hoverProvider)
+			vscode.languages.registerHoverProvider(selector, hoverProvider),
+			vscode.languages.registerCodeLensProvider(selector, codeLensProvider),
+			vscode.languages.registerCodeActionsProvider(selector, codeActionProvider)
 		];
 	}).flat();
+
+	// Command to open database browser for a specific table and record
+	const openDatabaseBrowser = vscode.commands.registerCommand('swat-dataset-selector.openDatabaseBrowser', 
+		async (tableName: string, recordName?: string) => {
+			await browserProvider.openTable(tableName, recordName);
+		}
+	);
+
+	// Command to open database browser for hru_data_hru table
+	const openHruDataBrowser = vscode.commands.registerCommand('swat-dataset-selector.openHruDataBrowser', 
+		async () => {
+			await browserProvider.openTable('hru_data_hru');
+		}
+	);
 
 	// Command to select dataset folder
 	const selectDataset = vscode.commands.registerCommand('swat-dataset-selector.selectDataset', async () => {
@@ -325,6 +349,8 @@ export function activate(context: vscode.ExtensionContext) {
 		,closeFile
 		,closeAllDatasetFiles
 		,seedTestData
+		,openDatabaseBrowser
+		,openHruDataBrowser
 	);
 }
 
