@@ -7,6 +7,16 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 ## [Unreleased]
 
 ### Added
+- **Database Table Browser (MVP)**: Interactive webview for browsing SWAT+ database tables
+  - View database tables in a grid format with all columns and rows
+  - Clickable foreign key links (🔗) to navigate to referenced records
+  - Automatic filtering to show specific records when navigating
+  - Read-only browsing for safe data exploration
+  - Quick access via Code Actions (💡 lightbulb) on foreign key values in text files
+  - Command: "SWAT+: Browse HRU Data" for quick access to HRU table
+- **Code Actions Provider**: Right-click menu actions for foreign key values
+  - "🔍 Open [value] in Database Browser" action appears when clicking on foreign keys
+  - Integrates seamlessly with text file navigation
 - **Enhanced Database Navigation**: Comprehensive relational navigation for SWAT+ text files
   - **Go to Definition (F12)**: Click on foreign key values to navigate to linked records
   - **Peek Definition (Alt+F12)**: View referenced records inline without leaving current file

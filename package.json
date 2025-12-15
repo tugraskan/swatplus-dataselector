@@ -52,6 +52,15 @@
         "command": "swat-dataset-selector.launchDebug",
         "title": "SWAT+: Debug with Selected Dataset",
         "icon": "$(debug-alt)"
+      },
+      {
+        "command": "swat-dataset-selector.openDatabaseBrowser",
+        "title": "SWAT+: Open Database Browser"
+      },
+      {
+        "command": "swat-dataset-selector.openHruDataBrowser",
+        "title": "SWAT+: Browse HRU Data",
+        "icon": "$(table)"
       }
     ]
   },

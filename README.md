@@ -83,6 +83,35 @@ After importing/converting a dataset to a SQLite database, you can navigate betw
 
 This mimics SWAT+ Editor's relational navigation workflow directly in VS Code!
 
+### Database Table Browser (NEW!)
+
+For a more SWAT+ Editor-like experience, use the built-in database table browser:
+
+#### Features
+- **Browse database tables** - View HRU data and other tables in a grid view
+- **Clickable foreign keys** - Click on any foreign key value (🔗) to navigate to the referenced record
+- **Filtered views** - Automatically filters to show only the referenced record
+- **Read-only** - Safe browsing without risk of accidental edits
+
+#### Usage
+
+**Option 1: From text files (Code Actions)**
+1. Open `hru-data.hru` in VS Code
+2. Click on a foreign key value (e.g., `hydro_001`)
+3. Click the lightbulb 💡 or press `Ctrl+.` (Cmd+. on Mac)
+4. Select `🔍 Open "hydro_001" in Database Browser`
+5. The database browser opens showing the `hydrology_hyd` table filtered to that record
+
+**Option 2: From Command Palette**
+1. Press `Ctrl+Shift+P` (Cmd+Shift+P on Mac)
+2. Type "SWAT+: Browse HRU Data"
+3. Browse the full HRU table with clickable foreign keys
+
+**Navigation workflow:**
+- Click any 🔗 link in the table to navigate to referenced records
+- Each click opens the target table filtered to that specific record
+- Perfect for following the data relationships like SWAT+ Editor
+
 ### Selected Database
 
 After you select a dataset folder the extension will reference the dataset's `project.db` when running the importer/conversion. The current database location for the selected dataset will be:
@@ -107,6 +136,7 @@ This replaces the need to manually edit `launch.json` and change the `cwd` param
 - C/C++ extension (for gdb debugging)
 - Properly configured CMake project
 - Python 3.x with `peewee` package (for database import/conversion)
+- **better-sqlite3** npm package (automatically included) for database browsing
 
 ## Extension Settings
 
