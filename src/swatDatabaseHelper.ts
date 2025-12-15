@@ -39,18 +39,20 @@ export class SwatDatabaseHelper {
 
     /**
      * Validate table name to prevent SQL injection
+     * Only allows alphanumeric characters and underscores, starting with a letter
      */
     private isValidTableName(tableName: string): boolean {
-        // Only allow alphanumeric characters and underscores
-        return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tableName);
+        // Must start with a letter, followed by alphanumeric or underscore
+        return /^[a-zA-Z][a-zA-Z0-9_]*$/.test(tableName);
     }
 
     /**
      * Validate column name to prevent SQL injection
+     * Only allows alphanumeric characters and underscores, starting with a letter
      */
     private isValidColumnName(columnName: string): boolean {
-        // Only allow alphanumeric characters and underscores
-        return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(columnName);
+        // Must start with a letter, followed by alphanumeric or underscore
+        return /^[a-zA-Z][a-zA-Z0-9_]*$/.test(columnName);
     }
 
     /**

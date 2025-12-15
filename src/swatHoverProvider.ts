@@ -140,24 +140,32 @@ export class SwatHoverProvider implements vscode.HoverProvider {
         const displayFields = ['name', 'description'];
         const allFields = Object.keys(record).filter(k => k !== 'id');
         
+        // Count how many fields we've shown
+        let fieldsShown = 0;
+        
         // Show name and description first if they exist
         displayFields.forEach(field => {
             if (record[field] !== undefined && record[field] !== null) {
                 markdown.appendMarkdown(`**${field}**: ${record[field]}\n\n`);
+                fieldsShown++;
             }
         });
         
         // Show a few other fields (limit to MAX_HOVER_FIELDS total)
-        const otherFields = allFields.filter(f => !displayFields.includes(f)).slice(0, MAX_HOVER_FIELDS - 2);
+        const remainingSlots = MAX_HOVER_FIELDS - fieldsShown;
+        const otherFields = allFields.filter(f => !displayFields.includes(f)).slice(0, remainingSlots);
         otherFields.forEach(field => {
             const val = record[field];
             if (val !== undefined && val !== null) {
                 markdown.appendMarkdown(`**${field}**: ${val}\n\n`);
+                fieldsShown++;
             }
         });
         
-        if (allFields.length > MAX_HOVER_FIELDS) {
-            markdown.appendMarkdown(`\n*...and ${allFields.length - MAX_HOVER_FIELDS} more fields*\n\n`);
+        // Calculate remaining fields
+        const remainingFields = allFields.length - fieldsShown;
+        if (remainingFields > 0) {
+            markdown.appendMarkdown(`\n*...and ${remainingFields} more field${remainingFields === 1 ? '' : 's'}*\n\n`);
         }
         
         markdown.appendMarkdown('\n---\n\n');
