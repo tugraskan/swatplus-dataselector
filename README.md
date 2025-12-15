@@ -34,22 +34,54 @@ This extension provides the following commands:
 3. Browse to your SWAT+ dataset folder
 4. Later, run `SWAT+: Debug with Selected Dataset` to launch debug with the selected folder
 
-### Database Navigation (NEW!)
+### Database Navigation
 
-After importing/converting a dataset to a SQLite database, you can navigate between linked records in SWAT+ text files:
+After importing/converting a dataset to a SQLite database, you can navigate between linked records in SWAT+ text files with enhanced browsing features:
+
+#### Features
+
+1. **Go to Definition (F12)**
+   - Click on any foreign key value (e.g., `hydro_001` in `hru-data.hru`)
+   - Press F12 to navigate to the referenced record in the target file (e.g., `hydrology.hyd`)
+   - Or right-click and select "Go to Definition"
+
+2. **Peek Definition (Alt+F12)**
+   - View the referenced record inline without leaving the current file
+   - See all details in a popup window
+
+3. **Enhanced Hover Preview**
+   - Hover over any foreign key value to see detailed information
+   - Shows up to 8 key fields from the referenced record
+   - Organized display with friendly names (Topography, Hydrology, etc.)
+   - Formatted numbers for easier reading
+   - Helpful action hints (F12, Alt+F12, right-click)
+
+4. **CodeLens Hints**
+   - Inline indicators above rows showing which foreign keys are referenced
+   - Example: `🔗 Referenced: Hydrology: hydro_001 | Topography: topo_002`
+   - Helps you quickly identify which records have linkages
+
+#### Getting Started
 
 1. **Select a dataset** with a `project.db` file (created via the Import/Convert DB button)
 2. **Open any SWAT+ text file** (e.g., `hru-data.hru`)
-3. **Click on a foreign key value** (e.g., a hydro name) or press `F12` to go to its definition
-4. **Hover over values** to see preview information about the linked record
+3. **Look for CodeLens hints** above rows that reference other tables
+4. **Click on a foreign key value** or press F12 to navigate
+5. **Hover over values** to see detailed preview information
 
-**Supported file types**: `.hru`, `.hyd`, `.fld`, `.sol`, `.lum`, `.ini`, `.wet`, `.sno`, `.plt`, `.dtl`, and more
+**Supported file types**: `.hru`, `.hyd`, `.fld`, `.sol`, `.lum`, `.ini`, `.wet`, `.sno`, `.plt`, `.dtl`, and 20+ more
 
-**Example workflow**:
+#### Example Workflow
+
+**Browsing HRU relationships:**
 - Open `hru-data.hru`
-- Find a row with a `hydro` column value like `hydro_001`
-- Click on `hydro_001` or press F12
-- VS Code navigates to the corresponding line in `hydrology.hyd`
+- See inline CodeLens hints like `🔗 Referenced: Hydrology: hydro_001 | Topography: topo_002`
+- Hover over `hydro_001` to see a preview with all hydrology parameters
+- Press F12 on `hydro_001` to jump to `hydrology.hyd` and see the full record
+- Use Alt+F12 to peek at the topography details without leaving the HRU file
+- Navigate back with Alt+← or use breadcrumbs
+
+This mimics SWAT+ Editor's relational navigation workflow directly in VS Code!
 
 ### Selected Database
 
