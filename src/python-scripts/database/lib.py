@@ -10,7 +10,13 @@ def bulk_insert(db, table, data):
 
 		with db.atomic():
 			for idx in range(0, len(data), num_insert):
-				table.insert_many(data[idx:idx + num_insert]).execute()
+				# Use INSERT OR REPLACE behavior to avoid UNIQUE constraint failures when importing
+				# Peewee's on_conflict can be used to perform REPLACE on conflict
+				try:
+					table.insert_many(data[idx:idx + num_insert]).on_conflict('REPLACE').execute()
+				except Exception:
+					# Fallback to plain insert if on_conflict not supported in this peewee version
+					table.insert_many(data[idx:idx + num_insert]).execute()
 
 def bulk_update_ids(db, table, param_dict, id_list):
 	if len(id_list) > 0:

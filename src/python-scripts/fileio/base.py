@@ -180,8 +180,9 @@ def read_file(file_name, table, db, expected_cols, ignore_id_col=False, start_li
 					skip = True
 
 				if not skip:
-					value = None
+					# Only set the field if the input line contains a value for it.
 					if len(val) > j:
+						value = None
 						if convert_name_to_lower and field.name == "name":
 							value = val[j].lower()
 						elif field.name == "description":
@@ -189,14 +190,14 @@ def read_file(file_name, table, db, expected_cols, ignore_id_col=False, start_li
 						else:
 							value = val[j]
 
-					if type(value) is str:
-						value = value.replace('"', '')
-						if value == 'null':
-							value = None
+						if type(value) is str:
+							value = value.replace('"', '')
+							if value == 'null':
+								value = None
 					
-					row[field.name] = value if field.name not in remove_spaces_cols else utils.remove_space(value)
+						row[field.name] = value if field.name not in remove_spaces_cols else utils.remove_space(value)
 
-					j += 1
+						j += 1
 
 			add_row = True
 			if overwrite != FileOverwrite.ignore:

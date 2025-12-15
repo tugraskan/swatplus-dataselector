@@ -134,3 +134,7 @@ class Rout_unit_def(BaseFileModel):
 
 					self.write_ele_ids2(file, table, element_table, row.elements, obj_table, obj_ids)
 					file.write("\n")
+
+
+# Backwards-compatible aliases expected by import code
+Rout_unit_rtu = Rout_unit
