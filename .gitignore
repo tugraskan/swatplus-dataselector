@@ -11,6 +11,8 @@ __pycache__/
 *.so
 .Python
 
-# Database files (generated during testing)
-*.db
-*.sqlite
+# Test/temporary database files (generated during testing)
+test_*.db
+test_*.sqlite
+temp_*.db
+temp_*.sqlite
