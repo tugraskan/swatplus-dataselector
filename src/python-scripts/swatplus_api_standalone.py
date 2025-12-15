@@ -5,6 +5,10 @@ Bundled version for use with VS Code extension
 
 This is a simplified, self-contained version of swatplus_api.py
 that only handles the import_text_files action.
+
+The fileio, database, and helpers modules are copied from the upstream
+swatplus-editor repository. The vendor/swatplus-editor submodule provides
+a reference to the upstream code for easy updates.
 """
 
 import sys

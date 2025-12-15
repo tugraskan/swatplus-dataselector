@@ -1,0 +1,4 @@
+[submodule "src/python-scripts/vendor/swatplus-editor"]
+	path = src/python-scripts/vendor/swatplus-editor
+	url = https://github.com/tugraskan/swatplus-editor.git
+	branch = main
