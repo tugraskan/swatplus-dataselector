@@ -4,6 +4,9 @@ import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import * as path from 'path';
 import { SwatDatasetWebviewProvider } from './swatWebviewProvider';
+import { SwatDatabaseHelper } from './swatDatabaseHelper';
+import { SwatDefinitionProvider } from './swatDefinitionProvider';
+import { SwatHoverProvider } from './swatHoverProvider';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -17,6 +20,29 @@ export function activate(context: vscode.ExtensionContext) {
 		SwatDatasetWebviewProvider.viewType,
 		swatProvider
 	);
+
+	// Create database helper and language providers for SWAT+ file navigation
+	const dbHelper = new SwatDatabaseHelper();
+	const getSelectedDataset = () => swatProvider.getSelectedDataset();
+
+	// Register Definition Provider for SWAT+ files
+	const swatFileExtensions = [
+		'hru', 'hyd', 'fld', 'sol', 'lum', 'ini', 'wet', 'sno', 
+		'plt', 'dtl', 'con', 'cha', 'res', 'aqu', 'rtu', 'ele',
+		'rec', 'bsn', 'cal', 'def', 'ops', 'sch', 'til', 'frt',
+		'cli', 'pcp', 'tmp', 'wnd', 'prt', 'sim'
+	];
+	
+	const definitionProvider = new SwatDefinitionProvider(dbHelper, getSelectedDataset);
+	const hoverProvider = new SwatHoverProvider(dbHelper, getSelectedDataset);
+
+	const definitionProviderDisposables = swatFileExtensions.map(ext => {
+		const selector = { scheme: 'file', pattern: `**/*.${ext}` };
+		return [
+			vscode.languages.registerDefinitionProvider(selector, definitionProvider),
+			vscode.languages.registerHoverProvider(selector, hoverProvider)
+		];
+	}).flat();
 
 	// Command to select dataset folder
 	const selectDataset = vscode.commands.registerCommand('swat-dataset-selector.selectDataset', async () => {
@@ -203,6 +229,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(
 		webviewViewProvider,
+		...definitionProviderDisposables,
 		selectDataset,
 		selectAndDebug,
 		launchWithSelected,

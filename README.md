@@ -7,6 +7,8 @@ A VS Code extension for SWAT+ development that allows you to browse and select d
 - **Select Dataset Folder**: Browse and select a SWAT+ dataset folder
 - **Quick Debug Launch**: Select a dataset folder and immediately start debugging
 - **Seamless Integration**: Works with CMake Tools and gdb debugger configurations
+- **Database Navigation**: Click on foreign key values in SWAT+ text files to navigate to linked records (e.g., click on a `hydro` value in `hru-data.hru` to jump to the definition in `hydrology.hyd`)
+- **Hover Information**: Hover over foreign key references to see details about the linked record
 
 ## Commands
 
@@ -32,6 +34,23 @@ This extension provides the following commands:
 3. Browse to your SWAT+ dataset folder
 4. Later, run `SWAT+: Debug with Selected Dataset` to launch debug with the selected folder
 
+### Database Navigation (NEW!)
+
+After importing/converting a dataset to a SQLite database, you can navigate between linked records in SWAT+ text files:
+
+1. **Select a dataset** with a `project.db` file (created via the Import/Convert DB button)
+2. **Open any SWAT+ text file** (e.g., `hru-data.hru`)
+3. **Click on a foreign key value** (e.g., a hydro name) or press `F12` to go to its definition
+4. **Hover over values** to see preview information about the linked record
+
+**Supported file types**: `.hru`, `.hyd`, `.fld`, `.sol`, `.lum`, `.ini`, `.wet`, `.sno`, `.plt`, `.dtl`, and more
+
+**Example workflow**:
+- Open `hru-data.hru`
+- Find a row with a `hydro` column value like `hydro_001`
+- Click on `hydro_001` or press F12
+- VS Code navigates to the corresponding line in `hydrology.hyd`
+
 ### Selected Database
 
 After you select a dataset folder the extension will reference the dataset's `project.db` when running the importer/conversion. The current database location for the selected dataset will be:
@@ -55,6 +74,7 @@ This replaces the need to manually edit `launch.json` and change the `cwd` param
 - CMake Tools extension (for `cmake.launchTargetPath` command)
 - C/C++ extension (for gdb debugging)
 - Properly configured CMake project
+- Python 3.x with `peewee` package (for database import/conversion)
 
 ## Extension Settings
 
