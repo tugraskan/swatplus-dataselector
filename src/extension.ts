@@ -201,6 +201,58 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
+	// Command to open a DB explicitly with a SQLite viewer (prefer viewer over text editor)
+	const openDbWithViewer = vscode.commands.registerCommand('swat-dataset-selector.openDbWithViewer', async (filePath: string) => {
+		if (!filePath || typeof filePath !== 'string') {
+			return;
+		}
+		try {
+			const uri = vscode.Uri.file(filePath);
+			// Try common viewer commands in order
+			const tryCommands = ['sqlite-viewer.open', 'sqlite.open', 'sqltools.openDatabase', 'sqltools.open'];
+			for (const cmd of tryCommands) {
+				try {
+					await vscode.commands.executeCommand(cmd, uri);
+					return;
+				} catch (e) {
+					// ignore and try next
+				}
+			}
+
+			// Try to find installed extensions with known custom editor ids
+			const editorMap: { [id: string]: string } = {
+				'qwtel.sqlite-viewer': 'qwtel.sqlite-viewer.viewer',
+				'alexcvzz.vscode-sqlite': 'alexcvzz.vscode-sqlite.openEditor'
+			};
+			for (const extId of Object.keys(editorMap)) {
+				if (vscode.extensions.getExtension(extId)) {
+					try {
+						await vscode.commands.executeCommand('vscode.openWith', uri, editorMap[extId]);
+						return;
+					} catch (e) {
+						// ignore
+					}
+				}
+			}
+
+			// Last resort: prompt to install a SQLite viewer or copy path
+			const choice = await vscode.window.showInformationMessage(
+				'To view SQLite database files, please install a SQLite viewer extension.',
+				'Install qwtel.sqlite-viewer',
+				'Copy Path'
+			);
+			if (choice === 'Install qwtel.sqlite-viewer') {
+				await vscode.commands.executeCommand('workbench.extensions.installExtension', 'qwtel.sqlite-viewer');
+			} else if (choice === 'Copy Path') {
+				await vscode.env.clipboard.writeText(filePath);
+				vscode.window.showInformationMessage('Database path copied to clipboard');
+			}
+		} catch (err) {
+			console.error('Failed to open DB with viewer', err);
+			vscode.window.showErrorMessage('Failed to open DB: ' + (err instanceof Error ? err.message : String(err)));
+		}
+	});
+
 	// Command to close a specific open file (if open)
 	const closeFile = vscode.commands.registerCommand('swat-dataset-selector.closeFile', async (filePath: string) => {
 		if (!filePath || typeof filePath !== 'string') {
@@ -269,6 +321,7 @@ export function activate(context: vscode.ExtensionContext) {
 		importTextFiles,
 		showDatasetInfo
 		,openFile
+		,openDbWithViewer
 		,closeFile
 		,closeAllDatasetFiles
 		,seedTestData
