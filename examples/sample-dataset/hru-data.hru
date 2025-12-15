@@ -1,0 +1,4 @@
+name              topo              hydro             soil              lu_mgt            soil_plant_init   surf_stor         snow              field             description
+hru_001           topo_001          hydro_001         soil_clay         lu_agriculture    init_default      null              snow_default      field_001         Agricultural HRU in clay soil
+hru_002           topo_002          hydro_002         soil_loam         lu_forest         init_default      null              snow_default      field_002         Forest HRU in loam soil
+hru_003           topo_001          hydro_003         soil_sand         lu_agriculture    init_crop         wetland_001       snow_default      field_003         Agricultural HRU with wetland
