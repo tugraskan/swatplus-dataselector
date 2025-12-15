@@ -156,6 +156,43 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 		try {
+			const fileExt = filePath.toLowerCase().split('.').pop();
+			
+			// Handle database files specially
+			if (fileExt === 'db' || fileExt === 'sqlite' || fileExt === 'sqlite3') {
+				// Try to open with a SQLite viewer extension
+				const uri = vscode.Uri.file(filePath);
+				
+				// Try common SQLite viewer extensions
+				try {
+					// Try qwtel.sqlite-viewer first (mentioned in README)
+					await vscode.commands.executeCommand('sqlite-viewer.open', uri);
+					return;
+				} catch (e1) {
+					try {
+						// Try alexcvzz.vscode-sqlite
+						await vscode.commands.executeCommand('sqlite.open', uri);
+						return;
+					} catch (e2) {
+						// If no SQLite viewer is available, show helpful message
+						const choice = await vscode.window.showInformationMessage(
+							'To view SQLite database files, please install a SQLite viewer extension.',
+							'Install qwtel.sqlite-viewer',
+							'Copy Path'
+						);
+						
+						if (choice === 'Install qwtel.sqlite-viewer') {
+							await vscode.commands.executeCommand('workbench.extensions.installExtension', 'qwtel.sqlite-viewer');
+						} else if (choice === 'Copy Path') {
+							await vscode.env.clipboard.writeText(filePath);
+							vscode.window.showInformationMessage('Database path copied to clipboard');
+						}
+						return;
+					}
+				}
+			}
+			
+			// For text files, open normally
 			const doc = await vscode.workspace.openTextDocument(filePath);
 			await vscode.window.showTextDocument(doc, { preview: false });
 		} catch (err) {
