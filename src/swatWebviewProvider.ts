@@ -74,6 +74,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         case 'selectDataset':
                             vscode.commands.executeCommand('swat-dataset-selector.selectDataset');
                             break;
+                        case 'importTextFiles':
+                            vscode.commands.executeCommand('swat-dataset-selector.importTextFiles');
+                            break;
                         case 'selectAndDebug':
                             vscode.commands.executeCommand('swat-dataset-selector.selectAndDebug');
                             break;
@@ -278,6 +281,35 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         <span>Error reading dataset folder</span>
                     </div>
                    </div>`;
+            }
+        }
+
+        // If a project DB exists inside the selected dataset, show a small 'Selected Database' section
+        let dbHtml = '';
+        if (this.selectedDataset) {
+            try {
+                const dbPath = path.join(this.selectedDataset, 'project.db');
+                if (fs.existsSync(dbPath)) {
+                    dbHtml = `
+                    <div class="section">
+                        <div class="section-header">
+                            ${svgs.info}
+                            <span class="section-title">Selected Database</span>
+                            <span class="badge">DB</span>
+                        </div>
+                        <div class="section-content">
+                            <div style="display:flex;flex-direction:column;gap:8px;padding:8px 4px">
+                                <div class="dataset-path" title="${escapeHtml(dbPath)}">${escapeHtml(dbPath)}</div>
+                                <div style="display:flex;gap:8px">
+                                    <button class="action-button secondary" id="openDbBtn" data-path="${escapeHtml(dbPath)}">Open DB</button>
+                                    <button class="action-button secondary" id="copyDbBtn" data-path="${escapeHtml(dbPath)}">Copy Path</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+                }
+            } catch (e) {
+                // ignore filesystem errors and don't show DB block
             }
         }
 
@@ -860,6 +892,10 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     ${svgs.folderOpened}
                     Select Folder
                 </button>
+                <button class="action-button primary${!this.selectedDataset ? ' disabled' : ''}" id="importConvertBtn" ${!this.selectedDataset ? 'disabled' : ''} title="Import/Convert dataset to project DB">
+                    ${svgs.star}
+                    Import / Convert DB
+                </button>
                 <button class="action-button secondary${!this.selectedDataset ? ' disabled' : ''}" id="launchDebugBtn" ${!this.selectedDataset ? 'disabled' : ''}>
                     ${svgs.debugPlay}
                     Debug
@@ -876,6 +912,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             <div class="divider" id="recent-divider" title="Recent / Selected separator"><div class="handle"></div></div>
 
             ${combinedHtml}
+            ${dbHtml}
         </div>
 
         <div class="help-text">
@@ -915,11 +952,42 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 swatHost.postMessage({ type: 'selectDataset' });
             });
 
+            const importBtn = $('importConvertBtn');
+            if (importBtn) importBtn.addEventListener('click', () => {
+                swatHost.postMessage({ type: 'importTextFiles' });
+            });
+
             // 'Select Dataset & Debug' button removed; no handler required.
 
             const launchBtn = $('launchDebugBtn');
             if (launchBtn) launchBtn.addEventListener('click', () => {
                 swatHost.postMessage({ type: 'launchDebug' });
+            });
+
+            // Open / Copy DB buttons (if present)
+            const openDbBtn = $('openDbBtn');
+            if (openDbBtn) openDbBtn.addEventListener('click', () => {
+                const p = openDbBtn.dataset.path;
+                if (p) swatHost.postMessage({ type: 'openFile', path: p });
+            });
+
+            const copyDbBtn = $('copyDbBtn');
+            if (copyDbBtn) copyDbBtn.addEventListener('click', async () => {
+                const p = copyDbBtn.dataset.path;
+                if (!p) return;
+                try {
+                    if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+                        await navigator.clipboard.writeText(p);
+                        const prev = copyDbBtn.textContent;
+                        copyDbBtn.textContent = 'Copied';
+                        setTimeout(() => { copyDbBtn.textContent = prev; }, 1500);
+                    } else {
+                        // fallback: send to host (host may not handle copy but it's a fallback)
+                        swatHost.postMessage({ type: 'openFile', path: p });
+                    }
+                } catch (err) {
+                    swatHost.postMessage({ type: 'openFile', path: p });
+                }
             });
 
             // Recent dataset click handlers

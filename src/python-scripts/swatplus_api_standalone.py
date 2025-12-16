@@ -1,7 +1,7 @@
-!/usr/bin/env python
+#!/usr/bin/env python
 """
 Standalone SWAT+ Text Files Importer
-Comment viewBundled version for use with VS Code extension
+Bundled version for use with VS Code extension
 
 This is a simplified, self-contained version of swatplus_api.py
 that only handles the import_text_files action.
