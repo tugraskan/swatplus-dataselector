@@ -31,6 +31,22 @@ export class SwatDatabaseBrowserProvider {
             return;
         }
 
+        // Validate table name
+        if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(tableName)) {
+            vscode.window.showErrorMessage(`Invalid table name: ${tableName}`);
+            return;
+        }
+
+        // Check if table exists
+        if (!this.dbHelper.tableExists(dbPath, tableName)) {
+            const availableTables = this.dbHelper.getAvailableTables(dbPath);
+            const tablesMsg = availableTables.length > 0 
+                ? `Available tables: ${availableTables.join(', ')}`
+                : 'No tables found in database';
+            vscode.window.showWarningMessage(`Table "${tableName}" not found. ${tablesMsg}`);
+            // Still show the error page in the browser
+        }
+
         // Create or show the panel
         if (this.panel) {
             this.panel.reveal(vscode.ViewColumn.One);
@@ -84,6 +100,32 @@ export class SwatDatabaseBrowserProvider {
             const sqlite3 = require('better-sqlite3');
             const db = sqlite3(dbPath, { readonly: true, fileMustExist: true });
 
+            // Validate table name to prevent SQL injection
+            if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(tableName)) {
+                vscode.window.showErrorMessage(`Invalid table name: ${tableName}`);
+                db.close();
+                return;
+            }
+
+            // Check if table exists
+            const tableCheckStmt = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`);
+            const tableExists = tableCheckStmt.get(tableName);
+            
+            if (!tableExists) {
+                // Get list of available tables
+                const availableTablesStmt = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`);
+                const availableTables = availableTablesStmt.all().map((t: any) => t.name);
+                
+                this.panel.webview.html = this.getErrorHtml(
+                    tableName,
+                    `Table "${tableName}" not found in database`,
+                    'The table may not exist or the database may need to be regenerated.',
+                    availableTables
+                );
+                db.close();
+                return;
+            }
+
             // Get table data
             let query = `SELECT * FROM ${tableName}`;
             const params: any[] = [];
@@ -113,7 +155,24 @@ export class SwatDatabaseBrowserProvider {
             );
 
         } catch (error) {
-            vscode.window.showErrorMessage(`Error loading table: ${error}`);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(`Error loading table: ${errorMessage}`);
+            if (this.panel) {
+                // Get available tables for error message
+                let availableTables: string[] = [];
+                try {
+                    availableTables = this.dbHelper.getAvailableTables(dbPath);
+                } catch (e) {
+                    // ignore
+                }
+                
+                this.panel.webview.html = this.getErrorHtml(
+                    tableName,
+                    'Error loading table',
+                    errorMessage,
+                    availableTables
+                );
+            }
         }
     }
 
@@ -296,13 +355,132 @@ export class SwatDatabaseBrowserProvider {
                     .empty-state {
                         text-align: center;
                         color: var(--vscode-descriptionForeground);
+                        max-width: 500px;
+                    }
+                    .empty-state h2 {
+                        color: var(--vscode-foreground);
+                    }
+                    .empty-state p {
+                        margin: 10px 0;
+                    }
+                    .info-box {
+                        background-color: var(--vscode-textBlockQuote-background);
+                        border-left: 4px solid var(--vscode-textLink-foreground);
+                        padding: 15px;
+                        margin-top: 20px;
+                        text-align: left;
                     }
                 </style>
             </head>
             <body>
                 <div class="empty-state">
-                    <h2>No records found</h2>
-                    <p>Table: ${tableName}</p>
+                    <h2>📭 No Records Found</h2>
+                    <p><strong>Table:</strong> ${this.formatTableName(tableName)}</p>
+                    <p>This table exists but contains no data.</p>
+                    <div class="info-box">
+                        <strong>💡 Possible reasons:</strong>
+                        <ul style="text-align: left; margin: 10px 0;">
+                            <li>The table hasn't been populated with data yet</li>
+                            <li>The filter criteria didn't match any records</li>
+                            <li>The database may need to be regenerated from text files</li>
+                        </ul>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `;
+    }
+
+    /**
+     * Get HTML for error state
+     */
+    private getErrorHtml(tableName: string, errorTitle: string, errorDetails: string, availableTables?: string[]): string {
+        let tablesListHtml = '';
+        if (availableTables && availableTables.length > 0) {
+            tablesListHtml = `
+                <div class="suggestion-box">
+                    <strong>📋 Available Tables in Database:</strong>
+                    <ul style="margin: 10px 0; max-height: 200px; overflow-y: auto;">
+                        ${availableTables.map(t => `<li><code>${t}</code></li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+        
+        return `
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>SWAT+ Database Browser - Error</title>
+                <style>
+                    body {
+                        font-family: var(--vscode-font-family);
+                        color: var(--vscode-foreground);
+                        background-color: var(--vscode-editor-background);
+                        padding: 20px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        min-height: 100vh;
+                    }
+                    .error-state {
+                        text-align: center;
+                        max-width: 700px;
+                        width: 100%;
+                    }
+                    .error-state h2 {
+                        color: var(--vscode-errorForeground);
+                    }
+                    .error-details {
+                        background-color: var(--vscode-inputValidation-errorBackground);
+                        border: 1px solid var(--vscode-inputValidation-errorBorder);
+                        padding: 15px;
+                        margin-top: 20px;
+                        text-align: left;
+                        border-radius: 4px;
+                    }
+                    .suggestion-box {
+                        background-color: var(--vscode-textBlockQuote-background);
+                        border-left: 4px solid var(--vscode-textLink-foreground);
+                        padding: 15px;
+                        margin-top: 20px;
+                        text-align: left;
+                    }
+                    code {
+                        background-color: var(--vscode-textPreformat-background);
+                        padding: 2px 6px;
+                        border-radius: 3px;
+                        font-family: var(--vscode-editor-font-family);
+                        font-size: 0.9em;
+                    }
+                    ul {
+                        padding-left: 20px;
+                    }
+                    li {
+                        margin: 5px 0;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="error-state">
+                    <h2>⚠️ ${errorTitle}</h2>
+                    <p><strong>Table:</strong> ${tableName}</p>
+                    <div class="error-details">
+                        <strong>Error Details:</strong>
+                        <p>${errorDetails}</p>
+                    </div>
+                    ${tablesListHtml}
+                    <div class="suggestion-box">
+                        <strong>💡 Suggestions:</strong>
+                        <ul style="margin: 10px 0;">
+                            <li>Check if the database file exists and is accessible</li>
+                            <li>Verify the table name matches one from the list above</li>
+                            <li>Try regenerating the database from SWAT+ text files using the <strong>Import/Convert DB</strong> button</li>
+                            <li>Make sure you've selected a SWAT+ dataset folder that contains a valid <code>project.db</code></li>
+                        </ul>
+                    </div>
                 </div>
             </body>
             </html>
