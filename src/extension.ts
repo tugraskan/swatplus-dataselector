@@ -4,6 +4,13 @@ import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import * as path from 'path';
 import { SwatDatasetWebviewProvider } from './swatWebviewProvider';
+import { SwatDatabaseHelper } from './swatDatabaseHelper';
+import { SwatDefinitionProvider } from './swatDefinitionProvider';
+import { SwatHoverProvider } from './swatHoverProvider';
+import { SwatCodeLensProvider } from './swatCodeLensProvider';
+import { SwatDatabaseBrowserProvider } from './swatDatabaseBrowserProvider';
+import { SwatCodeActionProvider } from './swatCodeActionProvider';
+import { SWAT_FILE_EXTENSIONS } from './swatFileParser';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -16,6 +23,43 @@ export function activate(context: vscode.ExtensionContext) {
 	const webviewViewProvider = vscode.window.registerWebviewViewProvider(
 		SwatDatasetWebviewProvider.viewType,
 		swatProvider
+	);
+
+	// Create database helper and language providers for SWAT+ file navigation
+	const dbHelper = new SwatDatabaseHelper();
+	const getSelectedDataset = () => swatProvider.getSelectedDataset();
+
+	// Create database browser provider
+	const browserProvider = new SwatDatabaseBrowserProvider(context, dbHelper, getSelectedDataset);
+
+	// Register Definition Provider, Hover Provider, CodeLens Provider, and Code Action Provider for SWAT+ files
+	const definitionProvider = new SwatDefinitionProvider(dbHelper, getSelectedDataset);
+	const hoverProvider = new SwatHoverProvider(dbHelper, getSelectedDataset);
+	const codeLensProvider = new SwatCodeLensProvider(dbHelper, getSelectedDataset);
+	const codeActionProvider = new SwatCodeActionProvider(dbHelper, getSelectedDataset, browserProvider);
+
+	const definitionProviderDisposables = SWAT_FILE_EXTENSIONS.map(ext => {
+		const selector = { scheme: 'file', pattern: `**/*.${ext}` };
+		return [
+			vscode.languages.registerDefinitionProvider(selector, definitionProvider),
+			vscode.languages.registerHoverProvider(selector, hoverProvider),
+			vscode.languages.registerCodeLensProvider(selector, codeLensProvider),
+			vscode.languages.registerCodeActionsProvider(selector, codeActionProvider)
+		];
+	}).flat();
+
+	// Command to open database browser for a specific table and record
+	const openDatabaseBrowser = vscode.commands.registerCommand('swat-dataset-selector.openDatabaseBrowser', 
+		async (tableName: string, recordName?: string) => {
+			await browserProvider.openTable(tableName, recordName);
+		}
+	);
+
+	// Command to open database browser for hru_data_hru table
+	const openHruDataBrowser = vscode.commands.registerCommand('swat-dataset-selector.openHruDataBrowser', 
+		async () => {
+			await browserProvider.openTable('hru_data_hru');
+		}
 	);
 
 	// Command to select dataset folder
@@ -81,6 +125,24 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.showInformationMessage(`SWAT+ Dataset folder selected: ${datasetPath}`);
 	});
 
+	// Command to set selected database (called from webview when user selects a DB file)
+	const setSelectedDatabase = vscode.commands.registerCommand('swat-dataset-selector.setSelectedDatabase', async (dbPath: string) => {
+		if (!dbPath || typeof dbPath !== 'string') return;
+		try {
+			swatProvider.setSelectedDataset(path.dirname(dbPath));
+			swatProvider.setSelectedDatabase(dbPath);
+			vscode.window.showInformationMessage(`Selected database: ${dbPath}`);
+			// Auto-open the DB using the viewer (mimic Explorer behavior)
+			try {
+				await vscode.commands.executeCommand('swat-dataset-selector.openDbWithViewer', dbPath);
+			} catch (openErr) {
+				console.warn('Auto-open DB failed', openErr);
+			}
+		} catch (err) {
+			console.error('Failed to set selected database', err);
+		}
+	});
+
 	// Command to import SWAT+ text files into a project database using the bundled python script
 	const importTextFiles = vscode.commands.registerCommand('swat-dataset-selector.importTextFiles', async () => {
 		const selected = swatProvider.getSelectedDataset();
@@ -136,11 +198,107 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 		try {
+			const fileExt = filePath.toLowerCase().split('.').pop();
+			
+			// Handle database files specially
+			if (fileExt === 'db' || fileExt === 'sqlite' || fileExt === 'sqlite3') {
+				// Try to open with a SQLite viewer extension
+				const uri = vscode.Uri.file(filePath);
+				
+				// Try common SQLite viewer extensions
+				try {
+					// Try qwtel.sqlite-viewer first (mentioned in README)
+					await vscode.commands.executeCommand('sqlite-viewer.open', uri);
+					return;
+				} catch (e1) {
+					try {
+						// Try alexcvzz.vscode-sqlite
+						await vscode.commands.executeCommand('sqlite.open', uri);
+						return;
+					} catch (e2) {
+						// If no SQLite viewer is available, show helpful message
+						const choice = await vscode.window.showInformationMessage(
+							'To view SQLite database files, please install a SQLite viewer extension.',
+							'Install qwtel.sqlite-viewer',
+							'Copy Path'
+						);
+						
+						if (choice === 'Install qwtel.sqlite-viewer') {
+							await vscode.commands.executeCommand('workbench.extensions.installExtension', 'qwtel.sqlite-viewer');
+						} else if (choice === 'Copy Path') {
+							await vscode.env.clipboard.writeText(filePath);
+							vscode.window.showInformationMessage('Database path copied to clipboard');
+						}
+						return;
+					}
+				}
+			}
+			
+			// For text files, open normally
 			const doc = await vscode.workspace.openTextDocument(filePath);
 			await vscode.window.showTextDocument(doc, { preview: false });
 		} catch (err) {
 			console.error('Failed to open file', err);
 			vscode.window.showErrorMessage('Failed to open file: ' + (err instanceof Error ? err.message : String(err)));
+		}
+	});
+
+	// Command to open a DB explicitly with a SQLite viewer (prefer viewer over text editor)
+	const openDbWithViewer = vscode.commands.registerCommand('swat-dataset-selector.openDbWithViewer', async (filePath: string) => {
+		if (!filePath || typeof filePath !== 'string') {
+			return;
+		}
+		try {
+			const uri = vscode.Uri.file(filePath);
+			// Try common viewer commands in order
+			const tryCommands = ['sqlite-viewer.open', 'sqlite.open', 'sqltools.openDatabase', 'sqltools.open'];
+			for (const cmd of tryCommands) {
+				try {
+					await vscode.commands.executeCommand(cmd, uri);
+					return;
+				} catch (e) {
+					// ignore and try next
+				}
+			}
+
+			// Try to find installed extensions with known custom editor ids
+			const editorMap: { [id: string]: string } = {
+				'qwtel.sqlite-viewer': 'qwtel.sqlite-viewer.viewer',
+				'alexcvzz.vscode-sqlite': 'alexcvzz.vscode-sqlite.openEditor'
+			};
+			// Try to open with VS Code's default editor first (mimics Explorer behavior)
+			try {
+				await vscode.commands.executeCommand('vscode.open', uri);
+				return;
+			} catch (e) {
+				// ignore and continue to try specific editors
+			}
+			for (const extId of Object.keys(editorMap)) {
+				if (vscode.extensions.getExtension(extId)) {
+					try {
+						await vscode.commands.executeCommand('vscode.openWith', uri, editorMap[extId]);
+						return;
+					} catch (e) {
+						// ignore
+					}
+				}
+			}
+
+			// Last resort: prompt to install a SQLite viewer or copy path
+			const choice = await vscode.window.showInformationMessage(
+				'To view SQLite database files, please install a SQLite viewer extension.',
+				'Install qwtel.sqlite-viewer',
+				'Copy Path'
+			);
+			if (choice === 'Install qwtel.sqlite-viewer') {
+				await vscode.commands.executeCommand('workbench.extensions.installExtension', 'qwtel.sqlite-viewer');
+			} else if (choice === 'Copy Path') {
+				await vscode.env.clipboard.writeText(filePath);
+				vscode.window.showInformationMessage('Database path copied to clipboard');
+			}
+		} catch (err) {
+			console.error('Failed to open DB with viewer', err);
+			vscode.window.showErrorMessage('Failed to open DB: ' + (err instanceof Error ? err.message : String(err)));
 		}
 	});
 
@@ -203,17 +361,22 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(
 		webviewViewProvider,
+		...definitionProviderDisposables,
 		selectDataset,
 		selectAndDebug,
 		launchWithSelected,
 		datasetFolderProvider,
 		selectRecentDataset,
+		setSelectedDatabase,
 		importTextFiles,
 		showDatasetInfo
 		,openFile
+		,openDbWithViewer
 		,closeFile
 		,closeAllDatasetFiles
 		,seedTestData
+		,openDatabaseBrowser
+		,openHruDataBrowser
 	);
 }
 
