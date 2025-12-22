@@ -446,7 +446,7 @@ class Exco_con(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		read_con_table(self.file_name, db.Recall_con, db.Recall_con_out, "exco", exco.Exco_exc)
+		read_con_table(self.file_name, db.Exco_con, db.Exco_con_out, "exco", exco.Exco_exc)
 
 	def write(self):
 		#write_con_table(self.file_name, self.get_meta_line(), db.Exco_con, db.Exco_con_out, "exco", exco.Exco_exc)
