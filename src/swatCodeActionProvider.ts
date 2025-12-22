@@ -113,6 +113,7 @@ export class SwatCodeActionProvider implements vscode.CodeActionProvider {
      */
     private guessTargetTable(columnName: string): string | undefined {
         const columnTableMap: { [key: string]: string } = {
+            // Core references
             'hydro': 'hydrology_hyd',
             'topo': 'topography_hyd',
             'field': 'field_fld',
@@ -124,7 +125,53 @@ export class SwatCodeActionProvider implements vscode.CodeActionProvider {
             'plnt_typ': 'plants_plt',
             'soil_text': 'soils_lte_sol',
             'aquifer': 'aquifer_aqu',
-            'aqu': 'aquifer_aqu'
+            'aqu': 'aquifer_aqu',
+            
+            // Water bodies
+            'reservoir': 'reservoir_res',
+            'res': 'reservoir_res',
+            'wetland': 'wetland_wet',
+            'wet': 'wetland_wet',
+            
+            // Channels and routing
+            'channel': 'channel_cha',
+            'cha': 'channel_cha',
+            'connect': 'connect_con',
+            'con': 'connect_con',
+            'rout_unit': 'routing_unit_rtu',
+            'rtu': 'routing_unit_rtu',
+            'elements': 'elements_ele',
+            'ele': 'elements_ele',
+            
+            // Climate
+            'weather': 'weather_cli',
+            'cli': 'weather_cli',
+            'precip': 'precip_pcp',
+            'pcp': 'precip_pcp',
+            'temperature': 'temperature_tmp',
+            'tmp': 'temperature_tmp',
+            'wind': 'wind_wnd',
+            'wnd': 'wind_wnd',
+            
+            // Management
+            'operations': 'operations_ops',
+            'ops': 'operations_ops',
+            'schedule': 'management_sch',
+            'sch': 'management_sch',
+            'tillage': 'tillage_til',
+            'til': 'tillage_til',
+            'fertilizer': 'fertilizer_frt',
+            'frt': 'fertilizer_frt',
+            
+            // Other
+            'recall': 'recall_rec',
+            'rec': 'recall_rec',
+            'decision': 'decision_def',
+            'def': 'decision_def',
+            'basin': 'basin_bsn',
+            'bsn': 'basin_bsn',
+            'calibration': 'calibration_cal',
+            'cal': 'calibration_cal'
         };
 
         return columnTableMap[columnName];

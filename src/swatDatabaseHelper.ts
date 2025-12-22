@@ -159,21 +159,62 @@ export class SwatDatabaseHelper {
      */
     private getFileNameForTable(tableName: string): string {
         const tableToFileMap: { [key: string]: string } = {
+            // Hydrology and topography
             'hydrology_hyd': 'hydrology.hyd',
             'topography_hyd': 'topography.hyd',
-            'field_fld': 'field.fld',
-            'soils_sol': 'soils.sol',
-            'landuse_lum': 'landuse.lum',
-            'soil_plant_ini': 'soil_plant.ini',
-            'wetland_wet': 'wetland.wet',
-            'snow_sno': 'snow.sno',
+            
+            // HRU and land management
             'hru_data_hru': 'hru-data.hru',
             'hru_lte_hru': 'hru-lte.hru',
-            'plants_plt': 'plants.plt',
-            'd_table_dtl': 'd_table.dtl',
+            'field_fld': 'field.fld',
+            'landuse_lum': 'landuse.lum',
+            
+            // Soils
+            'soils_sol': 'soils.sol',
             'soils_lte_sol': 'soils_lte.sol',
+            'soil_plant_ini': 'soil_plant.ini',
+            
+            // Water bodies
+            'wetland_wet': 'wetland.wet',
+            'reservoir_res': 'reservoir.res',
+            'res': 'reservoir.res',
             'aquifer_aqu': 'aquifer.aqu',
-            'initial_aqu': 'initial.aqu'
+            'initial_aqu': 'initial.aqu',
+            
+            // Channels and routing
+            'channel_cha': 'channel.cha',
+            'chandeg_cha': 'chandeg.cha',
+            'connect_con': 'connect.con',
+            'routing_unit_rtu': 'routing_unit.rtu',
+            'rout_unit_rtu': 'rout_unit.rtu',
+            'elements_ele': 'elements.ele',
+            
+            // Climate
+            'weather_cli': 'weather.cli',
+            'precip_pcp': 'precip.pcp',
+            'temperature_tmp': 'temperature.tmp',
+            'wind_wnd': 'wind.wnd',
+            
+            // Basin and calibration
+            'basin_bsn': 'basin.bsn',
+            'calibration_cal': 'calibration.cal',
+            'codes_bsn': 'codes.bsn',
+            
+            // Management operations
+            'operations_ops': 'operations.ops',
+            'management_sch': 'management.sch',
+            'schedule_sch': 'schedule.sch',
+            'tillage_til': 'tillage.til',
+            'fertilizer_frt': 'fertilizer.frt',
+            
+            // Plants and other
+            'plants_plt': 'plants.plt',
+            'snow_sno': 'snow.sno',
+            'd_table_dtl': 'd_table.dtl',
+            'recall_rec': 'recall.rec',
+            'decision_def': 'decision.def',
+            'print_prt': 'print.prt',
+            'simulation_sim': 'simulation.sim'
         };
 
         return tableToFileMap[tableName.toLowerCase()] || `${tableName}.txt`;
@@ -184,21 +225,61 @@ export class SwatDatabaseHelper {
      */
     getTableNameForFile(fileName: string): string | undefined {
         const fileToTableMap: { [key: string]: string } = {
-            'hru-data.hru': 'hru_data_hru',
-            'hru-lte.hru': 'hru_lte_hru',
+            // Hydrology and topography
             'hydrology.hyd': 'hydrology_hyd',
             'topography.hyd': 'topography_hyd',
+            
+            // HRU and land management
+            'hru-data.hru': 'hru_data_hru',
+            'hru-lte.hru': 'hru_lte_hru',
             'field.fld': 'field_fld',
-            'soils.sol': 'soils_sol',
             'landuse.lum': 'landuse_lum',
-            'soil_plant.ini': 'soil_plant_ini',
-            'wetland.wet': 'wetland_wet',
-            'snow.sno': 'snow_sno',
-            'plants.plt': 'plants_plt',
-            'd_table.dtl': 'd_table_dtl',
+            
+            // Soils
+            'soils.sol': 'soils_sol',
             'soils_lte.sol': 'soils_lte_sol',
+            'soil_plant.ini': 'soil_plant_ini',
+            
+            // Water bodies
+            'wetland.wet': 'wetland_wet',
+            'reservoir.res': 'reservoir_res',
             'aquifer.aqu': 'aquifer_aqu',
-            'initial.aqu': 'initial_aqu'
+            'initial.aqu': 'initial_aqu',
+            
+            // Channels and routing
+            'channel.cha': 'channel_cha',
+            'chandeg.cha': 'chandeg_cha',
+            'connect.con': 'connect_con',
+            'routing_unit.rtu': 'routing_unit_rtu',
+            'rout_unit.rtu': 'rout_unit_rtu',
+            'elements.ele': 'elements_ele',
+            
+            // Climate
+            'weather.cli': 'weather_cli',
+            'precip.pcp': 'precip_pcp',
+            'temperature.tmp': 'temperature_tmp',
+            'wind.wnd': 'wind_wnd',
+            
+            // Basin and calibration
+            'basin.bsn': 'basin_bsn',
+            'calibration.cal': 'calibration_cal',
+            'codes.bsn': 'codes_bsn',
+            
+            // Management operations
+            'operations.ops': 'operations_ops',
+            'management.sch': 'management_sch',
+            'schedule.sch': 'schedule_sch',
+            'tillage.til': 'tillage_til',
+            'fertilizer.frt': 'fertilizer_frt',
+            
+            // Plants and other
+            'plants.plt': 'plants_plt',
+            'snow.sno': 'snow_sno',
+            'd_table.dtl': 'd_table_dtl',
+            'recall.rec': 'recall_rec',
+            'decision.def': 'decision_def',
+            'print.prt': 'print_prt',
+            'simulation.sim': 'simulation_sim'
         };
 
         return fileToTableMap[fileName.toLowerCase()];

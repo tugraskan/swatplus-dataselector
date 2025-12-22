@@ -218,6 +218,7 @@ export class SwatHoverProvider implements vscode.HoverProvider {
      */
     private getDisplayName(columnName: string): string {
         const nameMap: { [key: string]: string } = {
+            // Core references
             'hydro': 'Hydrology',
             'topo': 'Topography',
             'field': 'Field',
@@ -229,7 +230,53 @@ export class SwatHoverProvider implements vscode.HoverProvider {
             'plnt_typ': 'Plant Type',
             'soil_text': 'Soil Texture',
             'aquifer': 'Aquifer',
-            'aqu': 'Aquifer'
+            'aqu': 'Aquifer',
+            
+            // Water bodies
+            'reservoir': 'Reservoir',
+            'res': 'Reservoir',
+            'wetland': 'Wetland',
+            'wet': 'Wetland',
+            
+            // Channels and routing
+            'channel': 'Channel',
+            'cha': 'Channel',
+            'connect': 'Connection',
+            'con': 'Connection',
+            'rout_unit': 'Routing Unit',
+            'rtu': 'Routing Unit',
+            'elements': 'Elements',
+            'ele': 'Elements',
+            
+            // Climate
+            'weather': 'Weather',
+            'cli': 'Weather',
+            'precip': 'Precipitation',
+            'pcp': 'Precipitation',
+            'temperature': 'Temperature',
+            'tmp': 'Temperature',
+            'wind': 'Wind',
+            'wnd': 'Wind',
+            
+            // Management
+            'operations': 'Operations',
+            'ops': 'Operations',
+            'schedule': 'Schedule',
+            'sch': 'Schedule',
+            'tillage': 'Tillage',
+            'til': 'Tillage',
+            'fertilizer': 'Fertilizer',
+            'frt': 'Fertilizer',
+            
+            // Other
+            'recall': 'Recall',
+            'rec': 'Recall',
+            'decision': 'Decision Table',
+            'def': 'Decision Table',
+            'basin': 'Basin',
+            'bsn': 'Basin',
+            'calibration': 'Calibration',
+            'cal': 'Calibration'
         };
         
         return nameMap[columnName] || this.formatFieldName(columnName);
@@ -239,8 +286,8 @@ export class SwatHoverProvider implements vscode.HoverProvider {
      * Format table name for display
      */
     private formatTableName(tableName: string): string {
-        // Remove _hyd, _fld, etc. suffixes and format
-        const baseName = tableName.replace(/_(hyd|fld|sol|lum|ini|wet|sno|plt|dtl|hru|aqu)$/, '');
+        // Remove common suffixes and format
+        const baseName = tableName.replace(/_(hyd|fld|sol|lum|ini|wet|sno|plt|dtl|hru|aqu|res|cha|con|rtu|ele|cli|pcp|tmp|wnd|bsn|cal|ops|sch|til|frt|rec|def|prt|sim)$/, '');
         return this.formatFieldName(baseName);
     }
 
@@ -249,6 +296,7 @@ export class SwatHoverProvider implements vscode.HoverProvider {
      */
     private guessTargetTable(columnName: string): string | undefined {
         const columnTableMap: { [key: string]: string } = {
+            // Core references
             'hydro': 'hydrology_hyd',
             'topo': 'topography_hyd',
             'field': 'field_fld',
@@ -260,7 +308,53 @@ export class SwatHoverProvider implements vscode.HoverProvider {
             'plnt_typ': 'plants_plt',
             'soil_text': 'soils_lte_sol',
             'aquifer': 'aquifer_aqu',
-            'aqu': 'aquifer_aqu'
+            'aqu': 'aquifer_aqu',
+            
+            // Water bodies
+            'reservoir': 'reservoir_res',
+            'res': 'reservoir_res',
+            'wetland': 'wetland_wet',
+            'wet': 'wetland_wet',
+            
+            // Channels and routing
+            'channel': 'channel_cha',
+            'cha': 'channel_cha',
+            'connect': 'connect_con',
+            'con': 'connect_con',
+            'rout_unit': 'routing_unit_rtu',
+            'rtu': 'routing_unit_rtu',
+            'elements': 'elements_ele',
+            'ele': 'elements_ele',
+            
+            // Climate
+            'weather': 'weather_cli',
+            'cli': 'weather_cli',
+            'precip': 'precip_pcp',
+            'pcp': 'precip_pcp',
+            'temperature': 'temperature_tmp',
+            'tmp': 'temperature_tmp',
+            'wind': 'wind_wnd',
+            'wnd': 'wind_wnd',
+            
+            // Management
+            'operations': 'operations_ops',
+            'ops': 'operations_ops',
+            'schedule': 'management_sch',
+            'sch': 'management_sch',
+            'tillage': 'tillage_til',
+            'til': 'tillage_til',
+            'fertilizer': 'fertilizer_frt',
+            'frt': 'fertilizer_frt',
+            
+            // Other
+            'recall': 'recall_rec',
+            'rec': 'recall_rec',
+            'decision': 'decision_def',
+            'def': 'decision_def',
+            'basin': 'basin_bsn',
+            'bsn': 'basin_bsn',
+            'calibration': 'calibration_cal',
+            'cal': 'calibration_cal'
         };
 
         return columnTableMap[columnName];
