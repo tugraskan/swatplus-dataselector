@@ -226,4 +226,51 @@ export class SwatDatabaseHelper {
             return [];
         }
     }
+
+    /**
+     * Get list of all tables in the database
+     */
+    getAvailableTables(dbPath: string): string[] {
+        if (!this.sqlite3) {
+            return [];
+        }
+
+        try {
+            const db = this.sqlite3(dbPath, { readonly: true, fileMustExist: true });
+            const stmt = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`);
+            const tables = stmt.all();
+            db.close();
+
+            return tables.map((t: any) => t.name);
+        } catch (error) {
+            console.error('Error getting tables:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Check if a table exists in the database
+     */
+    tableExists(dbPath: string, tableName: string): boolean {
+        if (!this.sqlite3) {
+            return false;
+        }
+
+        // Validate table name first
+        if (!this.isValidTableName(tableName)) {
+            return false;
+        }
+
+        try {
+            const db = this.sqlite3(dbPath, { readonly: true, fileMustExist: true });
+            const stmt = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`);
+            const result = stmt.get(tableName);
+            db.close();
+
+            return !!result;
+        } catch (error) {
+            console.error('Error checking table existence:', error);
+            return false;
+        }
+    }
 }
