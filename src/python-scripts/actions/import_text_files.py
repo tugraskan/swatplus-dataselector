@@ -115,6 +115,9 @@ class ImportTextFiles(ExecutableApi):
 			# 19. Import regions files
 			total = self.import_regions(total, step)
 			
+			# 20. Import structural files
+			total = self.import_structural(total, step)
+			
 			# Update project config
 			Project_config.update(
 				input_files_last_written=None,
@@ -616,6 +619,47 @@ class ImportTextFiles(ExecutableApi):
 		if self.file_exists("ls_unit.ele"):
 			try:
 				regions.Ls_unit_ele(self.get_file_path("ls_unit.ele"), self.editor_version, self.swat_version).read()
+			except NotImplementedError:
+				pass
+		
+		return start_prog + allocated_prog
+	
+	def import_structural(self, start_prog, allocated_prog):
+		"""Import structural BMP files."""
+		self.emit_progress(start_prog, "Importing structural files...")
+		
+		# Import septic.str if it exists
+		if self.file_exists("septic.str"):
+			try:
+				structural.Septic_str(self.get_file_path("septic.str"), self.editor_version, self.swat_version).read()
+			except NotImplementedError:
+				pass
+		
+		# Import bmpuser.str if it exists
+		if self.file_exists("bmpuser.str"):
+			try:
+				structural.Bmpuser_str(self.get_file_path("bmpuser.str"), self.editor_version, self.swat_version).read()
+			except NotImplementedError:
+				pass
+		
+		# Import filterstrip.str if it exists
+		if self.file_exists("filterstrip.str"):
+			try:
+				structural.Filterstrip_str(self.get_file_path("filterstrip.str"), self.editor_version, self.swat_version).read()
+			except NotImplementedError:
+				pass
+		
+		# Import grassedww.str if it exists
+		if self.file_exists("grassedww.str"):
+			try:
+				structural.Grassedww_str(self.get_file_path("grassedww.str"), self.editor_version, self.swat_version).read()
+			except NotImplementedError:
+				pass
+		
+		# Import tiledrain.str if it exists
+		if self.file_exists("tiledrain.str"):
+			try:
+				structural.Tiledrain_str(self.get_file_path("tiledrain.str"), self.editor_version, self.swat_version).read()
 			except NotImplementedError:
 				pass
 		
