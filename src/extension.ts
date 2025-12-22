@@ -125,6 +125,24 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.showInformationMessage(`SWAT+ Dataset folder selected: ${datasetPath}`);
 	});
 
+	// Command to set selected database (called from webview when user selects a DB file)
+	const setSelectedDatabase = vscode.commands.registerCommand('swat-dataset-selector.setSelectedDatabase', async (dbPath: string) => {
+		if (!dbPath || typeof dbPath !== 'string') return;
+		try {
+			swatProvider.setSelectedDataset(path.dirname(dbPath));
+			swatProvider.setSelectedDatabase(dbPath);
+			vscode.window.showInformationMessage(`Selected database: ${dbPath}`);
+			// Auto-open the DB using the viewer (mimic Explorer behavior)
+			try {
+				await vscode.commands.executeCommand('swat-dataset-selector.openDbWithViewer', dbPath);
+			} catch (openErr) {
+				console.warn('Auto-open DB failed', openErr);
+			}
+		} catch (err) {
+			console.error('Failed to set selected database', err);
+		}
+	});
+
 	// Command to import SWAT+ text files into a project database using the bundled python script
 	const importTextFiles = vscode.commands.registerCommand('swat-dataset-selector.importTextFiles', async () => {
 		const selected = swatProvider.getSelectedDataset();
@@ -248,6 +266,13 @@ export function activate(context: vscode.ExtensionContext) {
 				'qwtel.sqlite-viewer': 'qwtel.sqlite-viewer.viewer',
 				'alexcvzz.vscode-sqlite': 'alexcvzz.vscode-sqlite.openEditor'
 			};
+			// Try to open with VS Code's default editor first (mimics Explorer behavior)
+			try {
+				await vscode.commands.executeCommand('vscode.open', uri);
+				return;
+			} catch (e) {
+				// ignore and continue to try specific editors
+			}
 			for (const extId of Object.keys(editorMap)) {
 				if (vscode.extensions.getExtension(extId)) {
 					try {
@@ -342,6 +367,7 @@ export function activate(context: vscode.ExtensionContext) {
 		launchWithSelected,
 		datasetFolderProvider,
 		selectRecentDataset,
+		setSelectedDatabase,
 		importTextFiles,
 		showDatasetInfo
 		,openFile

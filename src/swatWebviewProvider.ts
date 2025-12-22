@@ -36,6 +36,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
     private selectedDataset: string | undefined;
     private recentDatasets: string[] = [];
+    private selectedDatabase: string | undefined;
 
     constructor(private readonly context: vscode.ExtensionContext) {
         // Load recent datasets from storage
@@ -45,6 +46,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         } catch (e) {
             this.recentDatasets = [];
         }
+        // restore selected database if persisted
+        try {
+            const db = this.context.globalState.get('selectedDatabase');
+            if (db && typeof db === 'string') this.selectedDatabase = db;
+        } catch (e) {}
     }
 
     public resolveWebviewView(
@@ -95,6 +101,16 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                 vscode.commands.executeCommand('swat-dataset-selector.openFile', data.path);
                             }
                             break;
+                        case 'setSelectedDatabase':
+                            if (data.path && typeof data.path === 'string') {
+                                vscode.commands.executeCommand('swat-dataset-selector.setSelectedDatabase', data.path);
+                            }
+                            break;
+                        case 'openDbWithViewer':
+                            if (data.path && typeof data.path === 'string') {
+                                vscode.commands.executeCommand('swat-dataset-selector.openDbWithViewer', data.path);
+                            }
+                            break;
                         case 'closeFile':
                             if (data.path && typeof data.path === 'string') {
                                 vscode.commands.executeCommand('swat-dataset-selector.closeFile', data.path);
@@ -135,6 +151,18 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         this.context.globalState.update('recentDatasets', this.recentDatasets);
 
         this._updateWebview();
+    }
+
+    public setSelectedDatabase(dbPath: string): void {
+        const p = normalizeToPath(dbPath);
+        if (!p) return;
+        this.selectedDatabase = p;
+        try { this.context.globalState.update('selectedDatabase', this.selectedDatabase); } catch (e) {}
+        this._updateWebview();
+    }
+
+    public getSelectedDatabase(): string | undefined {
+        return this.selectedDatabase;
     }
 
     public getSelectedDataset(): string | undefined {
@@ -218,10 +246,12 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     const entries = fs.existsSync(this.selectedDataset) ? fs.readdirSync(this.selectedDataset, { withFileTypes: true }) : [];
                     const itemsHtml = entries.map(ent => {
                     const full = path.join(this.selectedDataset || '', ent.name);
-                    const icon = ent.isDirectory() ? svgs.folder : svgs.file;
                     const ext = path.extname(ent.name).toLowerCase();
+                    const isDb = ext === '.db' || ext === '.sqlite' || ext === '.sqlite3';
+                    const icon = ent.isDirectory() ? svgs.folder : (isDb ? `<span class="db-badge">DB</span>` : svgs.file);
+                    const selectedClass = (this.selectedDatabase && this.selectedDatabase === full) ? ' selected-db' : '';
                     return `
-                            <div class="txt-item" data-path="${escapeHtml(full)}" data-ext="${escapeHtml(ext)}">
+                            <div class="txt-item${selectedClass}" data-path="${escapeHtml(full)}" data-ext="${escapeHtml(ext)}" data-isdb="${isDb ? '1' : ''}">
                                     <button class="icon-button txt-close-btn" data-path="${escapeHtml(full)}" title="Close file">
                                         ${svgs.close}
                                     </button>
@@ -299,7 +329,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         </div>
                         <div class="section-content">
                             <div style="display:flex;flex-direction:column;gap:8px;padding:8px 4px">
-                                <div class="dataset-path" title="${escapeHtml(dbPath)}">${escapeHtml(dbPath)}</div>
+                                <div id="selectedDbPath" class="dataset-path" data-path="${escapeHtml(dbPath)}" title="${escapeHtml(dbPath)}">${escapeHtml(dbPath)}</div>
                                 <div style="display:flex;gap:8px">
                                     <button class="action-button secondary" id="openDbBtn" data-path="${escapeHtml(dbPath)}">Open DB</button>
                                     <button class="action-button secondary" id="copyDbBtn" data-path="${escapeHtml(dbPath)}">Copy Path</button>
@@ -760,6 +790,21 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             text-overflow: ellipsis;
         }
 
+        .db-badge {
+            display: inline-block;
+            background: var(--vscode-badge-background);
+            color: var(--vscode-badge-foreground);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .txt-item.selected-db {
+            outline: 2px solid var(--vscode-list-activeSelectionBackground);
+            background-color: var(--vscode-list-hoverBackground);
+        }
+
         .recent-item-path {
             font-size: 10px;
             color: var(--vscode-descriptionForeground);
@@ -968,7 +1013,13 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             const openDbBtn = $('openDbBtn');
             if (openDbBtn) openDbBtn.addEventListener('click', () => {
                 const p = openDbBtn.dataset.path;
-                if (p) swatHost.postMessage({ type: 'openFile', path: p });
+                if (p) swatHost.postMessage({ type: 'openDbWithViewer', path: p });
+            });
+
+            const selectedDbPathEl = $('selectedDbPath');
+            if (selectedDbPathEl) selectedDbPathEl.addEventListener('click', () => {
+                const p = selectedDbPathEl.dataset.path;
+                if (p) swatHost.postMessage({ type: 'openDbWithViewer', path: p });
             });
 
             const copyDbBtn = $('copyDbBtn');
@@ -1016,9 +1067,28 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             document.querySelectorAll('.txt-item').forEach(item => {
                 item.addEventListener('click', (e) => {
                     const p = item.dataset.path;
+                    const isDb = item.dataset.isdb === '1';
                     if (p) {
-                        try { console.log('SWAT webview: txt-item clicked', p); } catch (e) {}
-                        swatHost.postMessage({ type: 'openFile', path: p });
+                        try { console.log('SWAT webview: txt-item clicked', p, 'isDb=', isDb); } catch (e) {}
+                        if (isDb) {
+                            // select as active database (mimic Solution Explorer selection)
+                            swatHost.postMessage({ type: 'setSelectedDatabase', path: p });
+                        } else {
+                            swatHost.postMessage({ type: 'openFile', path: p });
+                        }
+                    }
+                });
+                // double-click opens DB with viewer (or opens text file normally)
+                item.addEventListener('dblclick', (e) => {
+                    const p = item.dataset.path;
+                    const isDb = item.dataset.isdb === '1';
+                    if (p) {
+                        try { console.log('SWAT webview: txt-item dblclick', p, 'isDb=', isDb); } catch (e) {}
+                        if (isDb) {
+                            swatHost.postMessage({ type: 'openDbWithViewer', path: p });
+                        } else {
+                            swatHost.postMessage({ type: 'openFile', path: p });
+                        }
                     }
                 });
             });
@@ -1105,9 +1175,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     if (closest && closest('.txt-item')) {
                         const container = tgt.closest('.txt-item');
                         const p = container ? container.dataset.path : undefined;
+                        const isDb = container ? container.dataset.isdb === '1' : false;
                         if (p) {
-                            try { console.log('SWAT webview: delegated txt-item click', p); } catch (e) {}
-                            swatHost.postMessage({ type: 'openFile', path: p });
+                            try { console.log('SWAT webview: delegated txt-item click', p, 'isDb=', isDb); } catch (e) {}
+                            if (isDb) swatHost.postMessage({ type: 'setSelectedDatabase', path: p });
+                            else swatHost.postMessage({ type: 'openFile', path: p });
                         }
                         return;
                     }
