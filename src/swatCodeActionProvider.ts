@@ -122,7 +122,9 @@ export class SwatCodeActionProvider implements vscode.CodeActionProvider {
             'surf_stor': 'wetland_wet',
             'snow': 'snow_sno',
             'plnt_typ': 'plants_plt',
-            'soil_text': 'soils_lte_sol'
+            'soil_text': 'soils_lte_sol',
+            'aquifer': 'aquifer_aqu',
+            'aqu': 'aquifer_aqu'
         };
 
         return columnTableMap[columnName];

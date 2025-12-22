@@ -171,7 +171,9 @@ export class SwatDatabaseHelper {
             'hru_lte_hru': 'hru-lte.hru',
             'plants_plt': 'plants.plt',
             'd_table_dtl': 'd_table.dtl',
-            'soils_lte_sol': 'soils_lte.sol'
+            'soils_lte_sol': 'soils_lte.sol',
+            'aquifer_aqu': 'aquifer.aqu',
+            'initial_aqu': 'initial.aqu'
         };
 
         return tableToFileMap[tableName.toLowerCase()] || `${tableName}.txt`;
@@ -194,7 +196,9 @@ export class SwatDatabaseHelper {
             'snow.sno': 'snow_sno',
             'plants.plt': 'plants_plt',
             'd_table.dtl': 'd_table_dtl',
-            'soils_lte.sol': 'soils_lte_sol'
+            'soils_lte.sol': 'soils_lte_sol',
+            'aquifer.aqu': 'aquifer_aqu',
+            'initial.aqu': 'initial_aqu'
         };
 
         return fileToTableMap[fileName.toLowerCase()];

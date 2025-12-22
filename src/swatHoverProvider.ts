@@ -227,7 +227,9 @@ export class SwatHoverProvider implements vscode.HoverProvider {
             'surf_stor': 'Surface Storage',
             'snow': 'Snow',
             'plnt_typ': 'Plant Type',
-            'soil_text': 'Soil Texture'
+            'soil_text': 'Soil Texture',
+            'aquifer': 'Aquifer',
+            'aqu': 'Aquifer'
         };
         
         return nameMap[columnName] || this.formatFieldName(columnName);
@@ -238,7 +240,7 @@ export class SwatHoverProvider implements vscode.HoverProvider {
      */
     private formatTableName(tableName: string): string {
         // Remove _hyd, _fld, etc. suffixes and format
-        const baseName = tableName.replace(/_(hyd|fld|sol|lum|ini|wet|sno|plt|dtl|hru)$/, '');
+        const baseName = tableName.replace(/_(hyd|fld|sol|lum|ini|wet|sno|plt|dtl|hru|aqu)$/, '');
         return this.formatFieldName(baseName);
     }
 
@@ -256,7 +258,9 @@ export class SwatHoverProvider implements vscode.HoverProvider {
             'surf_stor': 'wetland_wet',
             'snow': 'snow_sno',
             'plnt_typ': 'plants_plt',
-            'soil_text': 'soils_lte_sol'
+            'soil_text': 'soils_lte_sol',
+            'aquifer': 'aquifer_aqu',
+            'aqu': 'aquifer_aqu'
         };
 
         return columnTableMap[columnName];
