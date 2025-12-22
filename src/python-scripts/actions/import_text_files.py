@@ -279,29 +279,26 @@ class ImportTextFiles(ExecutableApi):
 		"""Import connection files."""
 		self.emit_progress(start_prog, "Importing connection files...")
 		
-		# Note: Connection files currently don't have read() implementations
-		# The following dictionary documents which files should be processed here
-		# When read() methods are implemented in fileio/connect.py, uncomment the loop below
-		# 
-		# connect_files = {
-		#     'hru.con': connect.Hru_con,
-		#     'hru-lte.con': connect.Hru_lte_con,
-		#     'rout_unit.con': connect.Rout_unit_con,
-		#     'aquifer.con': connect.Aquifer_con,
-		#     'channel.con': connect.Channel_con,
-		#     'reservoir.con': connect.Reservoir_con,
-		#     'recall.con': connect.Recall_con,
-		#     'exco.con': connect.Exco_con,
-		#     'delratio.con': connect.Delratio_con,
-		#     'outlet.con': connect.Outlet_con
-		# }
-		# 
-		# for filename, file_class in connect_files.items():
-		#     if self.file_exists(filename):
-		#         try:
-		#             file_class(self.get_file_path(filename), self.editor_version, self.swat_version).read()
-		#         except NotImplementedError:
-		#             pass
+		# Import connection files
+		connect_files = {
+			'hru.con': connect.Hru_con,
+			'hru-lte.con': connect.Hru_lte_con,
+			'rout_unit.con': connect.Rout_unit_con,
+			'aquifer.con': connect.Aquifer_con,
+			'channel.con': connect.Channel_con,
+			'reservoir.con': connect.Reservoir_con,
+			'recall.con': connect.Recall_con,
+			'exco.con': connect.Exco_con,
+			'delratio.con': connect.Delratio_con,
+			'chandeg.con': connect.Chandeg_con
+		}
+		
+		for filename, file_class in connect_files.items():
+			if self.file_exists(filename):
+				try:
+					file_class(self.get_file_path(filename), self.editor_version, self.swat_version).read()
+				except NotImplementedError:
+					pass
 		
 		return start_prog + allocated_prog
 	
