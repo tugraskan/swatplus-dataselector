@@ -14,7 +14,7 @@ class Nutrients_sol(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		self.read_default_table(db.Nutrients_sol, project_base.db, 4, ignore_id_col=True)
 
 	def write(self):
 		self.write_default_table(db.Nutrients_sol, ignore_id_col=True, non_zero_min_cols=['exp_co'])
@@ -27,7 +27,51 @@ class Soils_sol(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		# Read soils.sol file with nested soil layer format
+		# Format: soil header line followed by layer lines
+		file = open(self.file_name, "r")
+		i = 1
+		for line in file:
+			if i > 3:  # Skip header lines
+				val = line.split()
+				if len(val) > 6:  # Soil header line (name, nly, hyd_grp, dp_tot, anion_excl, perc_crk, texture)
+					# Insert soil record
+					soil = db.Soils_sol.create(
+						name=val[0],
+						hyd_grp=val[2],
+						dp_tot=utils.num_or_null(val[3]),
+						anion_excl=utils.num_or_null(val[4]),
+						perc_crk=utils.num_or_null(val[5]),
+						texture=val[6] if len(val) > 6 else None
+					)
+					
+					# Read layer lines
+					nly = int(val[1])
+					for layer_num in range(1, nly + 1):
+						layer_line = file.readline()
+						layer_val = layer_line.split()
+						if len(layer_val) >= 14:  # Layer format: dp, bd, awc, soil_k, carbon, clay, silt, sand, rock, alb, usle_k, ec, caco3, ph
+							db.Soils_sol_layer.create(
+								soil=soil,
+								layer_num=layer_num,
+								dp=utils.num_or_null(layer_val[0]),
+								bd=utils.num_or_null(layer_val[1]),
+								awc=utils.num_or_null(layer_val[2]),
+								soil_k=utils.num_or_null(layer_val[3]),
+								carbon=utils.num_or_null(layer_val[4]),
+								clay=utils.num_or_null(layer_val[5]),
+								silt=utils.num_or_null(layer_val[6]),
+								sand=utils.num_or_null(layer_val[7]),
+								rock=utils.num_or_null(layer_val[8]),
+								alb=utils.num_or_null(layer_val[9]),
+								usle_k=utils.num_or_null(layer_val[10]),
+								ec=utils.num_or_null(layer_val[11]),
+								caco3=utils.num_or_null(layer_val[12]),
+								ph=utils.num_or_null(layer_val[13])
+							)
+						i += 1
+			i += 1
+		file.close()
 
 	def write(self):
 		soils = db.Soils_sol.select().order_by(db.Soils_sol.id)

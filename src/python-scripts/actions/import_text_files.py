@@ -244,6 +244,13 @@ class ImportTextFiles(ExecutableApi):
 		"""Import soil files."""
 		self.emit_progress(start_prog, "Importing soil files...")
 		
+		# Import soils.sol if it exists (must come before soils_lte.sol for FK dependencies)
+		if self.file_exists("soils.sol"):
+			try:
+				soils.Soils_sol(self.get_file_path("soils.sol"), self.editor_version, self.swat_version).read()
+			except NotImplementedError:
+				pass
+		
 		# Import soils_lte.sol if it exists
 		if self.file_exists("soils_lte.sol"):
 			try:
@@ -476,12 +483,19 @@ class ImportTextFiles(ExecutableApi):
 		"""Import initialization files."""
 		self.emit_progress(start_prog, "Importing initialization files...")
 		
-		# Note: Initialization files currently don't have read() implementations
+		# Import soil_plant.ini if it exists (needed for HRU FK lookups)
+		if self.file_exists("soil_plant.ini"):
+			try:
+				init.Soil_plant_ini(self.get_file_path("soil_plant.ini"), self.editor_version, self.swat_version).read()
+			except NotImplementedError:
+				pass
+		
+		# Note: Other initialization files currently don't have read() implementations
 		# The following list documents which files should be processed here
 		# When read() methods are implemented in fileio/init.py, uncomment the loop below
 		#
 		# init_files = [
-		#     'plant.ini', 'soil_plant.ini', 'om_water.ini',
+		#     'plant.ini', 'om_water.ini',
 		#     'pest_hru.ini', 'pest_water.ini', 'path_hru.ini',
 		#     'path_water.ini', 'hmet_hru.ini', 'hmet_water.ini'
 		# ]

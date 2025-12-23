@@ -179,8 +179,12 @@ class Landuse_lum(BaseFileModel):
 		self.version = version
 		self.swat_version = swat_version
 
-	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+	def read(self, database='project'):
+		# Read landuse.lum file - standard table format
+		if database == 'project':
+			self.read_default_table(db.Landuse_lum, project_base.db, 2, ignore_id_col=True)
+		else:
+			self.read_default_table(db_datasets.Landuse_lum, datasets_base.db, 2, ignore_id_col=True)
 
 	def write(self):
 		table = db.Landuse_lum

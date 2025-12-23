@@ -76,7 +76,35 @@ class Soil_plant_ini(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		# Read soil_plant.ini file with FK lookups
+		# Format: name, sw_frac, nutrients, pest, path, hmet, salt
+		file = open(self.file_name, "r")
+		
+		i = 1
+		for line in file:
+			if i > 2:  # Skip header lines
+				val = line.split()
+				if len(val) < 7:
+					continue
+				
+				# Look up foreign keys by name
+				nutrients_id = None
+				if val[2] != 'null':
+					try:
+						rec = soils.Nutrients_sol.get(soils.Nutrients_sol.name == val[2])
+						nutrients_id = rec.id
+					except:
+						pass
+				
+				db.Soil_plant_ini.create(
+					name=val[0],
+					sw_frac=utils.num_or_null(val[1]),
+					nutrients=nutrients_id
+					# pest, path, hmet, salt FKs skipped for now - tables not commonly used
+				)
+			i += 1
+		
+		file.close()
 
 	def write(self):
 		table = db.Soil_plant_ini
