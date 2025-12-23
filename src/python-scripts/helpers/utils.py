@@ -180,6 +180,16 @@ def val_if_null(val, ifnull = None):
 	return ifnull if val is None or val == 'null' else val
 
 
+def num_or_null(val):
+	"""Convert value to float, or return None if value is None, empty, or 'null'."""
+	if val is None or val == '' or val == 'null':
+		return None
+	try:
+		return float(val)
+	except (ValueError, TypeError):
+		return None
+
+
 def add_months(sourcedate, months):
     month = sourcedate.month - 1 + months
     year = sourcedate.year + month // 12
