@@ -169,8 +169,12 @@ export class SwatDatabaseBrowserProvider {
 
             // Debug: Log the first row to see what columns we got
             if (rows.length > 0) {
+                console.log('=== DEBUG: FK Name Resolution ===');
                 console.log('First row columns:', Object.keys(rows[0]));
-                console.log('FK selects:', fkSelects);
+                console.log('First row data:', rows[0]);
+                console.log('FK selects added:', fkSelects);
+                console.log('FK map:', Array.from(fkMap.entries()));
+                console.log('=================================');
             }
 
             db.close();
