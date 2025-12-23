@@ -53,8 +53,8 @@ class Management_sch(BaseFileModel):
 		vals = lines[i].split()
 		self.check_cols(vals, 3, 'management schedule {i}'.format(i=i))
 		name = vals[0].strip()
-		num_ops = int(vals[1])
-		num_auto = int(vals[2])
+		num_ops = int(float(vals[1]))
+		num_auto = int(float(vals[2]))
 
 		sch, created = self.mgt_sch.get_or_create(name=name)
 
@@ -99,8 +99,8 @@ class Management_sch(BaseFileModel):
 			self.mgt_sch_op.create(
 				management_sch=sch.id,
 				op_typ=vals[0].strip(),
-				mon=int(vals[1]),
-				day=int(vals[2]),
+				mon=int(float(vals[1])),
+				day=int(float(vals[2])),
 				hu_sch=float(vals[3]),
 				op_data1=vals[4].strip() if vals[4].strip() != 'null' else None,
 				op_data2=vals[5].strip() if vals[5].strip() != 'null' else None,
@@ -179,8 +179,12 @@ class Landuse_lum(BaseFileModel):
 		self.version = version
 		self.swat_version = swat_version
 
-	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+	def read(self, database='project'):
+		# Read landuse.lum file - standard table format
+		if database == 'project':
+			self.read_default_table(db.Landuse_lum, project_base.db, 2, ignore_id_col=True)
+		else:
+			self.read_default_table(db_datasets.Landuse_lum, datasets_base.db, 2, ignore_id_col=True)
 
 	def write(self):
 		table = db.Landuse_lum

@@ -1,6 +1,7 @@
 from .base import BaseFileModel
 from helpers import utils, table_mapper
-from database.project import connect
+from database.project import connect, base as project_base, hydrology, dr
+from database import lib as db_lib
 import database.project.routing_unit as db
 
 from peewee import *
@@ -13,7 +14,62 @@ class Rout_unit(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read rout_unit.rtu file and populate Rout_unit_rtu table.
+		File format: id, name, define, dlr, topo, field (6 columns)
+		Note: 'define' column is same as name, 'id' is ignored
+		"""
+		file = open(self.file_name, "r")
+		
+		i = 1
+		data = []
+		for line in file:
+			if i > 2:  # Skip header lines
+				val = line.split()
+				if len(val) < 6:
+					continue
+				
+				# Look up foreign keys by name
+				dlr_name = val[3]
+				dlr_id = None
+				if dlr_name != 'null':
+					try:
+						dlr_rec = db.Rout_unit_dr.get(db.Rout_unit_dr.name == dlr_name)
+						dlr_id = dlr_rec.id
+					except:
+						pass
+				
+				topo_name = val[4]
+				topo_id = None
+				if topo_name != 'null':
+					try:
+						topo_rec = hydrology.Topography_hyd.get(hydrology.Topography_hyd.name == topo_name)
+						topo_id = topo_rec.id
+					except:
+						pass
+				
+				field_name = val[5]
+				field_id = None
+				if field_name != 'null':
+					try:
+						field_rec = hydrology.Field_fld.get(hydrology.Field_fld.name == field_name)
+						field_id = field_rec.id
+					except:
+						pass
+				
+				d = {
+					'name': val[1],
+					'dlr': dlr_id,
+					'topo': topo_id,
+					'field': field_id
+				}
+				data.append(d)
+			i += 1
+		
+		file.close()
+		
+		if len(data) > 0:
+			db_lib.bulk_insert(project_base.db, db.Rout_unit_rtu, data)
 
 	def write(self):
 		table = db.Rout_unit_rtu
@@ -92,7 +148,11 @@ class Rout_unit_dr(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read rout_unit.dr file and populate Rout_unit_dr table.
+		File format: name, temp, flo, sed, orgn, sedp, no3, solp, pest_sol, pest_sorb (10 columns)
+		"""
+		self.read_default_table(db.Rout_unit_dr, project_base.db, 10, ignore_id_col=True)
 
 	def write(self):
 		self.write_default_table(db.Rout_unit_dr, True)

@@ -1,6 +1,8 @@
 from .base import BaseFileModel, FileColumn as col
 from peewee import *
 import database.project.climate as db
+from database.project import base as project_base
+from database import lib as db_lib
 from helpers import utils
 
 
@@ -11,7 +13,48 @@ class Weather_sta_cli(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read weather-sta.cli file and populate Weather_sta_cli table.
+		File format: name, wgn, pcp, tmp, slr, hmd, wnd, pet, atmo_dep (9 columns)
+		"""
+		file = open(self.file_name, "r")
+		
+		i = 1
+		data = []
+		for line in file:
+			if i > 2:  # Skip header lines
+				val = line.split()
+				if len(val) < 9:
+					continue
+				
+				# Look up Weather_wgn_cli foreign key by name
+				wgn_name = val[1]
+				wgn_id = None
+				if wgn_name != 'null':
+					try:
+						wgn_rec = db.Weather_wgn_cli.get(db.Weather_wgn_cli.name == wgn_name)
+						wgn_id = wgn_rec.id
+					except:
+						pass  # Weather generator not found, leave as None
+				
+				d = {
+					'name': val[0],
+					'wgn': wgn_id,
+					'pcp': val[2] if val[2] != 'null' else None,
+					'tmp': val[3] if val[3] != 'null' else None,
+					'slr': val[4] if val[4] != 'null' else None,
+					'hmd': val[5] if val[5] != 'null' else None,
+					'wnd': val[6] if val[6] != 'null' else None,
+					'pet': val[7] if val[7] != 'null' else None,
+					'atmo_dep': val[8] if val[8] != 'null' else None
+				}
+				data.append(d)
+			i += 1
+		
+		file.close()
+		
+		if len(data) > 0:
+			db_lib.bulk_insert(project_base.db, db.Weather_sta_cli, data)
 
 	def write(self):
 		table = db.Weather_sta_cli

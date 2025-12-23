@@ -1,8 +1,174 @@
 from helpers import utils, table_mapper
 import database.project.connect as db
 
-from database.project import hru, routing_unit, exco, reservoir, aquifer, channel, recall, dr, basin
+from database.project import hru, routing_unit, exco, reservoir, aquifer, channel, recall, dr, basin, climate, simulation
+from database import lib as db_lib
+from database.project import base as project_base
 from .base import BaseFileModel
+
+
+def read_con_table(file_name, con_table, con_out_table, elem_name, elem_table):
+	"""
+	Read a connection file and populate the connection and connection outflow tables.
+	:param file_name: Path to the connection file
+	:param con_table: Database table for connections (e.g., db.Aquifer_con)
+	:param con_out_table: Database table for connection outflows (e.g., db.Aquifer_con_out)
+	:param elem_name: Name of the element field (e.g., "aqu", "cha", "res")
+	:param elem_table: Database table for the element (e.g., aquifer.Aquifer_aqu)
+	"""
+	file = open(file_name, "r")
+	
+	i = 1
+	con_data = []
+	con_out_data = []
+	
+	for line in file:
+		if i > 2:  # Skip header lines
+			val = line.split()
+			if len(val) < 13:  # Minimum columns before con_outs
+				continue
+			
+			# Parse main connection fields
+			# id, name, gis_id, area, lat, lon, elev, elem_id, wst, cst, ovfl, rule, out_tot
+			con_id = int(float(val[0]))
+			name = val[1]
+			gis_id = int(float(val[2])) if val[2] != 'null' else None
+			area = float(val[3])
+			lat = float(val[4])
+			lon = float(val[5])
+			elev = float(val[6]) if val[6] != 'null' else None
+			elem_id = int(float(val[7]))
+			wst_name = val[8] if val[8] != 'null' else None
+			cst_id = int(float(val[9])) if val[9] != 'null' else 0
+			ovfl = int(float(val[10]))
+			rule = int(float(val[11]))
+			out_tot = int(float(val[12]))
+			
+			# Look up foreign keys
+			wst_id = None
+			if wst_name is not None:
+				try:
+					wst = climate.Weather_sta_cli.get(climate.Weather_sta_cli.name == wst_name)
+					wst_id = wst.id
+				except:
+					pass  # Weather station not found, leave as None
+			
+			# Look up element ID
+			elem_fk_id = None
+			try:
+				elem = elem_table.get(elem_table.id == elem_id)
+				elem_fk_id = elem.id
+			except:
+				pass  # Element not found, leave as None
+			
+			# Build connection record
+			con_record = {
+				'name': name,
+				'gis_id': gis_id,
+				'area': area,
+				'lat': lat,
+				'lon': lon,
+				'elev': elev,
+				'wst': wst_id,
+				'cst': cst_id if cst_id > 0 else None,
+				'ovfl': ovfl,
+				'rule': rule
+			}
+			
+			# Add element-specific foreign key
+			if elem_name == "hru":
+				con_record['hru'] = elem_fk_id
+			elif elem_name == "rtu":
+				con_record['rtu'] = elem_fk_id
+			elif elem_name == "aqu":
+				con_record['aqu'] = elem_fk_id
+			elif elem_name == "cha":
+				con_record['cha'] = elem_fk_id
+			elif elem_name == "res":
+				con_record['res'] = elem_fk_id
+			elif elem_name == "rec":
+				con_record['rec'] = elem_fk_id
+			elif elem_name == "exco":
+				con_record['exco'] = elem_fk_id
+			elif elem_name == "dlr":
+				con_record['dlr'] = elem_fk_id
+			elif elem_name == "lcha":
+				con_record['lcha'] = elem_fk_id
+			elif elem_name == "lhru":
+				con_record['lhru'] = elem_fk_id
+			
+			con_data.append(con_record)
+			
+			# Parse connection outflow records (groups of 4 values: obj_typ, obj_id, hyd_typ, frac)
+			out_idx = 13
+			for j in range(out_tot):
+				if out_idx + 3 < len(val):
+					obj_typ = val[out_idx]
+					obj_id = int(float(val[out_idx + 1]))
+					hyd_typ = val[out_idx + 2]
+					frac = float(val[out_idx + 3])
+					
+					con_out_record = {
+						'order': j + 1,
+						'obj_typ': obj_typ,
+						'obj_id': obj_id,
+						'hyd_typ': hyd_typ,
+						'frac': frac
+					}
+					con_out_data.append((con_id, con_out_record))
+					out_idx += 4
+		
+		i += 1
+	
+	file.close()
+	
+	# Insert connection records
+	if len(con_data) > 0:
+		db_lib.bulk_insert(project_base.db, con_table, con_data)
+	
+	# Insert connection outflow records
+	# We need to map the file's con_id to the actual database ID
+	if len(con_out_data) > 0:
+		# Get mapping of names to database IDs
+		con_records = con_table.select()
+		name_to_db_id = {c.name: c.id for c in con_records}
+		
+		# Build con_out records with correct foreign keys
+		con_out_final = []
+		for file_con_id, out_record in con_out_data:
+			# Find the connection name from con_data
+			if file_con_id - 1 < len(con_data):
+				con_name = con_data[file_con_id - 1]['name']
+				if con_name in name_to_db_id:
+					out_record_with_fk = out_record.copy()
+					# Add the appropriate foreign key field based on table
+					if con_out_table == db.Aquifer_con_out:
+						out_record_with_fk['aquifer_con'] = name_to_db_id[con_name]
+					elif con_out_table == db.Channel_con_out:
+						out_record_with_fk['channel_con'] = name_to_db_id[con_name]
+					elif con_out_table == db.Reservoir_con_out:
+						out_record_with_fk['reservoir_con'] = name_to_db_id[con_name]
+					elif con_out_table == db.Hru_con_out:
+						out_record_with_fk['hru_con'] = name_to_db_id[con_name]
+					elif con_out_table == db.Hru_lte_con_out:
+						out_record_with_fk['hru_lte_con'] = name_to_db_id[con_name]
+					elif con_out_table == db.Rout_unit_con_out:
+						out_record_with_fk['rtu_con'] = name_to_db_id[con_name]
+					elif con_out_table == db.Recall_con_out:
+						out_record_with_fk['recall_con'] = name_to_db_id[con_name]
+					elif con_out_table == db.Exco_con_out:
+						out_record_with_fk['exco_con'] = name_to_db_id[con_name]
+					elif con_out_table == db.Delratio_con_out:
+						out_record_with_fk['delratio_con'] = name_to_db_id[con_name]
+					elif con_out_table == db.Chandeg_con_out:
+						out_record_with_fk['chandeg_con'] = name_to_db_id[con_name]
+					elif con_out_table == db.Outlet_con_out:
+						out_record_with_fk['outlet_con'] = name_to_db_id[con_name]
+					
+					con_out_final.append(out_record_with_fk)
+		
+		if len(con_out_final) > 0:
+			db_lib.bulk_insert(project_base.db, con_out_table, con_out_final)
 
 
 def write_header(file, elem_name, has_con_out):
@@ -147,7 +313,7 @@ class Hru_con(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		read_con_table(self.file_name, db.Hru_con, db.Hru_con_out, "hru", hru.Hru_data_hru)
 
 	def write(self):
 		write_con_table(self.file_name, self.get_meta_line(), db.Hru_con, db.Hru_con_out, "hru", hru.Hru_data_hru)
@@ -160,7 +326,7 @@ class Hru_lte_con(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		read_con_table(self.file_name, db.Hru_lte_con, db.Hru_lte_con_out, "lhru", hru.Hru_lte_hru)
 
 	def write(self):
 		write_con_table(self.file_name, self.get_meta_line(), db.Hru_lte_con, db.Hru_lte_con_out, "lhru", hru.Hru_lte_hru)
@@ -173,7 +339,7 @@ class Rout_unit_con(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		read_con_table(self.file_name, db.Rout_unit_con, db.Rout_unit_con_out, "rtu", routing_unit.Rout_unit_rtu)
 
 	def write(self):
 		using_gwflow = False
@@ -190,7 +356,7 @@ class Aquifer_con(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		read_con_table(self.file_name, db.Aquifer_con, db.Aquifer_con_out, "aqu", aquifer.Aquifer_aqu)
 
 	def write(self):
 		write_con_table(self.file_name, self.get_meta_line(), db.Aquifer_con, db.Aquifer_con_out, "aqu", aquifer.Aquifer_aqu)
@@ -203,7 +369,7 @@ class Channel_con(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		read_con_table(self.file_name, db.Channel_con, db.Channel_con_out, "cha", channel.Channel_cha)
 
 	def write(self):
 		write_con_table(self.file_name, self.get_meta_line(), db.Channel_con, db.Channel_con_out, "cha", channel.Channel_cha)
@@ -216,7 +382,7 @@ class Chandeg_con(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		read_con_table(self.file_name, db.Chandeg_con, db.Chandeg_con_out, "lcha", channel.Channel_lte_cha)
 
 	def write(self):
 		write_con_table(self.file_name, self.get_meta_line(), db.Chandeg_con, db.Chandeg_con_out, "lcha", channel.Channel_lte_cha)
@@ -229,7 +395,7 @@ class Reservoir_con(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		read_con_table(self.file_name, db.Reservoir_con, db.Reservoir_con_out, "res", reservoir.Reservoir_res)
 
 	def write(self):
 		write_con_table(self.file_name, self.get_meta_line(), db.Reservoir_con, db.Reservoir_con_out, "res", reservoir.Reservoir_res)
@@ -242,7 +408,7 @@ class Recall_con(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		read_con_table(self.file_name, db.Recall_con, db.Recall_con_out, "rec", recall.Recall_rec)
 
 	def write(self):
 		#write_con_table(self.file_name, self.get_meta_line(), db.Recall_con, db.Recall_con_out, "rec", recall.Recall_rec)
@@ -280,7 +446,7 @@ class Exco_con(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		read_con_table(self.file_name, db.Exco_con, db.Exco_con_out, "exco", exco.Exco_exc)
 
 	def write(self):
 		#write_con_table(self.file_name, self.get_meta_line(), db.Exco_con, db.Exco_con_out, "exco", exco.Exco_exc)
@@ -323,7 +489,7 @@ class Delratio_con(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		read_con_table(self.file_name, db.Delratio_con, db.Delratio_con_out, "dlr", dr.Delratio_del)
 
 	def write(self):
 		write_con_table(self.file_name, self.get_meta_line(), db.Delratio_con, db.Delratio_con_out, "dlr", dr.Delratio_del)

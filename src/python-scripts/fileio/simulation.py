@@ -1,5 +1,7 @@
 from .base import BaseFileModel, FileColumn as col
 from helpers import utils
+from database.project import base as project_base
+from database import lib as db_lib
 
 from peewee import *
 
@@ -19,7 +21,11 @@ class Time_sim(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read time.sim file and populate Time_sim table.
+		File format: day_start, yrc_start, day_end, yrc_end, step (5 columns)
+		"""
+		self.read_default_table(db.Time_sim, project_base.db, 5, ignore_id_col=True)
 
 	def write(self):
 		self.write_default_table(db.Time_sim, ignore_id_col=True)
@@ -32,7 +38,11 @@ class Object_prt(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read object.prt file and populate Object_prt table.
+		File format: ob_typ, ob_name, filename (3 columns)
+		"""
+		self.read_default_table(db.Object_prt, project_base.db, 3, ignore_id_col=False)
 
 	def write(self):
 		self.write_default_table(db.Object_prt)

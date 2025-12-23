@@ -1,6 +1,7 @@
 from .base import BaseFileModel, FileColumn as col
 from peewee import *
-from database.project import init
+from database.project import init, base as project_base
+from database import lib as db_lib
 import database.project.channel as db
 import database.project.link as link
 from database.project.salts import Salt_channel_ini, Salt_module
@@ -13,7 +14,50 @@ class Initial_cha(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read initial.cha file and populate Initial_cha table.
+		File format: name, org_min, pest, path, hmet, salt, description (7 columns)
+		Note: pest, path, hmet, salt are typically 'null' placeholders
+		"""
+		file = open(self.file_name, "r")
+		
+		i = 1
+		data = []
+		for line in file:
+			if i > 2:  # Skip header lines
+				val = line.split()
+				if len(val) < 2:
+					continue
+				
+				# Look up Om_water_ini foreign key by name
+				org_min_name = val[1] if len(val) > 1 else None
+				org_min_id = None
+				if org_min_name and org_min_name != 'null':
+					try:
+						org_min_rec = init.Om_water_ini.get(init.Om_water_ini.name == org_min_name)
+						org_min_id = org_min_rec.id
+					except:
+						pass
+				
+				# Description is the last field (if present)
+				description = val[-1] if len(val) > 6 and val[-1] != 'null' else None
+				
+				d = {
+					'name': val[0],
+					'org_min': org_min_id,
+					'pest': None,  # These are typically null placeholders
+					'path': None,
+					'hmet': None,
+					'salt': None,
+					'description': description
+				}
+				data.append(d)
+			i += 1
+		
+		file.close()
+		
+		if len(data) > 0:
+			db_lib.bulk_insert(project_base.db, db.Initial_cha, data)
 
 	def write(self):
 		table = db.Initial_cha
@@ -63,7 +107,11 @@ class Hydrology_cha(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read hydrology.cha file and populate Hydrology_cha table.
+		File has 25 columns: name + 24 numeric fields
+		"""
+		self.read_default_table(db.Hydrology_cha, project_base.db, 25, ignore_id_col=True)
 
 	def write(self):
 		self.write_default_table(db.Hydrology_cha, ignore_id_col=True, non_zero_min_cols=['wd','dp','slp','len','fps'])
@@ -76,7 +124,10 @@ class Sediment_cha(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read sediment.cha file and populate Sediment_cha table.
+		"""
+		self.read_default_table(db.Sediment_cha, project_base.db, 0, ignore_id_col=True)
 
 	def write(self):
 		self.write_default_table(db.Sediment_cha, ignore_id_col=True)
@@ -89,7 +140,10 @@ class Nutrients_cha(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read nutrients.cha file and populate Nutrients_cha table.
+		"""
+		self.read_default_table(db.Nutrients_cha, project_base.db, 0, ignore_id_col=True)
 
 	def write(self):
 		self.write_default_table(db.Nutrients_cha, ignore_id_col=True)
@@ -102,7 +156,44 @@ class Channel_cha(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read channel.cha file and populate Channel_cha table.
+		File format: id, name, init, hyd, sed, nut (6 columns)
+		"""
+		file = open(self.file_name, "r")
+		
+		i = 1
+		data = []
+		for line in file:
+			if i > 2:  # Skip header lines
+				val = line.split()
+				if len(val) < 6:
+					continue
+				
+				# Look up foreign keys by name
+				def lookup_fk(table, name_val):
+					if name_val == 'null':
+						return None
+					try:
+						rec = table.get(table.name == name_val)
+						return rec.id
+					except:
+						return None
+				
+				d = {
+					'name': val[1],
+					'init': lookup_fk(db.Initial_cha, val[2]),
+					'hyd': lookup_fk(db.Hydrology_cha, val[3]),
+					'sed': lookup_fk(db.Sediment_cha, val[4]),
+					'nut': lookup_fk(db.Nutrients_cha, val[5])
+				}
+				data.append(d)
+			i += 1
+		
+		file.close()
+		
+		if len(data) > 0:
+			db_lib.bulk_insert(project_base.db, db.Channel_cha, data)
 
 	def write(self):
 		table = db.Channel_cha

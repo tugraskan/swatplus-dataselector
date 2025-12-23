@@ -1,7 +1,8 @@
 from .base import BaseFileModel, FileColumn as col
 from peewee import *
 from helpers import utils
-from database.project import soils, decision_table, hru_parm_db
+from database.project import soils, decision_table, hru_parm_db, hydrology, lum, init, reservoir, base as project_base
+from database import lib as db_lib
 import database.project.hru as db
 
 
@@ -12,7 +13,48 @@ class Hru_data_hru(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read hru-data.hru file and populate Hru_data_hru table.
+		File format: id, name, topo, hydro, soil, lu_mgt, soil_plant_init, surf_stor, snow, field (10 columns)
+		"""
+		file = open(self.file_name, "r")
+		
+		i = 1
+		data = []
+		for line in file:
+			if i > 2:  # Skip header lines
+				val = line.split()
+				if len(val) < 10:
+					continue
+				
+				# Look up foreign keys by name
+				def lookup_fk(table, name_val):
+					if name_val == 'null':
+						return None
+					try:
+						rec = table.get(table.name == name_val)
+						return rec.id
+					except:
+						return None
+				
+				d = {
+					'name': val[1],
+					'topo': lookup_fk(hydrology.Topography_hyd, val[2]),
+					'hydro': lookup_fk(hydrology.Hydrology_hyd, val[3]),
+					'soil': lookup_fk(soils.Soils_sol, val[4]),
+					'lu_mgt': lookup_fk(lum.Landuse_lum, val[5]),
+					'soil_plant_init': lookup_fk(init.Soil_plant_ini, val[6]),
+					'surf_stor': lookup_fk(reservoir.Wetland_wet, val[7]),
+					'snow': lookup_fk(hru_parm_db.Snow_sno, val[8]),
+					'field': lookup_fk(hydrology.Field_fld, val[9])
+				}
+				data.append(d)
+			i += 1
+		
+		file.close()
+		
+		if len(data) > 0:
+			db_lib.bulk_insert(project_base.db, db.Hru_data_hru, data)
 
 	def write(self):
 		table = db.Hru_data_hru

@@ -1,7 +1,8 @@
 from .base import BaseFileModel, FileColumn as col
 from peewee import *
 from helpers import utils
-from database.project import init, connect
+from database.project import init, connect, base as project_base
+from database import lib as db_lib
 import database.project.aquifer as db
 from database.project.salts import Salt_aqu_ini, Salt_module
 
@@ -13,7 +14,57 @@ class Aquifer_aqu(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read aquifer.aqu file and populate Aquifer_aqu table.
+		File format: id, name, init, gw_flo, dep_bot, dep_wt, no3_n, sol_p, carbon,
+		             flo_dist, bf_max, alpha_bf, revap, rchg_dp, spec_yld, hl_no3n, flo_min, revap_min
+		"""
+		file = open(self.file_name, "r")
+		
+		i = 1
+		data = []
+		for line in file:
+			if i > 2:  # Skip header lines
+				val = line.split()
+				if len(val) < 17:  # Need all 17 columns
+					continue
+				
+				# Look up Initial_aqu foreign key by name
+				init_name = val[2]
+				init_id = None
+				if init_name != 'null':
+					try:
+						init_rec = db.Initial_aqu.get(db.Initial_aqu.name == init_name)
+						init_id = init_rec.id
+					except:
+						pass  # Initial not found, leave as None
+				
+				d = {
+					'name': val[1],
+					'init': init_id,
+					'gw_flo': float(val[3]),
+					'dep_bot': float(val[4]),
+					'dep_wt': float(val[5]),
+					'no3_n': float(val[6]),
+					'sol_p': float(val[7]),
+					'carbon': float(val[8]),
+					'flo_dist': float(val[9]),
+					'bf_max': float(val[10]),
+					'alpha_bf': float(val[11]),
+					'revap': float(val[12]),
+					'rchg_dp': float(val[13]),
+					'spec_yld': float(val[14]),
+					'hl_no3n': float(val[15]),
+					'flo_min': float(val[16]),
+					'revap_min': float(val[17]) if len(val) > 17 else 0.0
+				}
+				data.append(d)
+			i += 1
+		
+		file.close()
+		
+		if len(data) > 0:
+			db_lib.bulk_insert(project_base.db, db.Aquifer_aqu, data)
 
 	def write(self):
 		table = db.Aquifer_aqu
@@ -48,7 +99,50 @@ class Initial_aqu(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read initial.aqu file and populate Initial_aqu table.
+		File format: name, org_min, pest, path, hmet, salt, description
+		Note: pest, path, hmet, salt are typically 'null' placeholders
+		"""
+		file = open(self.file_name, "r")
+		
+		i = 1
+		data = []
+		for line in file:
+			if i > 2:  # Skip header lines
+				val = line.split()
+				if len(val) < 2:  # Need at least name and org_min
+					continue
+				
+				# Look up Om_water_ini foreign key by name
+				org_min_name = val[1] if len(val) > 1 else None
+				org_min_id = None
+				if org_min_name and org_min_name != 'null':
+					try:
+						org_min_rec = init.Om_water_ini.get(init.Om_water_ini.name == org_min_name)
+						org_min_id = org_min_rec.id
+					except:
+						pass  # Not found, leave as None
+				
+				# Description is the last field (if present)
+				description = val[-1] if len(val) > 6 and val[-1] != 'null' else None
+				
+				d = {
+					'name': val[0],
+					'org_min': org_min_id,
+					'pest': None,  # These are typically null placeholders
+					'path': None,
+					'hmet': None,
+					'salt': None,
+					'description': description
+				}
+				data.append(d)
+			i += 1
+		
+		file.close()
+		
+		if len(data) > 0:
+			db_lib.bulk_insert(project_base.db, db.Initial_aqu, data)
 
 	def write(self):
 		table = db.Initial_aqu
