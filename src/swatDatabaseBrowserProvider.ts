@@ -126,12 +126,39 @@ export class SwatDatabaseBrowserProvider {
                 return;
             }
 
-            // Get table data
-            let query = `SELECT * FROM ${tableName}`;
-            const params: any[] = [];
+            // Get foreign key information first
+            const pragmaStmt = db.prepare(`PRAGMA foreign_key_list(${tableName})`);
+            const foreignKeys = pragmaStmt.all();
             
+            // Build query with JOINs for foreign keys to display names instead of IDs
+            const fkMap = new Map<string, { table: string, to: string, alias: string }>();
+            const fkJoins: string[] = [];
+            const fkSelects: string[] = [];
+            
+            foreignKeys.forEach((fk: any, index: number) => {
+                const alias = `fk_${index}`;
+                fkMap.set(fk.from, { table: fk.table, to: fk.to || 'id', alias });
+                
+                // Add LEFT JOIN for this foreign key
+                fkJoins.push(`LEFT JOIN ${fk.table} AS ${alias} ON ${tableName}.${fk.from} = ${alias}.${fk.to || 'id'}`);
+                
+                // Select the name from the joined table (aliased as <column>_name)
+                fkSelects.push(`${alias}.name AS ${fk.from}_name`);
+            });
+            
+            // Build the complete query
+            let query = `SELECT ${tableName}.*`;
+            if (fkSelects.length > 0) {
+                query += ', ' + fkSelects.join(', ');
+            }
+            query += ` FROM ${tableName}`;
+            if (fkJoins.length > 0) {
+                query += ' ' + fkJoins.join(' ');
+            }
+            
+            const params: any[] = [];
             if (filterRecordName) {
-                query += ' WHERE name = ?';
+                query += ` WHERE ${tableName}.name = ?`;
                 params.push(filterRecordName);
             }
             
@@ -139,10 +166,6 @@ export class SwatDatabaseBrowserProvider {
             
             const stmt = db.prepare(query);
             const rows = params.length > 0 ? stmt.all(...params) : stmt.all();
-
-            // Get foreign key information
-            const pragmaStmt = db.prepare(`PRAGMA foreign_key_list(${tableName})`);
-            const foreignKeys = pragmaStmt.all();
 
             db.close();
 
@@ -189,18 +212,23 @@ export class SwatDatabaseBrowserProvider {
             return this.getEmptyStateHtml(tableName);
         }
 
-        const columns = Object.keys(rows[0]);
-        const fkMap = new Map<string, { table: string, to: string }>();
+        // Get all columns from the result set
+        const allColumns = Object.keys(rows[0]);
         
+        // Build FK map for the original foreign key columns
+        const fkMap = new Map<string, { table: string, to: string }>();
         foreignKeys.forEach((fk: any) => {
             fkMap.set(fk.from, { table: fk.table, to: fk.to || 'id' });
         });
 
+        // Filter out the FK name columns from display, keep only original columns
+        const originalColumns = allColumns.filter(col => !col.endsWith('_name') || !fkMap.has(col.replace('_name', '')));
+        
         let tableHtml = `
             <table>
                 <thead>
                     <tr>
-                        ${columns.map(col => {
+                        ${originalColumns.map(col => {
                             const isFk = fkMap.has(col);
                             const fkInfo = isFk ? fkMap.get(col) : null;
                             return `<th title="${isFk ? `Foreign key → ${fkInfo?.table}` : ''}">${col}${isFk ? ' 🔗' : ''}</th>`;
@@ -210,13 +238,17 @@ export class SwatDatabaseBrowserProvider {
                 <tbody>
                     ${rows.map(row => `
                         <tr>
-                            ${columns.map(col => {
-                                const value = row[col];
+                            ${originalColumns.map(col => {
                                 const isFk = fkMap.has(col);
                                 const fkInfo = isFk ? fkMap.get(col) : null;
+                                const value = row[col];
+                                const nameValue = row[col + '_name']; // Get the resolved name from JOIN
                                 
-                                if (isFk && value) {
-                                    return `<td><a href="#" class="fk-link" data-table="${fkInfo?.table}" data-record="${value}">${value}</a></td>`;
+                                if (isFk && value !== null && value !== undefined) {
+                                    // Display the name if available, otherwise show the ID
+                                    const displayValue = nameValue !== null && nameValue !== undefined ? nameValue : value;
+                                    const title = nameValue ? `ID: ${value}` : '';
+                                    return `<td><a href="#" class="fk-link" data-table="${fkInfo?.table}" data-record="${nameValue || value}" title="${title}">${displayValue}</a></td>`;
                                 } else {
                                     return `<td>${value !== null && value !== undefined ? value : '<em>null</em>'}</td>`;
                                 }
