@@ -46,7 +46,7 @@ class Soils_sol(BaseFileModel):
 					)
 					
 					# Read layer lines
-					nly = int(val[1])
+					nly = int(float(val[1]))
 					for layer_num in range(1, nly + 1):
 						layer_line = file.readline()
 						layer_val = layer_line.split()

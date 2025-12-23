@@ -30,19 +30,19 @@ def read_con_table(file_name, con_table, con_out_table, elem_name, elem_table):
 			
 			# Parse main connection fields
 			# id, name, gis_id, area, lat, lon, elev, elem_id, wst, cst, ovfl, rule, out_tot
-			con_id = int(val[0])
+			con_id = int(float(val[0]))
 			name = val[1]
-			gis_id = int(val[2]) if val[2] != 'null' else None
+			gis_id = int(float(val[2])) if val[2] != 'null' else None
 			area = float(val[3])
 			lat = float(val[4])
 			lon = float(val[5])
 			elev = float(val[6]) if val[6] != 'null' else None
-			elem_id = int(val[7])
+			elem_id = int(float(val[7]))
 			wst_name = val[8] if val[8] != 'null' else None
-			cst_id = int(val[9]) if val[9] != 'null' else 0
-			ovfl = int(val[10])
-			rule = int(val[11])
-			out_tot = int(val[12])
+			cst_id = int(float(val[9])) if val[9] != 'null' else 0
+			ovfl = int(float(val[10]))
+			rule = int(float(val[11]))
+			out_tot = int(float(val[12]))
 			
 			# Look up foreign keys
 			wst_id = None
@@ -104,7 +104,7 @@ def read_con_table(file_name, con_table, con_out_table, elem_name, elem_table):
 			for j in range(out_tot):
 				if out_idx + 3 < len(val):
 					obj_typ = val[out_idx]
-					obj_id = int(val[out_idx + 1])
+					obj_id = int(float(val[out_idx + 1]))
 					hyd_typ = val[out_idx + 2]
 					frac = float(val[out_idx + 3])
 					
