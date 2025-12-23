@@ -1,7 +1,8 @@
 from .base import BaseFileModel, FileColumn as col
 from peewee import *
 from helpers import utils
-from database.project import init
+from database.project import init, base as project_base
+from database import lib as db_lib
 import database.project.reservoir as db
 from database.project.salts import Salt_res_ini, Salt_module
 
@@ -13,7 +14,45 @@ class Reservoir_res(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read reservoir.res file and populate Reservoir_res table.
+		File format: id, name, init, hyd, rel, sed, nut (7 columns)
+		"""
+		file = open(self.file_name, "r")
+		
+		i = 1
+		data = []
+		for line in file:
+			if i > 2:  # Skip header lines
+				val = line.split()
+				if len(val) < 7:
+					continue
+				
+				# Look up foreign keys by name
+				def lookup_fk(table, name_val):
+					if name_val == 'null':
+						return None
+					try:
+						rec = table.get(table.name == name_val)
+						return rec.id
+					except:
+						return None
+				
+				d = {
+					'name': val[1],
+					'init': lookup_fk(db.Initial_res, val[2]),
+					'hyd': lookup_fk(db.Hydrology_res, val[3]),
+					'rel': None,  # rel field - skip for now
+					'sed': lookup_fk(db.Sediment_res, val[5]),
+					'nut': lookup_fk(db.Nutrients_res, val[6])
+				}
+				data.append(d)
+			i += 1
+		
+		file.close()
+		
+		if len(data) > 0:
+			db_lib.bulk_insert(project_base.db, db.Reservoir_res, data)
 
 	def write(self):
 		table = db.Reservoir_res
@@ -73,7 +112,10 @@ class Hydrology_res(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self, database='project'):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read hydrology.res file and populate Hydrology_res table.
+		"""
+		self.read_default_table(db.Hydrology_res, project_base.db, 0, ignore_id_col=True)
 
 	def write(self):
 		self.write_default_table(db.Hydrology_res, True)
@@ -86,7 +128,47 @@ class Initial_res(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self, database='project'):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read initial.res file and populate Initial_res table.
+		File format: name, org_min, pest, path, hmet, description (6 columns)
+		"""
+		file = open(self.file_name, "r")
+		
+		i = 1
+		data = []
+		for line in file:
+			if i > 2:  # Skip header lines
+				val = line.split()
+				if len(val) < 2:
+					continue
+				
+				# Look up Om_water_ini foreign key by name
+				org_min_name = val[1] if len(val) > 1 else None
+				org_min_id = None
+				if org_min_name and org_min_name != 'null':
+					try:
+						org_min_rec = init.Om_water_ini.get(init.Om_water_ini.name == org_min_name)
+						org_min_id = org_min_rec.id
+					except:
+						pass
+				
+				description = val[-1] if len(val) > 5 and val[-1] != 'null' else None
+				
+				d = {
+					'name': val[0],
+					'org_min': org_min_id,
+					'pest': None,
+					'path': None,
+					'hmet': None,
+					'description': description
+				}
+				data.append(d)
+			i += 1
+		
+		file.close()
+		
+		if len(data) > 0:
+			db_lib.bulk_insert(project_base.db, db.Initial_res, data)
 
 	def write(self):
 		table = db.Initial_res
@@ -122,7 +204,10 @@ class Sediment_res(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self, database='project'):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read sediment.res file and populate Sediment_res table.
+		"""
+		self.read_default_table(db.Sediment_res, project_base.db, 0, ignore_id_col=True)
 
 	def write(self):
 		self.write_default_table(db.Sediment_res, True)
@@ -135,7 +220,10 @@ class Nutrients_res(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self, database='project'):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read nutrients.res file and populate Nutrients_res table.
+		"""
+		self.read_default_table(db.Nutrients_res, project_base.db, 0, ignore_id_col=True)
 
 	def write(self):
 		self.write_default_table(db.Nutrients_res, True)
@@ -161,7 +249,10 @@ class Wetland_wet(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read wetland.wet file and populate Wetland_wet table.
+		"""
+		self.read_default_table(db.Wetland_wet, project_base.db, 0, ignore_id_col=False)
 
 	def write(self):
 		table = db.Wetland_wet
