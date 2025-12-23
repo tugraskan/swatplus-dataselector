@@ -88,11 +88,11 @@ class ImportTextFiles(ExecutableApi):
 			# 10. Import aquifer files
 			total = self.import_aquifer(total, step)
 			
-			# 11. Import HRU files
-			total = self.import_hru(total, step)
-			
-			# 12. Import hydrology files
+			# 11. Import hydrology files (must come before HRU - HRU has FK dependencies on hydrology)
 			total = self.import_hydrology(total, step)
+			
+			# 12. Import HRU files
+			total = self.import_hru(total, step)
 			
 			# 13. Import initialization files
 			total = self.import_init(total, step)
