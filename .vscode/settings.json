@@ -1,3 +1,14 @@
+{
+  "sqltools.connections": [
+    {
+      "name": "SWAT Project (Osu_1hru)",
+      "driver": "SQLite",
+      "database": "C:\\Users\\taci.ugraskan\\source\\repos\\SWATPlus\\swatplus_ug-1\\data\\Osu_1hru\\project.sqlite",
+      "previewLimit": 50
+    }
+  ],
+  "sqltools.useNodeRuntime": true
+}
 // Place your settings in this file to overwrite default and user settings.
 {
     "files.exclude": {
