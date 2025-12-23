@@ -222,23 +222,26 @@ export class SwatDatabaseBrowserProvider {
         });
 
         // Filter out the FK name columns from display, keep only original columns
-        const originalColumns = allColumns.filter(col => !col.endsWith('_name') || !fkMap.has(col.replace('_name', '')));
+        const fkNameColumns = new Set(foreignKeys.map((fk: any) => fk.from + '_name'));
+        const displayColumns = allColumns.filter(col => !fkNameColumns.has(col));
         
         let tableHtml = `
             <table>
                 <thead>
                     <tr>
-                        ${originalColumns.map(col => {
+                        ${displayColumns.map(col => {
                             const isFk = fkMap.has(col);
                             const fkInfo = isFk ? fkMap.get(col) : null;
-                            return `<th title="${isFk ? `Foreign key → ${fkInfo?.table}` : ''}">${col}${isFk ? ' 🔗' : ''}</th>`;
+                            // Display column name without _id suffix for FK columns
+                            const displayName = isFk && col.endsWith('_id') ? col.substring(0, col.length - 3) : col;
+                            return `<th title="${isFk ? `Foreign key → ${fkInfo?.table}` : ''}">${displayName}${isFk ? ' 🔗' : ''}</th>`;
                         }).join('')}
                     </tr>
                 </thead>
                 <tbody>
                     ${rows.map(row => `
                         <tr>
-                            ${originalColumns.map(col => {
+                            ${displayColumns.map(col => {
                                 const isFk = fkMap.has(col);
                                 const fkInfo = isFk ? fkMap.get(col) : null;
                                 const value = row[col];
