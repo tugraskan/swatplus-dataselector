@@ -58,6 +58,10 @@ class ImportTextFiles(ExecutableApi):
 			# Import files in dependency order
 			self.emit_progress(total, "Starting import from text files...")
 			
+			# Clear all existing data to prevent UNIQUE constraint violations on re-import
+			self.emit_progress(total, "Clearing existing data...")
+			self.clear_all_tables()
+			
 			# 1. Import simulation configuration files
 			total = self.import_simulation(total, step)
 			
@@ -137,6 +141,152 @@ class ImportTextFiles(ExecutableApi):
 	def file_exists(self, filename):
 		"""Check if a file exists in the TxtInOut directory."""
 		return os.path.exists(self.get_file_path(filename))
+	
+	def clear_all_tables(self):
+		"""Clear all tables to prevent UNIQUE constraint violations on re-import."""
+		from database.project import (
+			soils as db_soils, hru as db_hru, connect as db_connect,
+			hydrology as db_hydrology, channel as db_channel, reservoir as db_reservoir,
+			routing_unit as db_routing, aquifer as db_aquifer, lum as db_lum,
+			init as db_init, climate as db_climate, simulation as db_simulation,
+			hru_parm_db as db_parm, decision_table as db_dtable, structural as db_struct,
+			basin as db_basin, change as db_change, regions as db_regions, recall as db_recall
+		)
+		
+		# Clear tables in reverse dependency order (children before parents)
+		# HRU and connections
+		db_hru.Hru_data_hru.delete().execute()
+		db_hru.Hru_lte_hru.delete().execute()
+		
+		# Connection outputs before connections
+		db_connect.Hru_con_out.delete().execute()
+		db_connect.Hru_con.delete().execute()
+		db_connect.Hru_lte_con_out.delete().execute()
+		db_connect.Hru_lte_con.delete().execute()
+		db_connect.Rout_unit_con_out.delete().execute()
+		db_connect.Rout_unit_con.delete().execute()
+		db_connect.Aquifer_con_out.delete().execute()
+		db_connect.Aquifer_con.delete().execute()
+		db_connect.Channel_con_out.delete().execute()
+		db_connect.Channel_con.delete().execute()
+		db_connect.Reservoir_con_out.delete().execute()
+		db_connect.Reservoir_con.delete().execute()
+		db_connect.Recall_con_out.delete().execute()
+		db_connect.Recall_con.delete().execute()
+		db_connect.Exco_con_out.delete().execute()
+		db_connect.Exco_con.delete().execute()
+		db_connect.Delratio_con_out.delete().execute()
+		db_connect.Delratio_con.delete().execute()
+		db_connect.Chandeg_con_out.delete().execute()
+		db_connect.Chandeg_con.delete().execute()
+		db_connect.Rout_unit_ele.delete().execute()
+		
+		# Soils (layers before parent)
+		db_soils.Soils_sol_layer.delete().execute()
+		db_soils.Soils_sol.delete().execute()
+		db_soils.Nutrients_sol.delete().execute()
+		db_soils.Soils_lte_sol.delete().execute()
+		
+		# Hydrology
+		db_hydrology.Topography_hyd.delete().execute()
+		db_hydrology.Hydrology_hyd.delete().execute()
+		db_hydrology.Field_fld.delete().execute()
+		
+		# Channels
+		db_channel.Channel_cha.delete().execute()
+		db_channel.Initial_cha.delete().execute()
+		db_channel.Hydrology_cha.delete().execute()
+		db_channel.Sediment_cha.delete().execute()
+		db_channel.Nutrients_cha.delete().execute()
+		db_channel.Channel_lte_cha.delete().execute()
+		db_channel.Hyd_sed_lte_cha.delete().execute()
+		
+		# Reservoirs
+		db_reservoir.Reservoir_res.delete().execute()
+		db_reservoir.Initial_res.delete().execute()
+		db_reservoir.Hydrology_res.delete().execute()
+		db_reservoir.Sediment_res.delete().execute()
+		db_reservoir.Nutrients_res.delete().execute()
+		db_reservoir.Weir_res.delete().execute()
+		db_reservoir.Wetland_wet.delete().execute()
+		db_reservoir.Hydrology_wet.delete().execute()
+		
+		# Routing units
+		db_routing.Rout_unit_rtu.delete().execute()
+		db_routing.Rout_unit_dr.delete().execute()
+		
+		# Aquifers
+		db_aquifer.Aquifer_aqu.delete().execute()
+		db_aquifer.Initial_aqu.delete().execute()
+		
+		# LUM (nested data before parent)
+		db_lum.Management_sch_op.delete().execute()
+		db_lum.Management_sch_auto.delete().execute()
+		db_lum.Management_sch.delete().execute()
+		db_lum.Landuse_lum.delete().execute()
+		db_lum.Cntable_lum.delete().execute()
+		db_lum.Cons_prac_lum.delete().execute()
+		db_lum.Ovn_table_lum.delete().execute()
+		
+		# Init
+		db_init.Soil_plant_ini.delete().execute()
+		db_init.Plant_ini_item.delete().execute()
+		db_init.Plant_ini.delete().execute()
+		db_init.Om_water_ini.delete().execute()
+		
+		# Climate
+		db_climate.Weather_sta_cli.delete().execute()
+		db_climate.Weather_wgn_cli_mon.delete().execute()
+		db_climate.Weather_wgn_cli.delete().execute()
+		db_climate.Weather_file.delete().execute()
+		
+		# Simulation
+		db_simulation.Object_prt.delete().execute()
+		db_simulation.Print_prt_object.delete().execute()
+		db_simulation.Print_prt_aa_int.delete().execute()
+		db_simulation.Print_prt.delete().execute()
+		db_simulation.Time_sim.delete().execute()
+		
+		# Parameter DB
+		db_parm.Plants_plt.delete().execute()
+		db_parm.Fertilizer_frt.delete().execute()
+		db_parm.Tillage_til.delete().execute()
+		db_parm.Pesticide_pst.delete().execute()
+		db_parm.Urban_urb.delete().execute()
+		db_parm.Septic_sep.delete().execute()
+		db_parm.Snow_sno.delete().execute()
+		
+		# Decision tables (nested before parent)
+		db_dtable.D_table_dtl_act_out.delete().execute()
+		db_dtable.D_table_dtl_act.delete().execute()
+		db_dtable.D_table_dtl_cond_alt.delete().execute()
+		db_dtable.D_table_dtl_cond.delete().execute()
+		db_dtable.D_table_dtl.delete().execute()
+		
+		# Structural
+		db_struct.Septic_str.delete().execute()
+		db_struct.Bmpuser_str.delete().execute()
+		db_struct.Filterstrip_str.delete().execute()
+		db_struct.Grassedww_str.delete().execute()
+		db_struct.Tiledrain_str.delete().execute()
+		
+		# Basin
+		db_basin.Codes_bsn.delete().execute()
+		db_basin.Parameters_bsn.delete().execute()
+		
+		# Change/Calibration
+		db_change.Cal_parms_cal.delete().execute()
+		db_change.Calibration_cal_elem.delete().execute()
+		db_change.Calibration_cal_cond.delete().execute()
+		db_change.Calibration_cal.delete().execute()
+		
+		# Regions
+		db_regions.Ls_unit_ele.delete().execute()
+		db_regions.Ls_unit_def.delete().execute()
+		
+		# Recall (data before rec)
+		db_recall.Recall_dat.delete().execute()
+		db_recall.Recall_rec.delete().execute()
 	
 	def import_simulation(self, start_prog, allocated_prog):
 		"""Import simulation configuration files."""
