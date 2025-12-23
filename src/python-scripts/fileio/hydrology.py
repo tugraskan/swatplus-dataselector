@@ -1,5 +1,7 @@
 from .base import BaseFileModel
 from helpers import utils
+from database.project import base as project_base
+from database import lib as db_lib
 import database.project.hydrology as db
 
 
@@ -10,7 +12,11 @@ class Field_fld(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read field.fld file and populate Field_fld table.
+		File format: name, len, wd, ang (4 columns)
+		"""
+		self.read_default_table(db.Field_fld, project_base.db, 4, ignore_id_col=True)
 
 	def write(self):
 		self.write_default_table(db.Field_fld, True)
@@ -23,7 +29,11 @@ class Topography_hyd(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read topography.hyd file and populate Topography_hyd table.
+		File format: name, slp, slp_len, lat_len, dist_cha, depos (6 columns)
+		"""
+		self.read_default_table(db.Topography_hyd, project_base.db, 6, ignore_id_col=True)
 
 	def write(self):
 		if db.Topography_hyd.select().count() > 0:
@@ -58,7 +68,12 @@ class Hydrology_hyd(BaseFileModel):
 		self.swat_version = swat_version
 
 	def read(self):
-		raise NotImplementedError('Reading not implemented yet.')
+		"""
+		Read hydrology.hyd file and populate Hydrology_hyd table.
+		File format: name, lat_ttime, lat_sed, can_max, esco, epco, orgn_enrich, 
+		            orgp_enrich, cn3_swf, bio_mix, perco, lat_orgn, lat_orgp, pet_co, latq_co (15 columns)
+		"""
+		self.read_default_table(db.Hydrology_hyd, project_base.db, 15, ignore_id_col=True)
 
 	def write(self):
 		if db.Hydrology_hyd.select().count() > 0:
