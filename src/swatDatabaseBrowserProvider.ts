@@ -167,6 +167,12 @@ export class SwatDatabaseBrowserProvider {
             const stmt = db.prepare(query);
             const rows = params.length > 0 ? stmt.all(...params) : stmt.all();
 
+            // Debug: Log the first row to see what columns we got
+            if (rows.length > 0) {
+                console.log('First row columns:', Object.keys(rows[0]));
+                console.log('FK selects:', fkSelects);
+            }
+
             db.close();
 
             // Update the webview
@@ -249,9 +255,10 @@ export class SwatDatabaseBrowserProvider {
                                 
                                 if (isFk && value !== null && value !== undefined) {
                                     // Display the name if available, otherwise show the ID
-                                    const displayValue = nameValue !== null && nameValue !== undefined ? nameValue : value;
-                                    const title = nameValue ? `ID: ${value}` : '';
-                                    return `<td><a href="#" class="fk-link" data-table="${fkInfo?.table}" data-record="${nameValue || value}" title="${title}">${displayValue}</a></td>`;
+                                    const displayValue = (nameValue !== null && nameValue !== undefined && nameValue !== '') ? nameValue : value;
+                                    const title = (nameValue && nameValue !== '') ? `ID: ${value}` : `ID: ${value} (name not found)`;
+                                    const recordLink = (nameValue && nameValue !== '') ? nameValue : value;
+                                    return `<td><a href="#" class="fk-link" data-table="${fkInfo?.table}" data-record="${recordLink}" title="${title}">${displayValue}</a></td>`;
                                 } else {
                                     return `<td>${value !== null && value !== undefined ? value : '<em>null</em>'}</td>`;
                                 }
