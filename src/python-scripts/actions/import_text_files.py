@@ -95,14 +95,14 @@ class ImportTextFiles(ExecutableApi):
 			# 11. Import hydrology files (must come before HRU - HRU has FK dependencies on hydrology)
 			total = self.import_hydrology(total, step)
 			
-			# 12. Import HRU files
-			total = self.import_hru(total, step)
-			
-			# 13. Import initialization files
+			# 12. Import initialization files (must come before HRU - HRU has FK to soil_plant_ini)
 			total = self.import_init(total, step)
 			
-			# 14. Import land use management files
+			# 13. Import land use management files (must come before HRU - HRU has FK to landuse_lum)
 			total = self.import_lum(total, step)
+			
+			# 14. Import HRU files (depends on hydrology, init, lum, soils, snow, wetland tables)
+			total = self.import_hru(total, step)
 			
 			# 15. Import operations files
 			total = self.import_ops(total, step)
