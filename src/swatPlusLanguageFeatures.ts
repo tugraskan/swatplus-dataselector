@@ -250,50 +250,41 @@ const relationshipCache = new Map<string, SwatFileRelation[]>();
  * Get relationships for a directory, using cache when available
  */
 function getRelationships(directory: string): SwatFileRelation[] {
-    console.log(`[SWAT+] ===== getRelationships CALLED =====`);
-    console.log(`[SWAT+] Input directory: ${directory}`);
-    
     try {
-        console.log(`[SWAT+] Inside try block`);
-        console.log(`[SWAT+] About to check cache`);
+        console.log(`[SWAT+] getRelationships START - directory: ${directory}`);
         
-        const hasCache = relationshipCache.has(directory);
-        console.log(`[SWAT+] Cache check complete, has cache: ${hasCache}`);
-        
-        if (!hasCache) {
-            console.log(`[SWAT+] Cache MISS - need to discover`);
-            const relations = discoverRelationships(directory);
-            console.log(`[SWAT+] Discovery returned ${relations.length} relations`);
-            relationshipCache.set(directory, relations);
-            console.log(`[SWAT+] Relations cached`);
-            
-            const schemaCount = relations.filter(r => r.source === 'schema').length;
-            const discoveredCount = relations.filter(r => r.source === 'discovered').length;
-            
-            console.log(`[SWAT+] ===== DISCOVERY SUMMARY =====`);
-            console.log(`[SWAT+]   Directory: ${directory}`);
-            console.log(`[SWAT+]   Schema relations: ${schemaCount}`);
-            console.log(`[SWAT+]   Auto-discovered: ${discoveredCount}`);
-            console.log(`[SWAT+]   Total: ${relations.length}`);
-            if (relations.length > 0 && relations.length < 20) {
-                console.log(`[SWAT+]   Details:`, relations.map(r => 
-                    `${r.sourceFile}.${r.columnName} → ${r.targetFile} [${r.source}]`
-                ));
-            }
-        } else {
-            console.log(`[SWAT+] Cache HIT - using cached data`);
+        // Quick validation
+        if (!directory || directory.trim().length === 0) {
+            console.log(`[SWAT+] Invalid directory, returning empty`);
+            return [];
         }
         
-        console.log(`[SWAT+] Getting result from cache`);
-        const result = relationshipCache.get(directory)!;
-        console.log(`[SWAT+] Result has ${result.length} relationships`);
-        console.log(`[SWAT+] ===== getRelationships RETURNING =====`);
-        return result;
+        // Check cache - using direct get() instead of has() to avoid potential issues
+        console.log(`[SWAT+] Checking cache...`);
+        let cached = relationshipCache.get(directory);
+        
+        if (cached) {
+            console.log(`[SWAT+] Cache HIT - returning ${cached.length} cached relationships`);
+            return cached;
+        }
+        
+        console.log(`[SWAT+] Cache MISS - discovering relationships...`);
+        const relations = discoverRelationships(directory);
+        
+        console.log(`[SWAT+] Discovered ${relations.length} relationships`);
+        relationshipCache.set(directory, relations);
+        
+        const schemaCount = relations.filter(r => r.source === 'schema').length;
+        const discoveredCount = relations.filter(r => r.source === 'discovered').length;
+        
+        console.log(`[SWAT+] Summary: ${schemaCount} from schema, ${discoveredCount} auto-discovered, ${relations.length} total`);
+        
+        return relations;
     } catch (error) {
-        console.error('[SWAT+] !!!!! ERROR in getRelationships:', error);
+        console.error('[SWAT+] ERROR in getRelationships:', error);
         if (error instanceof Error) {
-            console.error('[SWAT+] Error message:', error.message);
-            console.error('[SWAT+] Error stack:', error.stack);
+            console.error('[SWAT+] Error details:', error.message);
+            console.error('[SWAT+] Stack:', error.stack);
         }
         return [];
     }
