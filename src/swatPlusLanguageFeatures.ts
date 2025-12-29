@@ -5,28 +5,148 @@ import * as path from 'path';
 /**
  * SWAT+ Database Navigation Features
  * Provides Go to Definition, Hover, Peek Definition, and CodeLens for SWAT+ text files
+ * 
+ * Foreign key relationships are discovered automatically by:
+ * 1. Reading column headers from SWAT+ files
+ * 2. Matching column names to other file names in the dataset
+ * 3. Treating matching columns as foreign keys
  */
 
-// Common SWAT+ file relationships and foreign key patterns
+// Detected foreign key relationship
 interface SwatFileRelation {
     sourceFile: string;  // e.g., "hru"
     foreignKeyColumn: number;  // Column index in source file
+    columnName: string;  // e.g., "hydrology"
     targetFile: string;  // e.g., "hydrology"
     targetKeyColumn: number;  // Column index in target file (usually 0 - name column)
     fieldName: string;  // Friendly name like "Hydrology" or "Topography"
 }
 
-// Define common SWAT+ file relationships
-const SWAT_RELATIONS: SwatFileRelation[] = [
-    { sourceFile: 'hru', foreignKeyColumn: 1, targetFile: 'hydrology', targetKeyColumn: 0, fieldName: 'Hydrology' },
-    { sourceFile: 'hru', foreignKeyColumn: 2, targetFile: 'topography', targetKeyColumn: 0, fieldName: 'Topography' },
-    { sourceFile: 'hru', foreignKeyColumn: 3, targetFile: 'field', targetKeyColumn: 0, fieldName: 'Field' },
-    { sourceFile: 'hru-lte', foreignKeyColumn: 1, targetFile: 'hydrology', targetKeyColumn: 0, fieldName: 'Hydrology' },
-    { sourceFile: 'hru-lte', foreignKeyColumn: 2, targetFile: 'topography', targetKeyColumn: 0, fieldName: 'Topography' },
-    { sourceFile: 'rout_unit', foreignKeyColumn: 1, targetFile: 'topography', targetKeyColumn: 0, fieldName: 'Topography' },
-    { sourceFile: 'aquifer', foreignKeyColumn: 1, targetFile: 'initial', targetKeyColumn: 0, fieldName: 'Initial' },
-    { sourceFile: 'channel', foreignKeyColumn: 1, targetFile: 'hydrology', targetKeyColumn: 0, fieldName: 'Hydrology' },
-];
+/**
+ * Get the header (column names) from a SWAT+ file
+ */
+function getFileHeader(filePath: string): string[] {
+    try {
+        if (!fs.existsSync(filePath)) {
+            return [];
+        }
+        
+        const content = fs.readFileSync(filePath, 'utf8');
+        const lines = content.split('\n');
+        
+        if (lines.length === 0) {
+            return [];
+        }
+        
+        // First line is the header
+        const headerLine = lines[0].trim();
+        return headerLine.split(/\s+/).filter(f => f.length > 0);
+    } catch (error) {
+        console.error('Error reading file header:', error);
+        return [];
+    }
+}
+
+/**
+ * Get all SWAT+ files in a directory
+ */
+function getSwatFiles(directory: string): string[] {
+    try {
+        if (!fs.existsSync(directory)) {
+            return [];
+        }
+        
+        const files = fs.readdirSync(directory);
+        const swatExtensions = ['.hru', '.hyd', '.sol', '.cli', '.pcp', '.tmp', '.wnd', '.txt'];
+        
+        return files.filter(file => {
+            const ext = path.extname(file).toLowerCase();
+            return swatExtensions.includes(ext);
+        });
+    } catch (error) {
+        console.error('Error reading directory:', error);
+        return [];
+    }
+}
+
+/**
+ * Discover foreign key relationships by reading file headers
+ * A column is considered a foreign key if its name matches another file's base name
+ */
+function discoverRelationships(directory: string): SwatFileRelation[] {
+    const relations: SwatFileRelation[] = [];
+    const swatFiles = getSwatFiles(directory);
+    
+    // Build a map of file base names (without extension) to file names
+    const fileBaseNames = new Map<string, string>();
+    for (const file of swatFiles) {
+        const baseName = path.basename(file, path.extname(file));
+        fileBaseNames.set(baseName.toLowerCase(), file);
+    }
+    
+    // For each file, check if any column names match other file base names
+    for (const sourceFile of swatFiles) {
+        const sourceFilePath = path.join(directory, sourceFile);
+        const headers = getFileHeader(sourceFilePath);
+        const sourceBaseName = path.basename(sourceFile, path.extname(sourceFile));
+        
+        // Skip the first column (usually 'name' or ID)
+        for (let colIndex = 1; colIndex < headers.length; colIndex++) {
+            const columnName = headers[colIndex].toLowerCase();
+            
+            // Check if this column name matches any file base name
+            if (fileBaseNames.has(columnName)) {
+                const targetFile = fileBaseNames.get(columnName)!;
+                
+                relations.push({
+                    sourceFile: sourceBaseName.toLowerCase(),
+                    foreignKeyColumn: colIndex,
+                    columnName: columnName,
+                    targetFile: path.basename(targetFile, path.extname(targetFile)).toLowerCase(),
+                    targetKeyColumn: 0, // First column is assumed to be the key
+                    fieldName: capitalizeFirst(columnName)
+                });
+            }
+        }
+    }
+    
+    return relations;
+}
+
+/**
+ * Capitalize first letter of a string
+ */
+function capitalizeFirst(str: string): string {
+    if (!str) {
+        return str;
+    }
+    return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+/**
+ * Cache for discovered relationships per directory
+ */
+const relationshipCache = new Map<string, SwatFileRelation[]>();
+
+/**
+ * Get relationships for a directory, using cache when available
+ */
+function getRelationships(directory: string): SwatFileRelation[] {
+    if (!relationshipCache.has(directory)) {
+        const relations = discoverRelationships(directory);
+        relationshipCache.set(directory, relations);
+        console.log(`Discovered ${relations.length} foreign key relationships in ${directory}:`, 
+            relations.map(r => `${r.sourceFile}.${r.columnName} → ${r.targetFile}`));
+    }
+    return relationshipCache.get(directory)!;
+}
+
+/**
+ * Clear the relationship cache (useful when files change)
+ */
+export function clearRelationshipCache(): void {
+    relationshipCache.clear();
+}
 
 interface SwatRecord {
     file: string;
@@ -98,9 +218,13 @@ export class SwatDefinitionProvider implements vscode.DefinitionProvider {
         position: vscode.Position,
         token: vscode.CancellationToken
     ): vscode.ProviderResult<vscode.Definition> {
-        const fileName = path.basename(document.fileName).replace(/\.(txt|hru|hyd)$/, '');
+        const directory = path.dirname(document.fileName);
+        const fileName = path.basename(document.fileName).replace(/\.(txt|hru|hyd|sol|cli|pcp|tmp|wnd)$/, '');
         const line = document.lineAt(position.line);
         const lineText = line.text;
+        
+        // Get relationships for this directory
+        const relations = getRelationships(directory);
         
         // Parse the line to get fields
         const fields = lineText.trim().split(/\s+/);
@@ -123,8 +247,8 @@ export class SwatDefinitionProvider implements vscode.DefinitionProvider {
         }
         
         // Check if this column is a foreign key
-        const relation = SWAT_RELATIONS.find(r => 
-            fileName.includes(r.sourceFile) && r.foreignKeyColumn === currentColumn
+        const relation = relations.find(r => 
+            fileName.toLowerCase().includes(r.sourceFile) && r.foreignKeyColumn === currentColumn
         );
         
         if (!relation) {
@@ -133,14 +257,14 @@ export class SwatDefinitionProvider implements vscode.DefinitionProvider {
         
         // Find the target file
         const targetFileName = `${relation.targetFile}.hru`;
-        const targetFilePath = path.join(path.dirname(document.fileName), targetFileName);
+        const targetFilePath = path.join(directory, targetFileName);
         
         // Try different extensions
-        const possibleExtensions = ['.hru', '.hyd', '.txt', '.sol', '.cli'];
+        const possibleExtensions = ['.hru', '.hyd', '.txt', '.sol', '.cli', '.pcp', '.tmp', '.wnd'];
         let actualTargetPath = targetFilePath;
         
         for (const ext of possibleExtensions) {
-            const testPath = path.join(path.dirname(document.fileName), `${relation.targetFile}${ext}`);
+            const testPath = path.join(directory, `${relation.targetFile}${ext}`);
             if (fs.existsSync(testPath)) {
                 actualTargetPath = testPath;
                 break;
@@ -178,9 +302,13 @@ export class SwatHoverProvider implements vscode.HoverProvider {
         position: vscode.Position,
         token: vscode.CancellationToken
     ): vscode.ProviderResult<vscode.Hover> {
-        const fileName = path.basename(document.fileName).replace(/\.(txt|hru|hyd)$/, '');
+        const directory = path.dirname(document.fileName);
+        const fileName = path.basename(document.fileName).replace(/\.(txt|hru|hyd|sol|cli|pcp|tmp|wnd)$/, '');
         const line = document.lineAt(position.line);
         const lineText = line.text;
+        
+        // Get relationships for this directory
+        const relations = getRelationships(directory);
         
         // Parse the line
         const fields = lineText.trim().split(/\s+/);
@@ -209,8 +337,8 @@ export class SwatHoverProvider implements vscode.HoverProvider {
         }
         
         // Check if this is a foreign key
-        const relation = SWAT_RELATIONS.find(r => 
-            fileName.includes(r.sourceFile) && r.foreignKeyColumn === currentColumn
+        const relation = relations.find(r => 
+            fileName.toLowerCase().includes(r.sourceFile) && r.foreignKeyColumn === currentColumn
         );
         
         if (!relation) {
@@ -218,11 +346,11 @@ export class SwatHoverProvider implements vscode.HoverProvider {
         }
         
         // Find target file
-        const possibleExtensions = ['.hru', '.hyd', '.txt', '.sol', '.cli'];
+        const possibleExtensions = ['.hru', '.hyd', '.txt', '.sol', '.cli', '.pcp', '.tmp', '.wnd'];
         let actualTargetPath: string | undefined;
         
         for (const ext of possibleExtensions) {
-            const testPath = path.join(path.dirname(document.fileName), `${relation.targetFile}${ext}`);
+            const testPath = path.join(directory, `${relation.targetFile}${ext}`);
             if (fs.existsSync(testPath)) {
                 actualTargetPath = testPath;
                 break;
@@ -279,11 +407,15 @@ export class SwatCodeLensProvider implements vscode.CodeLensProvider {
         document: vscode.TextDocument,
         token: vscode.CancellationToken
     ): vscode.ProviderResult<vscode.CodeLens[]> {
-        const fileName = path.basename(document.fileName).replace(/\.(txt|hru|hyd)$/, '');
+        const directory = path.dirname(document.fileName);
+        const fileName = path.basename(document.fileName).replace(/\.(txt|hru|hyd|sol|cli|pcp|tmp|wnd)$/, '');
         const codeLenses: vscode.CodeLens[] = [];
         
+        // Get relationships for this directory
+        const allRelations = getRelationships(directory);
+        
         // Find all relations for this file
-        const relations = SWAT_RELATIONS.filter(r => fileName.includes(r.sourceFile));
+        const relations = allRelations.filter(r => fileName.toLowerCase().includes(r.sourceFile));
         
         if (relations.length === 0) {
             return codeLenses;
@@ -366,7 +498,40 @@ export function registerSwatLanguageFeatures(context: vscode.ExtensionContext, w
         new SwatCodeLensProvider(workspaceFolder)
     );
     
-    context.subscriptions.push(definitionProvider, hoverProvider, codeLensProvider);
+    // Register command to refresh foreign key relationships
+    const refreshCommand = vscode.commands.registerCommand('swat-dataset-selector.refreshRelationships', () => {
+        clearRelationshipCache();
+        vscode.window.showInformationMessage('SWAT+ foreign key relationships refreshed');
+        // Refresh CodeLens displays
+        vscode.commands.executeCommand('editor.action.showReferences');
+    });
     
-    console.log('SWAT+ language features registered');
+    // Watch for file changes to refresh relationships automatically
+    const fileWatcher = vscode.workspace.createFileSystemWatcher('**/*.{hru,hyd,sol,cli,pcp,tmp,wnd,txt}');
+    
+    fileWatcher.onDidCreate(() => {
+        clearRelationshipCache();
+        console.log('SWAT+ file created, relationships refreshed');
+    });
+    
+    fileWatcher.onDidDelete(() => {
+        clearRelationshipCache();
+        console.log('SWAT+ file deleted, relationships refreshed');
+    });
+    
+    fileWatcher.onDidChange(() => {
+        // Only clear cache when header might have changed
+        clearRelationshipCache();
+        console.log('SWAT+ file changed, relationships refreshed');
+    });
+    
+    context.subscriptions.push(
+        definitionProvider, 
+        hoverProvider, 
+        codeLensProvider, 
+        refreshCommand,
+        fileWatcher
+    );
+    
+    console.log('SWAT+ language features registered with automatic relationship discovery');
 }

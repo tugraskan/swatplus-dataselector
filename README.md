@@ -24,6 +24,7 @@ This extension provides the following commands:
 - `SWAT+: Select Dataset Folder` - Browse and select a dataset folder (saves selection for later use)
 - `SWAT+: Select Dataset and Debug` - Browse for a dataset folder and immediately launch debug session
 - `SWAT+: Debug with Selected Dataset` - Launch debug with previously selected dataset folder
+- `SWAT+: Refresh Foreign Key Relationships` - Manually refresh the discovered foreign key relationships (auto-refreshes on file changes)
 
 ## Usage
 
@@ -70,7 +71,30 @@ When working with SWAT+ text files (`.hru`, `.hyd`, `.sol`, `.cli`, etc.), the e
 - Example: `🔗 Referenced: Hydrology: hydro_001 | Topography: topo_002`
 - Provides at-a-glance view of relationships without hovering
 
+### How Foreign Key Discovery Works
+
+The extension **automatically discovers** foreign key relationships by:
+
+1. **Reading column headers** from all SWAT+ files in your dataset
+2. **Matching column names** to other file names in the same directory
+3. **Creating relationships** when a column name matches a file's base name
+
+For example, if `hru.hru` has columns: `name`, `hydrology`, `topography`, `field`
+And files `hydrology.hru`, `topography.hru`, and `field.hru` exist,
+Then the extension automatically creates foreign key relationships for columns 1, 2, and 3.
+
+**Key Features:**
+- ✅ **Automatic**: No manual configuration needed
+- ✅ **Dynamic**: Adapts to your dataset structure
+- ✅ **Auto-refresh**: Updates when files are added/removed/changed
+- ✅ **Works with ALL SWAT+ files**: Not limited to predefined relationships
+- ✅ **Manual refresh**: Use `SWAT+: Refresh Foreign Key Relationships` command if needed
+
+This means the navigation features work with **any** SWAT+ dataset structure, including custom files and relationships, without requiring updates to the extension.
+
 ## How It Works
+
+### Debugging
 
 The extension dynamically launches a debug session with:
 - **Type**: `cppdbg` (C++ debugging with gdb)

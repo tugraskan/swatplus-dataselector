@@ -4,6 +4,23 @@ All notable changes to the "swatplus-vscode-dataset-selector" extension will be 
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.3] - 2025-12-29
+
+### Changed
+- **Automatic Foreign Key Discovery**: Foreign key relationships are now discovered automatically by reading file headers
+  - No longer requires hardcoded relationships
+  - Adapts to any SWAT+ dataset structure
+  - Works with custom files and relationships
+  - Auto-refreshes when files change
+- New command: `SWAT+: Refresh Foreign Key Relationships` for manual refresh
+
+### Technical Details
+- Extension reads column headers from all SWAT+ files
+- Matches column names to file names in the dataset
+- Creates foreign key relationships dynamically
+- Caches relationships for performance
+- File watcher automatically refreshes on changes
+
 ## [0.0.2] - 2025-12-29
 
 ### Added

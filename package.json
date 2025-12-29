@@ -2,7 +2,7 @@
   "name": "swat-dataset-selector",
   "displayName": "SWAT+ Dataset Selector",
   "description": "Browse and select SWAT+ dataset folders for debugging with enhanced database navigation",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "taciugraskan",
   "repository": {
     "type": "git",
@@ -52,6 +52,11 @@
         "command": "swat-dataset-selector.launchDebug",
         "title": "SWAT+: Debug with Selected Dataset",
         "icon": "$(debug-alt)"
+      },
+      {
+        "command": "swat-dataset-selector.refreshRelationships",
+        "title": "SWAT+: Refresh Foreign Key Relationships",
+        "icon": "$(refresh)"
       }
     ]
   },
