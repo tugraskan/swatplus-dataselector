@@ -1,8 +1,8 @@
 {
   "name": "swat-dataset-selector",
   "displayName": "SWAT+ Dataset Selector",
-  "description": "Browse and select SWAT+ dataset folders for debugging",
-  "version": "0.0.1",
+  "description": "Browse and select SWAT+ dataset folders for debugging with enhanced database navigation",
+  "version": "0.0.2",
   "publisher": "taciugraskan",
   "repository": {
     "type": "git",

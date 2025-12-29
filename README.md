@@ -1,12 +1,21 @@
 # SWAT+ Dataset Selector
 
-A VS Code extension for SWAT+ development that allows you to browse and select dataset folders for debugging sessions.
+A VS Code extension for SWAT+ development that allows you to browse and select dataset folders for debugging sessions with enhanced database navigation features.
 
 ## Features
 
 - **Select Dataset Folder**: Browse and select a SWAT+ dataset folder
 - **Quick Debug Launch**: Select a dataset folder and immediately start debugging
 - **Seamless Integration**: Works with CMake Tools and gdb debugger configurations
+- **Enhanced Database Navigation**: Comprehensive relational navigation for SWAT+ text files
+  - **Go to Definition (F12)**: Click on foreign key values to navigate to linked records
+  - **Peek Definition (Alt+F12)**: View referenced records inline without leaving current file
+  - **Enhanced Hover Preview**: Rich tooltips showing up to 8 key fields with formatted values
+    - Organized display with friendly names (Hydrology, Topography, etc.)
+    - Formatted numbers for easier reading
+    - Helpful action hints (F12, Alt+F12, right-click)
+  - **CodeLens Hints**: Inline indicators above rows showing referenced foreign keys
+    - Example: `🔗 Referenced: Hydrology: hydro_001 | Topography: topo_002`
 
 ## Commands
 
@@ -18,19 +27,48 @@ This extension provides the following commands:
 
 ## Usage
 
-### Method 1: Select and Debug in One Step
+### Dataset Selection and Debugging
+
+#### Method 1: Select and Debug in One Step
 
 1. Open Command Palette (`Ctrl+Shift+P` or `Cmd+Shift+P`)
 2. Run `SWAT+: Select Dataset and Debug`
 3. Browse to your SWAT+ dataset folder
 4. Debug session will start automatically with the selected folder as working directory
 
-### Method 2: Select First, Debug Later
+#### Method 2: Select First, Debug Later
 
 1. Open Command Palette
 2. Run `SWAT+: Select Dataset Folder`
 3. Browse to your SWAT+ dataset folder
 4. Later, run `SWAT+: Debug with Selected Dataset` to launch debug with the selected folder
+
+### Database Navigation Features
+
+When working with SWAT+ text files (`.hru`, `.hyd`, `.sol`, `.cli`, etc.), the extension provides intelligent navigation:
+
+#### Go to Definition (F12)
+- Click on any foreign key value (e.g., `hydro_001` in the `hru.hru` file)
+- Press **F12** or right-click and select "Go to Definition"
+- Jump directly to the referenced record in the target file (e.g., `hydrology.hru`)
+
+#### Peek Definition (Alt+F12)
+- Hover over a foreign key value
+- Press **Alt+F12** or right-click and select "Peek Definition"
+- View the referenced record inline without leaving your current file
+
+#### Enhanced Hover Preview
+- Hover over any foreign key value
+- See a rich tooltip with:
+  - Up to 8 key fields from the referenced record
+  - Formatted numeric values (with thousand separators)
+  - Friendly field names (Hydrology, Topography, Field, etc.)
+  - Quick action hints for navigation
+
+#### CodeLens Indicators
+- See inline hints above data rows showing all foreign key references
+- Example: `🔗 Referenced: Hydrology: hydro_001 | Topography: topo_002`
+- Provides at-a-glance view of relationships without hovering
 
 ## How It Works
 
@@ -58,6 +96,15 @@ This extension does not add any VS Code settings.
 - The debug configuration assumes gdb is available on your system
 
 ## Release Notes
+
+### 0.0.2
+
+Enhanced Database Navigation
+- Added Go to Definition (F12) for SWAT+ text file foreign keys
+- Added Peek Definition (Alt+F12) for inline record viewing
+- Added enhanced hover previews with up to 8 formatted fields
+- Added CodeLens indicators showing referenced foreign keys
+- Support for common SWAT+ file relationships (HRU, Hydrology, Topography, Field, etc.)
 
 ### 0.0.1
 

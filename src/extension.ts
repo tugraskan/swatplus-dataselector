@@ -2,6 +2,7 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { SwatDatasetWebviewProvider } from './swatWebviewProvider';
+import { registerSwatLanguageFeatures } from './swatPlusLanguageFeatures';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -168,6 +169,12 @@ export function activate(context: vscode.ExtensionContext) {
 		,closeAllDatasetFiles
 		,seedTestData
 	);
+
+	// Register SWAT+ language features for database navigation
+	const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+	if (workspaceFolder) {
+		registerSwatLanguageFeatures(context, workspaceFolder.uri.fsPath);
+	}
 }
 
 async function launchDebugSession(datasetFolder: string) {
