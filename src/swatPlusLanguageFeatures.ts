@@ -343,94 +343,104 @@ export class SwatDefinitionProvider implements vscode.DefinitionProvider {
         position: vscode.Position,
         token: vscode.CancellationToken
     ): vscode.ProviderResult<vscode.Definition> {
-        const directory = path.dirname(document.fileName);
-        const fileName = path.basename(document.fileName).replace(/\.(txt|hru|hyd|sol|cli|pcp|tmp|wnd)$/, '');
-        const line = document.lineAt(position.line);
-        const lineText = line.text;
-        
-        console.log(`[SWAT+] Definition requested for file: ${fileName}, line: ${position.line}, char: ${position.character}`);
-        
-        // Get relationships for this directory
-        const relations = getRelationships(directory);
-        
-        console.log(`[SWAT+] Found ${relations.length} total relationships`);
-        console.log(`[SWAT+] Relationships for ${fileName}:`, relations.filter(r => fileName.toLowerCase().includes(r.sourceFile)));
-        
-        // Parse the line to get fields
-        const fields = lineText.trim().split(/\s+/);
-        console.log(`[SWAT+] Line fields:`, fields);
-        
-        // Find which column the cursor is on
-        let currentColumn = -1;
-        let charCount = 0;
-        for (let i = 0; i < fields.length; i++) {
-            const fieldStart = lineText.indexOf(fields[i], charCount);
-            const fieldEnd = fieldStart + fields[i].length;
-            if (position.character >= fieldStart && position.character <= fieldEnd) {
-                currentColumn = i;
-                break;
+        try {
+            const directory = path.dirname(document.fileName);
+            const fileName = path.basename(document.fileName).replace(/\.(txt|hru|hyd|sol|cli|pcp|tmp|wnd)$/, '');
+            const line = document.lineAt(position.line);
+            const lineText = line.text;
+            
+            console.log(`[SWAT+] Definition requested for file: ${fileName}, line: ${position.line}, char: ${position.character}`);
+            console.log(`[SWAT+] Directory: ${directory}`);
+            console.log(`[SWAT+] Line text: "${lineText}"`);
+            
+            // Get relationships for this directory
+            console.log(`[SWAT+] Getting relationships...`);
+            const relations = getRelationships(directory);
+            
+            console.log(`[SWAT+] Found ${relations.length} total relationships`);
+            const matchingRelations = relations.filter(r => fileName.toLowerCase().includes(r.sourceFile));
+            console.log(`[SWAT+] Relationships for ${fileName}:`, matchingRelations);
+            
+            // Parse the line to get fields
+            const fields = lineText.trim().split(/\s+/);
+            console.log(`[SWAT+] Line fields:`, fields);
+            
+            // Find which column the cursor is on
+            let currentColumn = -1;
+            let charCount = 0;
+            for (let i = 0; i < fields.length; i++) {
+                const fieldStart = lineText.indexOf(fields[i], charCount);
+                const fieldEnd = fieldStart + fields[i].length;
+                if (position.character >= fieldStart && position.character <= fieldEnd) {
+                    currentColumn = i;
+                    break;
+                }
+                charCount = fieldEnd;
             }
-            charCount = fieldEnd;
-        }
-        
-        console.log(`[SWAT+] Current column: ${currentColumn}, value: ${fields[currentColumn]}`);
-        
-        if (currentColumn === -1) {
-            console.log('[SWAT+] Could not determine column');
-            return undefined;
-        }
-        
-        // Check if this column is a foreign key
-        const relation = relations.find(r => 
-            fileName.toLowerCase().includes(r.sourceFile) && r.foreignKeyColumn === currentColumn
-        );
-        
-        if (!relation) {
-            console.log(`[SWAT+] No relationship found for ${fileName} column ${currentColumn}`);
-            return undefined;
-        }
-        
-        console.log(`[SWAT+] Found relationship:`, relation);
-        
-        // Find the target file
-        const targetFileName = `${relation.targetFile}.hru`;
-        const targetFilePath = path.join(directory, targetFileName);
-        
-        // Try different extensions
-        const possibleExtensions = ['.hru', '.hyd', '.txt', '.sol', '.cli', '.pcp', '.tmp', '.wnd'];
-        let actualTargetPath = targetFilePath;
-        
-        for (const ext of possibleExtensions) {
-            const testPath = path.join(directory, `${relation.targetFile}${ext}`);
-            if (fs.existsSync(testPath)) {
-                actualTargetPath = testPath;
-                console.log(`[SWAT+] Found target file: ${actualTargetPath}`);
-                break;
+            
+            console.log(`[SWAT+] Current column: ${currentColumn}, value: ${fields[currentColumn]}`);
+            
+            if (currentColumn === -1) {
+                console.log('[SWAT+] Could not determine column');
+                return undefined;
             }
-        }
-        
-        if (!fs.existsSync(actualTargetPath)) {
-            console.log(`[SWAT+] Target file not found: ${actualTargetPath}`);
+            
+            // Check if this column is a foreign key
+            const relation = relations.find(r => 
+                fileName.toLowerCase().includes(r.sourceFile) && r.foreignKeyColumn === currentColumn
+            );
+            
+            if (!relation) {
+                console.log(`[SWAT+] No relationship found for ${fileName} column ${currentColumn}`);
+                return undefined;
+            }
+            
+            console.log(`[SWAT+] Found relationship:`, relation);
+            
+            // Find the target file
+            const targetFileName = `${relation.targetFile}.hru`;
+            const targetFilePath = path.join(directory, targetFileName);
+            
+            // Try different extensions
+            const possibleExtensions = ['.hru', '.hyd', '.txt', '.sol', '.cli', '.pcp', '.tmp', '.wnd'];
+            let actualTargetPath = targetFilePath;
+            
+            for (const ext of possibleExtensions) {
+                const testPath = path.join(directory, `${relation.targetFile}${ext}`);
+                if (fs.existsSync(testPath)) {
+                    actualTargetPath = testPath;
+                    console.log(`[SWAT+] Found target file: ${actualTargetPath}`);
+                    break;
+                }
+            }
+            
+            if (!fs.existsSync(actualTargetPath)) {
+                console.log(`[SWAT+] Target file not found: ${actualTargetPath}`);
+                return undefined;
+            }
+            
+            // Find the target record
+            const keyValue = fields[currentColumn];
+            console.log(`[SWAT+] Looking for key value: ${keyValue} in ${actualTargetPath}`);
+            const targetRecord = findRecordByKey(actualTargetPath, keyValue, relation.targetKeyColumn);
+            
+            if (!targetRecord) {
+                console.log(`[SWAT+] Target record not found for key: ${keyValue}`);
+                return undefined;
+            }
+            
+            console.log(`[SWAT+] Found target record at line ${targetRecord.line}`);
+            
+            // Return the location
+            return new vscode.Location(
+                vscode.Uri.file(targetRecord.file),
+                new vscode.Position(targetRecord.line, 0)
+            );
+        } catch (error) {
+            console.error('[SWAT+] Error in provideDefinition:', error);
+            vscode.window.showErrorMessage(`SWAT+ Navigation Error: ${error instanceof Error ? error.message : String(error)}`);
             return undefined;
         }
-        
-        // Find the target record
-        const keyValue = fields[currentColumn];
-        console.log(`[SWAT+] Looking for key value: ${keyValue} in ${actualTargetPath}`);
-        const targetRecord = findRecordByKey(actualTargetPath, keyValue, relation.targetKeyColumn);
-        
-        if (!targetRecord) {
-            console.log(`[SWAT+] Target record not found for key: ${keyValue}`);
-            return undefined;
-        }
-        
-        console.log(`[SWAT+] Found target record at line ${targetRecord.line}`);
-        
-        // Return the location
-        return new vscode.Location(
-            vscode.Uri.file(targetRecord.file),
-            new vscode.Position(targetRecord.line, 0)
-        );
     }
 }
 
