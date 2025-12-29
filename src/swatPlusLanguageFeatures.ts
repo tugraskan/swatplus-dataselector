@@ -250,33 +250,43 @@ const relationshipCache = new Map<string, SwatFileRelation[]>();
  * Get relationships for a directory, using cache when available
  */
 function getRelationships(directory: string): SwatFileRelation[] {
-    console.log(`[SWAT+] getRelationships called for: ${directory}`);
-    console.log(`[SWAT+] Cache has directory: ${relationshipCache.has(directory)}`);
-    
-    if (!relationshipCache.has(directory)) {
-        console.log(`[SWAT+] Cache miss, discovering relationships...`);
-        const relations = discoverRelationships(directory);
-        relationshipCache.set(directory, relations);
+    try {
+        console.log(`[SWAT+] getRelationships START`);
+        console.log(`[SWAT+] Directory: ${directory}`);
+        console.log(`[SWAT+] Checking cache...`);
         
-        const schemaCount = relations.filter(r => r.source === 'schema').length;
-        const discoveredCount = relations.filter(r => r.source === 'discovered').length;
+        const hasCache = relationshipCache.has(directory);
+        console.log(`[SWAT+] Cache has directory: ${hasCache}`);
         
-        console.log(`SWAT+ Foreign Key Discovery in ${directory}:`);
-        console.log(`  - ${schemaCount} from schema (primary)`);
-        console.log(`  - ${discoveredCount} auto-discovered (fallback)`);
-        console.log(`  - Total: ${relations.length} relationships`);
-        if (relations.length > 0) {
-            console.log('  Relationships:', relations.map(r => 
-                `${r.sourceFile}.${r.columnName} → ${r.targetFile} [${r.source}]`
-            ));
+        if (!hasCache) {
+            console.log(`[SWAT+] Cache miss, discovering relationships...`);
+            const relations = discoverRelationships(directory);
+            console.log(`[SWAT+] Discovery complete, caching ${relations.length} relations...`);
+            relationshipCache.set(directory, relations);
+            
+            const schemaCount = relations.filter(r => r.source === 'schema').length;
+            const discoveredCount = relations.filter(r => r.source === 'discovered').length;
+            
+            console.log(`SWAT+ Foreign Key Discovery in ${directory}:`);
+            console.log(`  - ${schemaCount} from schema (primary)`);
+            console.log(`  - ${discoveredCount} auto-discovered (fallback)`);
+            console.log(`  - Total: ${relations.length} relationships`);
+            if (relations.length > 0) {
+                console.log('  Relationships:', relations.map(r => 
+                    `${r.sourceFile}.${r.columnName} → ${r.targetFile} [${r.source}]`
+                ));
+            }
+        } else {
+            console.log(`[SWAT+] Using cached relationships`);
         }
-    } else {
-        console.log(`[SWAT+] Using cached relationships`);
+        
+        const result = relationshipCache.get(directory)!;
+        console.log(`[SWAT+] Returning ${result.length} relationships`);
+        return result;
+    } catch (error) {
+        console.error('[SWAT+] Error in getRelationships:', error);
+        return [];
     }
-    
-    const result = relationshipCache.get(directory)!;
-    console.log(`[SWAT+] Returning ${result.length} relationships`);
-    return result;
 }
 
 /**
