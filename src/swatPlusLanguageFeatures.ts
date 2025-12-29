@@ -97,10 +97,14 @@ function findFileForBaseName(directory: string, baseName: string, availableFiles
  * Falls back to automatic discovery if schema doesn't find relationships
  */
 function discoverRelationships(directory: string): SwatFileRelation[] {
+    console.log(`[SWAT+] discoverRelationships START for: ${directory}`);
     const relations: SwatFileRelation[] = [];
     const swatFiles = getSwatFiles(directory);
     
+    console.log(`[SWAT+] Found ${swatFiles.length} SWAT files in directory`);
+    
     if (swatFiles.length === 0) {
+        console.log(`[SWAT+] No SWAT files found, returning empty relations`);
         return relations;
     }
     
@@ -246,7 +250,11 @@ const relationshipCache = new Map<string, SwatFileRelation[]>();
  * Get relationships for a directory, using cache when available
  */
 function getRelationships(directory: string): SwatFileRelation[] {
+    console.log(`[SWAT+] getRelationships called for: ${directory}`);
+    console.log(`[SWAT+] Cache has directory: ${relationshipCache.has(directory)}`);
+    
     if (!relationshipCache.has(directory)) {
+        console.log(`[SWAT+] Cache miss, discovering relationships...`);
         const relations = discoverRelationships(directory);
         relationshipCache.set(directory, relations);
         
@@ -262,8 +270,13 @@ function getRelationships(directory: string): SwatFileRelation[] {
                 `${r.sourceFile}.${r.columnName} → ${r.targetFile} [${r.source}]`
             ));
         }
+    } else {
+        console.log(`[SWAT+] Using cached relationships`);
     }
-    return relationshipCache.get(directory)!;
+    
+    const result = relationshipCache.get(directory)!;
+    console.log(`[SWAT+] Returning ${result.length} relationships`);
+    return result;
 }
 
 /**
