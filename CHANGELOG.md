@@ -4,6 +4,29 @@ All notable changes to the "swatplus-vscode-dataset-selector" extension will be 
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.4] - 2025-12-29
+
+### Changed
+- **Schema-based Foreign Key Discovery (PRIMARY)**: Now uses official SWAT+ Editor database schema
+  - Integrated schema from https://github.com/swat-model/swatplus-editor
+  - 50+ officially defined relationships from SWAT+ Editor
+  - More accurate and reliable than header-based discovery
+  - Includes friendly field names from official documentation
+- **Automatic Discovery (FALLBACK)**: Maintains automatic discovery for custom relationships
+  - Works when schema doesn't define a relationship
+  - Discovers custom files and non-standard relationships
+  - Two-tier approach: schema first, auto-discovery second
+
+### Added
+- New file: `swatPlusSchema.ts` with SWAT+ Editor schema definitions
+- Enhanced logging showing source of each relationship (schema vs discovered)
+
+### Technical Details
+- Primary: Reads SWAT+ Editor schema for official relationships
+- Fallback: Auto-discovers by matching column headers to file names
+- Better file matching with multiple naming patterns
+- Improved compatibility with various SWAT+ dataset structures
+
 ## [0.0.3] - 2025-12-29
 
 ### Changed

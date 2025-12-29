@@ -73,24 +73,36 @@ When working with SWAT+ text files (`.hru`, `.hyd`, `.sol`, `.cli`, etc.), the e
 
 ### How Foreign Key Discovery Works
 
-The extension **automatically discovers** foreign key relationships by:
+The extension discovers foreign key relationships using a **two-tier approach**:
 
-1. **Reading column headers** from all SWAT+ files in your dataset
-2. **Matching column names** to other file names in the same directory
-3. **Creating relationships** when a column name matches a file's base name
+#### Primary Method: SWAT+ Editor Schema
+The extension uses the official **SWAT+ Editor database schema** (from https://github.com/swat-model/swatplus-editor) to identify known foreign key relationships. This includes:
+- HRU → Hydrology, Topography, Soil, Field, etc.
+- Channel → Hydrology
+- Reservoir → Hydrology, Sediment, Initial
+- Land Use → Plant Community, Management, CN Table, etc.
+- And 50+ other official relationships
 
-For example, if `hru.hru` has columns: `name`, `hydrology`, `topography`, `field`
-And files `hydrology.hru`, `topography.hru`, and `field.hru` exist,
-Then the extension automatically creates foreign key relationships for columns 1, 2, and 3.
+#### Fallback Method: Automatic Discovery
+For custom files or relationships not in the schema, the extension automatically:
+1. **Reads column headers** from all SWAT+ files in your dataset
+2. **Matches column names** to other file names in the same directory
+3. **Creates relationships** when a column name matches a file's base name
+
+**Example:**
+If `hru.hru` has columns: `name`, `hydrology`, `topography`, `field`
+- `hydrology` → Found in schema, uses official definition ✅
+- `topography` → Found in schema, uses official definition ✅
+- `custom_field` → Not in schema, auto-discovers if `custom_field.hru` exists ✅
 
 **Key Features:**
-- ✅ **Automatic**: No manual configuration needed
-- ✅ **Dynamic**: Adapts to your dataset structure
+- ✅ **Schema-based**: Uses official SWAT+ Editor relationships (primary)
+- ✅ **Automatic fallback**: Discovers custom relationships not in schema
+- ✅ **Robust**: Works with any SWAT+ dataset structure
 - ✅ **Auto-refresh**: Updates when files are added/removed/changed
-- ✅ **Works with ALL SWAT+ files**: Not limited to predefined relationships
 - ✅ **Manual refresh**: Use `SWAT+: Refresh Foreign Key Relationships` command if needed
 
-This means the navigation features work with **any** SWAT+ dataset structure, including custom files and relationships, without requiring updates to the extension.
+This dual approach ensures the extension works with both standard and custom SWAT+ datasets.
 
 ## How It Works
 

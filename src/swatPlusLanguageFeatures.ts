@@ -1,15 +1,15 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { SWAT_SCHEMA_RELATIONS, SchemaRelation, getFileVariations } from './swatPlusSchema';
 
 /**
  * SWAT+ Database Navigation Features
  * Provides Go to Definition, Hover, Peek Definition, and CodeLens for SWAT+ text files
  * 
- * Foreign key relationships are discovered automatically by:
- * 1. Reading column headers from SWAT+ files
- * 2. Matching column names to other file names in the dataset
- * 3. Treating matching columns as foreign keys
+ * Foreign key relationships are discovered using:
+ * 1. PRIMARY: SWAT+ Editor schema (official database schema)
+ * 2. FALLBACK: Automatic discovery by matching column names to file names
  */
 
 // Detected foreign key relationship
@@ -20,6 +20,7 @@ interface SwatFileRelation {
     targetFile: string;  // e.g., "hydrology"
     targetKeyColumn: number;  // Column index in target file (usually 0 - name column)
     fieldName: string;  // Friendly name like "Hydrology" or "Topography"
+    source: 'schema' | 'discovered';  // Track where this relationship came from
 }
 
 /**
@@ -70,19 +71,123 @@ function getSwatFiles(directory: string): string[] {
 }
 
 /**
- * Discover foreign key relationships by reading file headers
- * A column is considered a foreign key if its name matches another file's base name
+ * Find a file in directory that matches a target base name
+ * Tries various naming patterns and extensions
+ */
+function findFileForBaseName(directory: string, baseName: string, availableFiles: string[]): string | undefined {
+    const variations = getFileVariations(baseName);
+    
+    for (const variation of variations) {
+        const found = availableFiles.find(f => f.toLowerCase() === variation.toLowerCase());
+        if (found) {
+            return found;
+        }
+    }
+    
+    // Also try matching just the base name (case-insensitive)
+    const baseNameLower = baseName.toLowerCase().replace(/_/g, '-');
+    return availableFiles.find(f => {
+        const fileBase = path.basename(f, path.extname(f)).toLowerCase().replace(/_/g, '-');
+        return fileBase === baseNameLower || fileBase.includes(baseNameLower) || baseNameLower.includes(fileBase);
+    });
+}
+
+/**
+ * Discover foreign key relationships using SWAT+ Editor schema (PRIMARY METHOD)
+ * Falls back to automatic discovery if schema doesn't find relationships
  */
 function discoverRelationships(directory: string): SwatFileRelation[] {
     const relations: SwatFileRelation[] = [];
     const swatFiles = getSwatFiles(directory);
     
-    // Build a map of file base names (without extension) to file names
-    const fileBaseNames = new Map<string, string>();
-    for (const file of swatFiles) {
-        const baseName = path.basename(file, path.extname(file));
-        fileBaseNames.set(baseName.toLowerCase(), file);
+    if (swatFiles.length === 0) {
+        return relations;
     }
+    
+    // Build a map of available files for quick lookup
+    const fileMap = new Map<string, string>();
+    for (const file of swatFiles) {
+        const baseName = path.basename(file, path.extname(file)).toLowerCase();
+        fileMap.set(baseName, file);
+    }
+    
+    // STEP 1: Use SWAT+ Editor schema (PRIMARY)
+    const schemaRelations = discoverFromSchema(directory, swatFiles, fileMap);
+    relations.push(...schemaRelations);
+    
+    // STEP 2: Fall back to automatic discovery for any remaining relationships (BACKUP)
+    const autoRelations = discoverFromHeaders(directory, swatFiles, fileMap);
+    
+    // Add auto-discovered relations that aren't already in schema
+    for (const autoRel of autoRelations) {
+        const isDuplicate = relations.some(r => 
+            r.sourceFile === autoRel.sourceFile && 
+            r.foreignKeyColumn === autoRel.foreignKeyColumn
+        );
+        if (!isDuplicate) {
+            relations.push(autoRel);
+        }
+    }
+    
+    return relations;
+}
+
+/**
+ * Discover relationships from SWAT+ Editor schema
+ */
+function discoverFromSchema(directory: string, swatFiles: string[], fileMap: Map<string, string>): SwatFileRelation[] {
+    const relations: SwatFileRelation[] = [];
+    
+    for (const schemaRel of SWAT_SCHEMA_RELATIONS) {
+        // Find source file
+        const sourceFile = findFileForBaseName(directory, schemaRel.sourceFile, swatFiles);
+        if (!sourceFile) {
+            continue;
+        }
+        
+        // Find target file
+        const targetFile = findFileForBaseName(directory, schemaRel.targetFile, swatFiles);
+        if (!targetFile) {
+            continue;
+        }
+        
+        // Read source file headers to find column index
+        const sourceFilePath = path.join(directory, sourceFile);
+        const headers = getFileHeader(sourceFilePath);
+        
+        // Find the column index by matching field name
+        const columnIndex = headers.findIndex(h => 
+            h.toLowerCase() === schemaRel.foreignKeyField.toLowerCase()
+        );
+        
+        if (columnIndex === -1 || columnIndex === 0) {
+            // Column not found or is the name column, skip
+            continue;
+        }
+        
+        const sourceBaseName = path.basename(sourceFile, path.extname(sourceFile));
+        const targetBaseName = path.basename(targetFile, path.extname(targetFile));
+        
+        relations.push({
+            sourceFile: sourceBaseName.toLowerCase(),
+            foreignKeyColumn: columnIndex,
+            columnName: schemaRel.foreignKeyField.toLowerCase(),
+            targetFile: targetBaseName.toLowerCase(),
+            targetKeyColumn: 0, // First column is the key
+            fieldName: schemaRel.fieldName,
+            source: 'schema'
+        });
+    }
+    
+    return relations;
+}
+
+/**
+ * Discover foreign key relationships by reading file headers (BACKUP METHOD)
+ * A column is considered a foreign key if its name matches another file's base name
+ */
+function discoverFromHeaders(directory: string, swatFiles: string[], fileMap: Map<string, string>): SwatFileRelation[] {
+    const relations: SwatFileRelation[] = [];
     
     // For each file, check if any column names match other file base names
     for (const sourceFile of swatFiles) {
@@ -95,8 +200,8 @@ function discoverRelationships(directory: string): SwatFileRelation[] {
             const columnName = headers[colIndex].toLowerCase();
             
             // Check if this column name matches any file base name
-            if (fileBaseNames.has(columnName)) {
-                const targetFile = fileBaseNames.get(columnName)!;
+            if (fileMap.has(columnName)) {
+                const targetFile = fileMap.get(columnName)!;
                 
                 relations.push({
                     sourceFile: sourceBaseName.toLowerCase(),
@@ -104,7 +209,8 @@ function discoverRelationships(directory: string): SwatFileRelation[] {
                     columnName: columnName,
                     targetFile: path.basename(targetFile, path.extname(targetFile)).toLowerCase(),
                     targetKeyColumn: 0, // First column is assumed to be the key
-                    fieldName: capitalizeFirst(columnName)
+                    fieldName: capitalizeFirst(columnName),
+                    source: 'discovered'
                 });
             }
         }
@@ -135,8 +241,19 @@ function getRelationships(directory: string): SwatFileRelation[] {
     if (!relationshipCache.has(directory)) {
         const relations = discoverRelationships(directory);
         relationshipCache.set(directory, relations);
-        console.log(`Discovered ${relations.length} foreign key relationships in ${directory}:`, 
-            relations.map(r => `${r.sourceFile}.${r.columnName} → ${r.targetFile}`));
+        
+        const schemaCount = relations.filter(r => r.source === 'schema').length;
+        const discoveredCount = relations.filter(r => r.source === 'discovered').length;
+        
+        console.log(`SWAT+ Foreign Key Discovery in ${directory}:`);
+        console.log(`  - ${schemaCount} from schema (primary)`);
+        console.log(`  - ${discoveredCount} auto-discovered (fallback)`);
+        console.log(`  - Total: ${relations.length} relationships`);
+        if (relations.length > 0) {
+            console.log('  Relationships:', relations.map(r => 
+                `${r.sourceFile}.${r.columnName} → ${r.targetFile} [${r.source}]`
+            ));
+        }
     }
     return relationshipCache.get(directory)!;
 }
@@ -533,5 +650,5 @@ export function registerSwatLanguageFeatures(context: vscode.ExtensionContext, w
         fileWatcher
     );
     
-    console.log('SWAT+ language features registered with automatic relationship discovery');
+    console.log('SWAT+ language features registered with schema-based relationship discovery (primary) and automatic fallback');
 }
