@@ -250,7 +250,8 @@ export class SwatHoverProvider implements vscode.HoverProvider {
         for (let i = 0; i < maxFields; i++) {
             const value = targetRecord.fields[i];
             // Format numbers for easier reading
-            const formattedValue = isNaN(Number(value)) ? value : Number(value).toLocaleString();
+            const numValue = Number(value);
+            const formattedValue = isNaN(numValue) ? value : numValue.toLocaleString();
             markdownContent.appendMarkdown(`**Field ${i + 1}:** ${formattedValue}\n\n`);
         }
         
