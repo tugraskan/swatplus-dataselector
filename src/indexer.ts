@@ -118,13 +118,18 @@ export class SwatIndexer {
         }
 
         this.datasetPath = datasetPath;
-        this.txtInOutPath = path.join(datasetPath, 'TxtInOut');
-
-        // Check if TxtInOut directory exists
-        if (!fs.existsSync(this.txtInOutPath)) {
+        
+        // Check for TxtInOut subdirectory first, then fall back to direct folder
+        const txtInOutSubdir = path.join(datasetPath, 'TxtInOut');
+        if (fs.existsSync(txtInOutSubdir)) {
+            this.txtInOutPath = txtInOutSubdir;
+        } else if (fs.existsSync(path.join(datasetPath, 'file.cio'))) {
+            // Files are directly in the dataset folder (common SWAT+ layout)
+            this.txtInOutPath = datasetPath;
+        } else {
             vscode.window.showErrorMessage(
-                `TxtInOut directory not found in ${datasetPath}. ` +
-                'Please ensure this is a valid SWAT+ dataset folder.'
+                `No SWAT+ input files found in ${datasetPath}. ` +
+                'Please ensure this is a valid SWAT+ dataset folder (should contain file.cio).'
             );
             return false;
         }
