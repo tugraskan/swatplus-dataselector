@@ -3,7 +3,7 @@
   "source": {
     "repo": "swat-model/swatplus-editor",
     "commit": "f8ff21e40d52895ea91028035959f20ca4104405",
-    "generated_on": "2025-12-30T19:08:37.199020",
+    "generated_on": "2025-12-30T19:12:13.157744",
     "extraction_method": "dynamic_recursive_scan"
   },
   "tables": {

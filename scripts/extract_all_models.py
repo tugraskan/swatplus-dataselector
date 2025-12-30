@@ -7,6 +7,8 @@ This script recursively scans all model files and extracts all BaseModel subclas
 import os
 import json
 import re
+import subprocess
+import traceback
 from datetime import datetime
 from pathlib import Path
 import argparse
@@ -181,13 +183,31 @@ def normalize_table_to_filename(table_name):
     # Fallback: just replace underscores with dashes and add .txt
     return table_name.replace('_', '-') + '.txt'
 
+def get_git_commit(repo_path):
+    """Get current git commit hash from repository"""
+    try:
+        result = subprocess.run(
+            ['git', 'rev-parse', 'HEAD'],
+            cwd=repo_path.parent.parent.parent,  # Go up to repo root from src/api/database
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "unknown"
+
 def scan_all_models(editor_path):
     """Recursively scan all Python files in database directories"""
+    
+    # Get current commit from the swatplus-editor repo
+    commit_hash = get_git_commit(editor_path)
+    
     schema = {
         "schema_version": "2.0.0",
         "source": {
             "repo": "swat-model/swatplus-editor",
-            "commit": "f8ff21e40d52895ea91028035959f20ca4104405",
+            "commit": commit_hash,
             "generated_on": datetime.now().isoformat(),
             "extraction_method": "dynamic_recursive_scan"
         },
@@ -260,7 +280,6 @@ def scan_all_models(editor_path):
                 
             except Exception as e:
                 print(f"  ✗ Error parsing {py_file.name}: {e}")
-                import traceback
                 traceback.print_exc()
         
         print()
