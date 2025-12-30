@@ -52,7 +52,7 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
         }
 
         // Check if document is in the indexed folder
-        // Use platform-appropriate path comparison (case-insensitive on Windows)
+        // Uses platform-appropriate path comparison (case-insensitive on Windows)
         this.outputChannel.appendLine(`[FK Definition] Checking if ${document.fileName} is in ${txtInOutPath}`);
         
         if (!pathStartsWith(document.fileName, txtInOutPath)) {

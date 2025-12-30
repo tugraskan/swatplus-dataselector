@@ -86,14 +86,13 @@ export class SwatFKDecorationProvider {
             return;
         }
 
-        // Check if document is in the indexed folder
+        // Get the indexed folder path and check if document is in it
+        // Uses platform-appropriate path comparison (case-insensitive on Windows)
         const txtInOutPath = this.indexer.getTxtInOutPath();
         if (!txtInOutPath) {
             return;
         }
         
-        // Check if document is in the indexed folder
-        // Use platform-appropriate path comparison (case-insensitive on Windows)
         if (!pathStartsWith(editor.document.fileName, txtInOutPath)) {
             return;
         }
