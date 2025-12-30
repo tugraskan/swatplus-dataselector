@@ -234,8 +234,14 @@ export class SwatIndexer {
                     valueMap[headers[j]] = values[j];
                 }
 
-                // Get primary key value (assume 'id' or 'name')
-                const pkColumn = table.primary_keys[0] || 'id';
+                // Get primary key value
+                // Try schema PK first, but fall back to 'name' if PK not in file headers
+                let pkColumn = table.primary_keys[0] || 'id';
+                if (!headers.includes(pkColumn)) {
+                    // PK from schema not in file (e.g., 'id' not written to TxtInOut)
+                    // Fall back to 'name' which is the common identifier in SWAT+ files
+                    pkColumn = 'name';
+                }
                 const pkValue = valueMap[pkColumn] || '';
 
                 const row: IndexedRow = {
