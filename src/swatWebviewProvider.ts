@@ -209,6 +209,12 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         <div class="selected-window-path-scroll" title="${escapeHtml(this.selectedDataset)}">
                             <div class="dataset-header-path">${escapeHtml(this.selectedDataset)}</div>
                         </div>
+                        <div class="selected-window-actions">
+                            <button class="action-button primary" id="buildIndexBtn">
+                                ${svgs.database}
+                                Build Index
+                            </button>
+                        </div>
                         <div class="selected-window-body">
                             <div class="section-content" id="selected-files-content">
                                 <div class="no-dataset">
@@ -255,6 +261,12 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         <!-- Dedicated horizontal scroller for the full dataset path -->
                         <div class="selected-window-path-scroll" title="${escapeHtml(this.selectedDataset)}">
                             <div class="dataset-header-path">${escapeHtml(this.selectedDataset)}</div>
+                        </div>
+                        <div class="selected-window-actions">
+                            <button class="action-button primary" id="buildIndexBtn">
+                                ${svgs.database}
+                                Build Index
+                            </button>
                         </div>
                         <div class="selected-window-body">
                             <div class="section-content" id="selected-files-content">
@@ -558,6 +570,16 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             display: inline-block;
             min-width: 100%;
             white-space: nowrap;
+        }
+
+        .selected-window-actions {
+            padding: 10px;
+            background-color: var(--vscode-editor-background);
+            border-bottom: 1px solid var(--vscode-panel-border);
+        }
+
+        .selected-window-actions .action-button {
+            width: 100%;
         }
 
         .dataset-header-name {
@@ -875,10 +897,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 <button class="action-button secondary${!this.selectedDataset ? ' disabled' : ''}" id="launchDebugBtn" ${!this.selectedDataset ? 'disabled' : ''}>
                     ${svgs.debugPlay}
                     Debug
-                </button>
-                <button class="action-button primary${!this.selectedDataset ? ' disabled' : ''}" id="buildIndexBtn" ${!this.selectedDataset ? 'disabled' : ''}>
-                    ${svgs.database}
-                    Build Index
                 </button>
             </div>
         </div>
