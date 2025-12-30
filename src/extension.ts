@@ -154,21 +154,11 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
-	// Command: Build Inputs Index
+	// Command: Build Inputs Index (builds or rebuilds)
 	const buildIndex = vscode.commands.registerCommand('swat-dataset-selector.buildIndex', async () => {
 		const selectedPath = swatProvider.getSelectedDataset();
 		if (!selectedPath) {
 			vscode.window.showWarningMessage('Please select a SWAT+ dataset folder first.');
-			return;
-		}
-
-		// Check if index already exists
-		const hasIndex = await indexer.hasIndex(selectedPath);
-		if (hasIndex && indexer.isIndexBuilt()) {
-			const choice = await vscode.window.showWarningMessage(
-				'An index already exists for this dataset. Use "Rebuild Index" to refresh it.',
-				'OK'
-			);
 			return;
 		}
 
