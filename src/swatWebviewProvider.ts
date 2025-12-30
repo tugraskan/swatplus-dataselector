@@ -7,7 +7,7 @@ import * as fs from 'fs';
  * Escapes HTML special characters to prevent XSS attacks
  */
 function escapeHtml(text: string): string {
-    const s = text == null ? '' : String(text);
+    const s = text === null || text === undefined ? '' : String(text);
     const map: { [key: string]: string } = {
         '&': '&amp;',
         '<': '&lt;',
@@ -19,7 +19,7 @@ function escapeHtml(text: string): string {
 }
 
 function normalizeToPath(value: any): string | undefined {
-    if (value == null) {return undefined;}
+    if (value === null || value === undefined) {return undefined;}
     if (typeof value === 'string') {return value;}
     if (typeof value === 'object') {
         if (typeof (value as any).path === 'string') {return (value as any).path;}
