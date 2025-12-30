@@ -36,22 +36,28 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
             return undefined;
         }
 
-        // Check if document is in TxtInOut
+        // Check if document is in the correct folder
         const datasetPath = this.indexer.getDatasetPath();
         if (!datasetPath) {
             this.outputChannel.appendLine('[FK Definition] No dataset path set');
             return undefined;
         }
 
+        // Get the actual TxtInOut path (could be datasetPath/TxtInOut or datasetPath itself)
+        const txtInOutPath = this.indexer.getTxtInOutPath();
+        if (!txtInOutPath) {
+            this.outputChannel.appendLine('[FK Definition] TxtInOut path not set - index may not be built');
+            return undefined;
+        }
+
         // Normalize paths for cross-platform compatibility
-        const txtInOutPath = path.join(datasetPath, 'TxtInOut');
         const normalizedDocPath = path.normalize(document.fileName);
         const normalizedTxtInOutPath = path.normalize(txtInOutPath);
         
         this.outputChannel.appendLine(`[FK Definition] Checking if ${normalizedDocPath} is in ${normalizedTxtInOutPath}`);
         
         if (!normalizedDocPath.startsWith(normalizedTxtInOutPath)) {
-            this.outputChannel.appendLine('[FK Definition] File not in TxtInOut folder - skipping');
+            this.outputChannel.appendLine('[FK Definition] File not in indexed folder - skipping');
             return undefined;
         }
 

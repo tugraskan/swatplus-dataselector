@@ -365,4 +365,8 @@ export class SwatIndexer {
     public getDatasetPath(): string | null {
         return this.datasetPath;
     }
+
+    public getTxtInOutPath(): string | null {
+        return this.txtInOutPath;
+    }
 }
