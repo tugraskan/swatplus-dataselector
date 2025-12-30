@@ -317,9 +317,17 @@ def main():
     with open(output_path, 'w') as f:
         json.dump(schema, f, indent=2)
     
+    # Also write to swatplus-editor-schema.json for backward compatibility
+    compat_path = output_path.parent / 'swatplus-editor-schema.json'
+    if compat_path != output_path:
+        with open(compat_path, 'w') as f:
+            json.dump(schema, f, indent=2)
+    
     print("=" * 70)
     print(f"✅ Schema extraction complete!")
-    print(f"   Output: {output_path}")
+    print(f"   Primary output: {output_path}")
+    if compat_path != output_path:
+        print(f"   Compatibility copy: {compat_path}")
     print(f"   Files scanned: {schema['statistics']['files_scanned']}")
     print(f"   Models found: {schema['statistics']['models_found']}")
     print(f"   Tables mapped: {schema['statistics']['tables_mapped']}")

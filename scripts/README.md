@@ -156,9 +156,11 @@ scripts/
 └── extract_schema_static.py   # Old: MVP only (13 tables, deprecated)
 
 resources/schema/
-├── swatplus-editor-schema-full.json   # New: All 213 tables
-└── swatplus-editor-schema.json        # Old: Only 13 tables
+├── swatplus-editor-schema-full.json   # All 213 tables (full schema)
+└── swatplus-editor-schema.json        # All 213 tables (same as -full.json)
 ```
+
+**Note**: Both schema files contain the complete 213-table schema. The `-full` suffix is kept for clarity, while `swatplus-editor-schema.json` is maintained for backward compatibility with existing code.
 
 ## Integration with Extension
 
