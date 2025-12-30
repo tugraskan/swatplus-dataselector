@@ -1,0 +1,2053 @@
+{
+  "schema_version": "1.0.0",
+  "source": {
+    "repo": "swat-model/swatplus-editor",
+    "commit": "f8ff21e40d52895ea91028035959f20ca4104405",
+    "generated_on": "2025-12-30T15:55:02.655373"
+  },
+  "tables": {
+    "hru-data.hru": {
+      "file_name": "hru-data.hru",
+      "table_name": "hru_data_hru",
+      "model_class": "hru.Hru_data_hru",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "topo",
+          "db_column": "topo",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "topography_hyd",
+            "column": "id"
+          }
+        },
+        {
+          "name": "hydro",
+          "db_column": "hydro",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "hydrology_hyd",
+            "column": "id"
+          }
+        },
+        {
+          "name": "soil",
+          "db_column": "soil",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "soils_sol",
+            "column": "id"
+          }
+        },
+        {
+          "name": "lu_mgt",
+          "db_column": "lu_mgt",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "landuse_lum",
+            "column": "id"
+          }
+        },
+        {
+          "name": "soil_plant_init",
+          "db_column": "soil_plant_init",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "soil_plant_ini",
+            "column": "id"
+          }
+        },
+        {
+          "name": "surf_stor",
+          "db_column": "surf_stor",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "wetland_wet",
+            "column": "id"
+          }
+        },
+        {
+          "name": "snow",
+          "db_column": "snow",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "snow_sno",
+            "column": "id"
+          }
+        },
+        {
+          "name": "field",
+          "db_column": "field",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "field_fld",
+            "column": "id"
+          }
+        },
+        {
+          "name": "description",
+          "db_column": "description",
+          "type": "TextField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "topo",
+          "db_column": "topo_id",
+          "references": {
+            "table": "topography_hyd",
+            "column": "id"
+          }
+        },
+        {
+          "column": "hydro",
+          "db_column": "hydro_id",
+          "references": {
+            "table": "hydrology_hyd",
+            "column": "id"
+          }
+        },
+        {
+          "column": "soil",
+          "db_column": "soil_id",
+          "references": {
+            "table": "soils_sol",
+            "column": "id"
+          }
+        },
+        {
+          "column": "lu_mgt",
+          "db_column": "lu_mgt_id",
+          "references": {
+            "table": "landuse_lum",
+            "column": "id"
+          }
+        },
+        {
+          "column": "soil_plant_init",
+          "db_column": "soil_plant_init_id",
+          "references": {
+            "table": "soil_plant_ini",
+            "column": "id"
+          }
+        },
+        {
+          "column": "surf_stor",
+          "db_column": "surf_stor_id",
+          "references": {
+            "table": "wetland_wet",
+            "column": "id"
+          }
+        },
+        {
+          "column": "snow",
+          "db_column": "snow_id",
+          "references": {
+            "table": "snow_sno",
+            "column": "id"
+          }
+        },
+        {
+          "column": "field",
+          "db_column": "field_id",
+          "references": {
+            "table": "field_fld",
+            "column": "id"
+          }
+        }
+      ],
+      "notes": "Auto-generated from Peewee model via static analysis"
+    },
+    "hru-lte.hru": {
+      "file_name": "hru-lte.hru",
+      "table_name": "hru_lte_hru",
+      "model_class": "hru.Hru_lte_hru",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "area",
+          "db_column": "area",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "cn2",
+          "db_column": "cn2",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "cn3_swf",
+          "db_column": "cn3_swf",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "t_conc",
+          "db_column": "t_conc",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "soil_dp",
+          "db_column": "soil_dp",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "perc_co",
+          "db_column": "perc_co",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "slp",
+          "db_column": "slp",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "slp_len",
+          "db_column": "slp_len",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "et_co",
+          "db_column": "et_co",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "aqu_sp_yld",
+          "db_column": "aqu_sp_yld",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "alpha_bf",
+          "db_column": "alpha_bf",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "revap",
+          "db_column": "revap",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "rchg_dp",
+          "db_column": "rchg_dp",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "sw_init",
+          "db_column": "sw_init",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "aqu_init",
+          "db_column": "aqu_init",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "aqu_sh_flo",
+          "db_column": "aqu_sh_flo",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "aqu_dp_flo",
+          "db_column": "aqu_dp_flo",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "snow_h2o",
+          "db_column": "snow_h2o",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lat",
+          "db_column": "lat",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "soil_text",
+          "db_column": "soil_text",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "soils_lte_sol",
+            "column": "id"
+          }
+        },
+        {
+          "name": "trop_flag",
+          "db_column": "trop_flag",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "grow_start",
+          "db_column": "grow_start",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "d_table_dtl",
+            "column": "id"
+          }
+        },
+        {
+          "name": "grow_end",
+          "db_column": "grow_end",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "d_table_dtl",
+            "column": "id"
+          }
+        },
+        {
+          "name": "plnt_typ",
+          "db_column": "plnt_typ",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "plants_plt",
+            "column": "id"
+          }
+        },
+        {
+          "name": "stress",
+          "db_column": "stress",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "pet_flag",
+          "db_column": "pet_flag",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "irr_flag",
+          "db_column": "irr_flag",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "irr_src",
+          "db_column": "irr_src",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "t_drain",
+          "db_column": "t_drain",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "usle_k",
+          "db_column": "usle_k",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "usle_c",
+          "db_column": "usle_c",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "usle_p",
+          "db_column": "usle_p",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "usle_ls",
+          "db_column": "usle_ls",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "soil_text",
+          "db_column": "soil_text_id",
+          "references": {
+            "table": "soils_lte_sol",
+            "column": "id"
+          }
+        },
+        {
+          "column": "grow_start",
+          "db_column": "grow_start_id",
+          "references": {
+            "table": "d_table_dtl",
+            "column": "id"
+          }
+        },
+        {
+          "column": "grow_end",
+          "db_column": "grow_end_id",
+          "references": {
+            "table": "d_table_dtl",
+            "column": "id"
+          }
+        },
+        {
+          "column": "plnt_typ",
+          "db_column": "plnt_typ_id",
+          "references": {
+            "table": "plants_plt",
+            "column": "id"
+          }
+        }
+      ],
+      "notes": "Auto-generated from Peewee model via static analysis"
+    },
+    "topography.hyd": {
+      "file_name": "topography.hyd",
+      "table_name": "topography_hyd",
+      "model_class": "hydrology.Topography_hyd",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "slp",
+          "db_column": "slp",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "slp_len",
+          "db_column": "slp_len",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lat_len",
+          "db_column": "lat_len",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "dist_cha",
+          "db_column": "dist_cha",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "depos",
+          "db_column": "depos",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "type",
+          "db_column": "type",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Auto-generated from Peewee model via static analysis"
+    },
+    "hydrology.hyd": {
+      "file_name": "hydrology.hyd",
+      "table_name": "hydrology_hyd",
+      "model_class": "hydrology.Hydrology_hyd",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lat_ttime",
+          "db_column": "lat_ttime",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lat_sed",
+          "db_column": "lat_sed",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "can_max",
+          "db_column": "can_max",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "esco",
+          "db_column": "esco",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "epco",
+          "db_column": "epco",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "orgn_enrich",
+          "db_column": "orgn_enrich",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "orgp_enrich",
+          "db_column": "orgp_enrich",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "cn3_swf",
+          "db_column": "cn3_swf",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "bio_mix",
+          "db_column": "bio_mix",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "perco",
+          "db_column": "perco",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lat_orgn",
+          "db_column": "lat_orgn",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lat_orgp",
+          "db_column": "lat_orgp",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "harg_pet",
+          "db_column": "harg_pet",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "pet_co",
+          "db_column": "pet_co",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "latq_co",
+          "db_column": "latq_co",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Auto-generated from Peewee model via static analysis"
+    },
+    "field.fld": {
+      "file_name": "field.fld",
+      "table_name": "field_fld",
+      "model_class": "hydrology.Field_fld",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "len",
+          "db_column": "len",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "wd",
+          "db_column": "wd",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "ang",
+          "db_column": "ang",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Auto-generated from Peewee model via static analysis"
+    },
+    "soils.sol": {
+      "file_name": "soils.sol",
+      "table_name": "soils_sol",
+      "model_class": "soils.Soils_sol",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "hyd_grp",
+          "db_column": "hyd_grp",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "dp_tot",
+          "db_column": "dp_tot",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "anion_excl",
+          "db_column": "anion_excl",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "perc_crk",
+          "db_column": "perc_crk",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "texture",
+          "db_column": "texture",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "description",
+          "db_column": "description",
+          "type": "TextField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Auto-generated from Peewee model via static analysis"
+    },
+    "soils-lte.sol": {
+      "file_name": "soils-lte.sol",
+      "table_name": "soils_lte_sol",
+      "model_class": "soils.Soils_lte_sol",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "awc",
+          "db_column": "awc",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "por",
+          "db_column": "por",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "scon",
+          "db_column": "scon",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Auto-generated from Peewee model via static analysis"
+    },
+    "landuse.lum": {
+      "file_name": "landuse.lum",
+      "table_name": "landuse_lum",
+      "model_class": "lum.Landuse_lum",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "cal_group",
+          "db_column": "cal_group",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "plnt_com",
+          "db_column": "plnt_com",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "plant_ini",
+            "column": "id"
+          }
+        },
+        {
+          "name": "mgt",
+          "db_column": "mgt",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "management_sch",
+            "column": "id"
+          }
+        },
+        {
+          "name": "cn2",
+          "db_column": "cn2",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "cntable_lum",
+            "column": "id"
+          }
+        },
+        {
+          "name": "cons_prac",
+          "db_column": "cons_prac",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "cons_prac_lum",
+            "column": "id"
+          }
+        },
+        {
+          "name": "urban",
+          "db_column": "urban",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "urban_urb",
+            "column": "id"
+          }
+        },
+        {
+          "name": "urb_ro",
+          "db_column": "urb_ro",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "ov_mann",
+          "db_column": "ov_mann",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "ovn_table_lum",
+            "column": "id"
+          }
+        },
+        {
+          "name": "tile",
+          "db_column": "tile",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "tiledrain_str",
+            "column": "id"
+          }
+        },
+        {
+          "name": "sep",
+          "db_column": "sep",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "septic_str",
+            "column": "id"
+          }
+        },
+        {
+          "name": "vfs",
+          "db_column": "vfs",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "filterstrip_str",
+            "column": "id"
+          }
+        },
+        {
+          "name": "grww",
+          "db_column": "grww",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "grassedww_str",
+            "column": "id"
+          }
+        },
+        {
+          "name": "bmp",
+          "db_column": "bmp",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "bmpuser_str",
+            "column": "id"
+          }
+        },
+        {
+          "name": "description",
+          "db_column": "description",
+          "type": "TextField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "plnt_com",
+          "db_column": "plnt_com_id",
+          "references": {
+            "table": "plant_ini",
+            "column": "id"
+          }
+        },
+        {
+          "column": "mgt",
+          "db_column": "mgt_id",
+          "references": {
+            "table": "management_sch",
+            "column": "id"
+          }
+        },
+        {
+          "column": "cn2",
+          "db_column": "cn2_id",
+          "references": {
+            "table": "cntable_lum",
+            "column": "id"
+          }
+        },
+        {
+          "column": "cons_prac",
+          "db_column": "cons_prac_id",
+          "references": {
+            "table": "cons_prac_lum",
+            "column": "id"
+          }
+        },
+        {
+          "column": "urban",
+          "db_column": "urban_id",
+          "references": {
+            "table": "urban_urb",
+            "column": "id"
+          }
+        },
+        {
+          "column": "ov_mann",
+          "db_column": "ov_mann_id",
+          "references": {
+            "table": "ovn_table_lum",
+            "column": "id"
+          }
+        },
+        {
+          "column": "tile",
+          "db_column": "tile_id",
+          "references": {
+            "table": "tiledrain_str",
+            "column": "id"
+          }
+        },
+        {
+          "column": "sep",
+          "db_column": "sep_id",
+          "references": {
+            "table": "septic_str",
+            "column": "id"
+          }
+        },
+        {
+          "column": "vfs",
+          "db_column": "vfs_id",
+          "references": {
+            "table": "filterstrip_str",
+            "column": "id"
+          }
+        },
+        {
+          "column": "grww",
+          "db_column": "grww_id",
+          "references": {
+            "table": "grassedww_str",
+            "column": "id"
+          }
+        },
+        {
+          "column": "bmp",
+          "db_column": "bmp_id",
+          "references": {
+            "table": "bmpuser_str",
+            "column": "id"
+          }
+        }
+      ],
+      "notes": "Auto-generated from Peewee model via static analysis"
+    },
+    "management.sch": {
+      "file_name": "management.sch",
+      "table_name": "management_sch",
+      "model_class": "lum.Management_sch",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Auto-generated from Peewee model via static analysis"
+    },
+    "soil-plant.ini": {
+      "file_name": "soil-plant.ini",
+      "table_name": "soil_plant_ini",
+      "model_class": "init.Soil_plant_ini",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "sw_frac",
+          "db_column": "sw_frac",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "nutrients",
+          "db_column": "nutrients",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "nutrients_sol",
+            "column": "id"
+          }
+        },
+        {
+          "name": "pest",
+          "db_column": "pest",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "pest_hru_ini",
+            "column": "id"
+          }
+        },
+        {
+          "name": "path",
+          "db_column": "path",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "path_hru_ini",
+            "column": "id"
+          }
+        },
+        {
+          "name": "hmet",
+          "db_column": "hmet",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "hmet_hru_ini",
+            "column": "id"
+          }
+        },
+        {
+          "name": "salt",
+          "db_column": "salt",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "salt_hru_ini",
+            "column": "id"
+          }
+        },
+        {
+          "name": "salt_cs",
+          "db_column": "salt_cs",
+          "type": "ForeignKeyField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "salt_hru_ini_cs",
+            "column": "id"
+          }
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "nutrients",
+          "db_column": "nutrients_id",
+          "references": {
+            "table": "nutrients_sol",
+            "column": "id"
+          }
+        },
+        {
+          "column": "pest",
+          "db_column": "pest_id",
+          "references": {
+            "table": "pest_hru_ini",
+            "column": "id"
+          }
+        },
+        {
+          "column": "path",
+          "db_column": "path_id",
+          "references": {
+            "table": "path_hru_ini",
+            "column": "id"
+          }
+        },
+        {
+          "column": "hmet",
+          "db_column": "hmet_id",
+          "references": {
+            "table": "hmet_hru_ini",
+            "column": "id"
+          }
+        },
+        {
+          "column": "salt",
+          "db_column": "salt_id",
+          "references": {
+            "table": "salt_hru_ini",
+            "column": "id"
+          }
+        },
+        {
+          "column": "salt_cs",
+          "db_column": "salt_cs_id",
+          "references": {
+            "table": "salt_hru_ini_cs",
+            "column": "id"
+          }
+        }
+      ],
+      "notes": "Auto-generated from Peewee model via static analysis"
+    },
+    "snow.sno": {
+      "file_name": "snow.sno",
+      "table_name": "snow_sno",
+      "model_class": "hru_parm_db.Snow_sno",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "fall_tmp",
+          "db_column": "fall_tmp",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "melt_tmp",
+          "db_column": "melt_tmp",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "melt_max",
+          "db_column": "melt_max",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "melt_min",
+          "db_column": "melt_min",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "tmp_lag",
+          "db_column": "tmp_lag",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "snow_h2o",
+          "db_column": "snow_h2o",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "cov50",
+          "db_column": "cov50",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "snow_init",
+          "db_column": "snow_init",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Auto-generated from Peewee model via static analysis"
+    },
+    "plants.plt": {
+      "file_name": "plants.plt",
+      "table_name": "plants_plt",
+      "model_class": "hru_parm_db.Plants_plt",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "plnt_typ",
+          "db_column": "plnt_typ",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "gro_trig",
+          "db_column": "gro_trig",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "nfix_co",
+          "db_column": "nfix_co",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "days_mat",
+          "db_column": "days_mat",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "bm_e",
+          "db_column": "bm_e",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "harv_idx",
+          "db_column": "harv_idx",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lai_pot",
+          "db_column": "lai_pot",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac_hu1",
+          "db_column": "frac_hu1",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lai_max1",
+          "db_column": "lai_max1",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac_hu2",
+          "db_column": "frac_hu2",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lai_max2",
+          "db_column": "lai_max2",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "hu_lai_decl",
+          "db_column": "hu_lai_decl",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "dlai_rate",
+          "db_column": "dlai_rate",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "can_ht_max",
+          "db_column": "can_ht_max",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "rt_dp_max",
+          "db_column": "rt_dp_max",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "tmp_opt",
+          "db_column": "tmp_opt",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "tmp_base",
+          "db_column": "tmp_base",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac_n_yld",
+          "db_column": "frac_n_yld",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac_p_yld",
+          "db_column": "frac_p_yld",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac_n_em",
+          "db_column": "frac_n_em",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac_n_50",
+          "db_column": "frac_n_50",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac_n_mat",
+          "db_column": "frac_n_mat",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac_p_em",
+          "db_column": "frac_p_em",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac_p_50",
+          "db_column": "frac_p_50",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac_p_mat",
+          "db_column": "frac_p_mat",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "harv_idx_ws",
+          "db_column": "harv_idx_ws",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "usle_c_min",
+          "db_column": "usle_c_min",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "stcon_max",
+          "db_column": "stcon_max",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "vpd",
+          "db_column": "vpd",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac_stcon",
+          "db_column": "frac_stcon",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "ru_vpd",
+          "db_column": "ru_vpd",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "co2_hi",
+          "db_column": "co2_hi",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "bm_e_hi",
+          "db_column": "bm_e_hi",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "plnt_decomp",
+          "db_column": "plnt_decomp",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lai_min",
+          "db_column": "lai_min",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "bm_tree_acc",
+          "db_column": "bm_tree_acc",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "yrs_mat",
+          "db_column": "yrs_mat",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "bm_tree_max",
+          "db_column": "bm_tree_max",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "ext_co",
+          "db_column": "ext_co",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "leaf_tov_mn",
+          "db_column": "leaf_tov_mn",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "leaf_tov_mx",
+          "db_column": "leaf_tov_mx",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "bm_dieoff",
+          "db_column": "bm_dieoff",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "rt_st_beg",
+          "db_column": "rt_st_beg",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "rt_st_end",
+          "db_column": "rt_st_end",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "plnt_pop1",
+          "db_column": "plnt_pop1",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac_lai1",
+          "db_column": "frac_lai1",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "plnt_pop2",
+          "db_column": "plnt_pop2",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac_lai2",
+          "db_column": "frac_lai2",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac_sw_gro",
+          "db_column": "frac_sw_gro",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "aeration",
+          "db_column": "aeration",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "wnd_dead",
+          "db_column": "wnd_dead",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "wnd_flat",
+          "db_column": "wnd_flat",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "rsd_pctcov",
+          "db_column": "rsd_pctcov",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "rsd_covfac",
+          "db_column": "rsd_covfac",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "description",
+          "db_column": "description",
+          "type": "TextField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Auto-generated from Peewee model via static analysis"
+    },
+    "d_table.dtl": {
+      "file_name": "d_table.dtl",
+      "table_name": "d_table_dtl",
+      "model_class": "decision_table.D_table_dtl",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "file_name",
+          "db_column": "file_name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "description",
+          "db_column": "description",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Auto-generated from Peewee model via static analysis"
+    }
+  }
+}
