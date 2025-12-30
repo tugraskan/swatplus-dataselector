@@ -876,11 +876,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     ${svgs.debugPlay}
                     Debug
                 </button>
+                <button class="action-button primary${!this.selectedDataset ? ' disabled' : ''}" id="buildIndexBtn" ${!this.selectedDataset ? 'disabled' : ''}>
+                    ${svgs.database}
+                    Build Index
+                </button>
             </div>
-            <button class="action-button primary${!this.selectedDataset ? ' disabled' : ''}" id="buildIndexBtn" ${!this.selectedDataset ? 'disabled' : ''}>
-                ${svgs.database}
-                Build Inputs Index
-            </button>
         </div>
 
         <div class="divider"></div>
