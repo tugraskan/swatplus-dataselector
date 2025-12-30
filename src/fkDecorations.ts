@@ -8,6 +8,16 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { SwatIndexer } from './indexer';
 
+/**
+ * Calculate the character position of a column value in a whitespace-separated line
+ */
+function calculateColumnPosition(values: string[], columnIndex: number): { start: number; end: number } {
+    const valuesBefore = values.slice(0, columnIndex);
+    const startChar = valuesBefore.join(' ').length + valuesBefore.length;
+    const endChar = startChar + values[columnIndex].length;
+    return { start: startChar, end: endChar };
+}
+
 export class SwatFKDecorationProvider {
     private fkDecorationType: vscode.TextEditorDecorationType;
     private unresolvedFkDecorationType: vscode.TextEditorDecorationType;
@@ -137,15 +147,13 @@ export class SwatFKDecorationProvider {
                 }
 
                 // Calculate position of the FK value in the line
-                const valuesBefore = values.slice(0, columnIndex);
-                const startChar = valuesBefore.join(' ').length + valuesBefore.length;
-                const endChar = startChar + values[columnIndex].length;
+                const pos = calculateColumnPosition(values, columnIndex);
 
                 const range = new vscode.Range(
                     lineNum,
-                    startChar,
+                    pos.start,
                     lineNum,
-                    endChar
+                    pos.end
                 );
 
                 const decoration: vscode.DecorationOptions = {

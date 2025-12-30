@@ -10,6 +10,9 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// Constants for FK filtering
+const FK_NULL_VALUES = ['null', '0', ''];
+
 export interface SchemaColumn {
     name: string;
     db_column: string;
@@ -235,7 +238,7 @@ export class SwatIndexer {
                 // Record FK references
                 for (const fk of table.foreign_keys) {
                     const fkValue = valueMap[fk.column];
-                    if (fkValue && fkValue !== 'null' && fkValue !== '0') {
+                    if (fkValue && !FK_NULL_VALUES.includes(fkValue)) {
                         this.fkReferences.push({
                             sourceFile: filePath,
                             sourceTable: table.table_name,
