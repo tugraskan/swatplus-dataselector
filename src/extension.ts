@@ -33,13 +33,14 @@ export function activate(context: vscode.ExtensionContext) {
 		'hru', 'hyd', 'sol', 'lum', 'ini', 'sno', 'plt', 'dtl', 'fld', 'sch',
 		'aqu', 'cha', 'res', 'bsn', 'cli', 'prt', 'ops', 'pst', 'sft', 'cal'
 	];
+	const documentSelectors = [
+		{ pattern: '**/TxtInOut/**' },
+		{ pattern: '**/TxtInOut/*' },
+		// Register for all common SWAT+ file extensions
+		...swatFileExtensions.map(ext => ({ scheme: 'file' as const, pattern: `**/*.${ext}` }))
+	];
 	const definitionProviderDisposable = vscode.languages.registerDefinitionProvider(
-		[
-			{ pattern: '**/TxtInOut/**' },
-			{ pattern: '**/TxtInOut/*' },
-			// Register for all common SWAT+ file extensions
-			{ scheme: 'file', pattern: `**/*.{${swatFileExtensions.join(',')}}` }
-		],
+		documentSelectors,
 		fkDefinitionProvider
 	);
 
