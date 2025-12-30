@@ -95,6 +95,12 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
         // Find which value the cursor is in
         for (let i = 0; i < values.length; i++) {
             const valueStart = line.text.indexOf(values[i], currentPos);
+            
+            // Handle case where value is not found
+            if (valueStart === -1) {
+                continue;
+            }
+            
             const valueEnd = valueStart + values[i].length;
             
             if (position.character >= valueStart && position.character <= valueEnd) {
