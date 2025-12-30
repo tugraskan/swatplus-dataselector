@@ -29,12 +29,16 @@ export function activate(context: vscode.ExtensionContext) {
 	// Register FK definition provider for SWAT+ files
 	// Use a more flexible document selector that matches all files in TxtInOut
 	// and common SWAT+ file extensions
+	const swatFileExtensions = [
+		'hru', 'hyd', 'sol', 'lum', 'ini', 'sno', 'plt', 'dtl', 'fld', 'sch',
+		'aqu', 'cha', 'res', 'bsn', 'cli', 'prt', 'ops', 'pst', 'sft', 'cal'
+	];
 	const definitionProviderDisposable = vscode.languages.registerDefinitionProvider(
 		[
 			{ pattern: '**/TxtInOut/**' },
 			{ pattern: '**/TxtInOut/*' },
 			// Register for all common SWAT+ file extensions
-			{ scheme: 'file', pattern: '**/*.{hru,hyd,sol,lum,ini,sno,plt,dtl,fld,sch,aqu,cha,res,bsn,cli,prt,ops,pst,sft,cal}' }
+			{ scheme: 'file', pattern: `**/*.{${swatFileExtensions.join(',')}}` }
 		],
 		fkDefinitionProvider
 	);
