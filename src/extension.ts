@@ -27,21 +27,14 @@ export function activate(context: vscode.ExtensionContext) {
 	const fkDecorations = new SwatFKDecorationProvider(indexer, context);
 
 	// Register FK definition provider for SWAT+ files
-	// Use a more flexible document selector
+	// Use a more flexible document selector that matches all files in TxtInOut
+	// and common SWAT+ file extensions
 	const definitionProviderDisposable = vscode.languages.registerDefinitionProvider(
 		[
 			{ pattern: '**/TxtInOut/**' },
 			{ pattern: '**/TxtInOut/*' },
-			{ scheme: 'file', pattern: '**/*.hru' },
-			{ scheme: 'file', pattern: '**/*.hyd' },
-			{ scheme: 'file', pattern: '**/*.sol' },
-			{ scheme: 'file', pattern: '**/*.lum' },
-			{ scheme: 'file', pattern: '**/*.ini' },
-			{ scheme: 'file', pattern: '**/*.sno' },
-			{ scheme: 'file', pattern: '**/*.plt' },
-			{ scheme: 'file', pattern: '**/*.dtl' },
-			{ scheme: 'file', pattern: '**/*.fld' },
-			{ scheme: 'file', pattern: '**/*.sch' }
+			// Register for all common SWAT+ file extensions
+			{ scheme: 'file', pattern: '**/*.{hru,hyd,sol,lum,ini,sno,plt,dtl,fld,sch,aqu,cha,res,bsn,cli,prt,ops,pst,sft,cal}' }
 		],
 		fkDefinitionProvider
 	);
