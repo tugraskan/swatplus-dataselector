@@ -7,6 +7,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { SwatIndexer } from './indexer';
+import { pathStartsWith } from './pathUtils';
 
 /**
  * Calculate the character position of a column value in a whitespace-separated line
@@ -91,15 +92,9 @@ export class SwatFKDecorationProvider {
             return;
         }
         
-        // Normalize paths for cross-platform compatibility
-        // Use case-insensitive comparison on Windows where file system is case-insensitive
-        const normalizedDocPath = path.normalize(editor.document.fileName);
-        const normalizedTxtInOutPath = path.normalize(txtInOutPath);
-        const isWindows = process.platform === 'win32';
-        const docPathForComparison = isWindows ? normalizedDocPath.toLowerCase() : normalizedDocPath;
-        const txtInOutPathForComparison = isWindows ? normalizedTxtInOutPath.toLowerCase() : normalizedTxtInOutPath;
-        
-        if (!docPathForComparison.startsWith(txtInOutPathForComparison)) {
+        // Check if document is in the indexed folder
+        // Use platform-appropriate path comparison (case-insensitive on Windows)
+        if (!pathStartsWith(editor.document.fileName, txtInOutPath)) {
             return;
         }
 

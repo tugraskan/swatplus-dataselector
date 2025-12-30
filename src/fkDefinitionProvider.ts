@@ -8,6 +8,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { SwatIndexer } from './indexer';
+import { pathStartsWith } from './pathUtils';
 
 export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
     private outputChannel: vscode.OutputChannel;
@@ -50,17 +51,11 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
             return undefined;
         }
 
-        // Normalize paths for cross-platform compatibility
-        // Use case-insensitive comparison on Windows where file system is case-insensitive
-        const normalizedDocPath = path.normalize(document.fileName);
-        const normalizedTxtInOutPath = path.normalize(txtInOutPath);
-        const isWindows = process.platform === 'win32';
-        const docPathForComparison = isWindows ? normalizedDocPath.toLowerCase() : normalizedDocPath;
-        const txtInOutPathForComparison = isWindows ? normalizedTxtInOutPath.toLowerCase() : normalizedTxtInOutPath;
+        // Check if document is in the indexed folder
+        // Use platform-appropriate path comparison (case-insensitive on Windows)
+        this.outputChannel.appendLine(`[FK Definition] Checking if ${document.fileName} is in ${txtInOutPath}`);
         
-        this.outputChannel.appendLine(`[FK Definition] Checking if ${normalizedDocPath} is in ${normalizedTxtInOutPath}`);
-        
-        if (!docPathForComparison.startsWith(txtInOutPathForComparison)) {
+        if (!pathStartsWith(document.fileName, txtInOutPath)) {
             this.outputChannel.appendLine('[FK Definition] File not in indexed folder - skipping');
             return undefined;
         }
