@@ -60,16 +60,40 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
         const headers = headerLine.split(/\s+/);
 
         // Find which column the cursor is on
-        const lineUpToCursor = line.text.substring(0, position.character);
-        const valuesUpToCursor = lineUpToCursor.trim().split(/\s+/);
-        const columnIndex = valuesUpToCursor.length - 1;
+        // Use actual character position instead of parsing trimmed text
+        let columnIndex = -1;
+        let currentPos = 0;
+        
+        // Skip leading whitespace in the line
+        const trimmedLine = line.text.trimStart();
+        const leadingSpaces = line.text.length - trimmedLine.length;
+        
+        if (position.character < leadingSpaces) {
+            return undefined; // Cursor is in leading whitespace
+        }
+        
+        // Find which value the cursor is in
+        for (let i = 0; i < values.length; i++) {
+            const valueStart = line.text.indexOf(values[i], currentPos);
+            const valueEnd = valueStart + values[i].length;
+            
+            if (position.character >= valueStart && position.character <= valueEnd) {
+                columnIndex = i;
+                break;
+            }
+            
+            currentPos = valueEnd;
+        }
 
         if (columnIndex < 0 || columnIndex >= headers.length) {
+            console.log(`[FK Definition] Column index out of bounds: ${columnIndex}, headers.length: ${headers.length}`);
             return undefined;
         }
 
         const columnName = headers[columnIndex];
         const fkValue = values[columnIndex];
+        
+        console.log(`[FK Definition] columnIndex: ${columnIndex}, columnName: ${columnName}, fkValue: ${fkValue}`);
 
         // Check if this column is a FK
         const fkColumn = table.columns.find(
@@ -77,8 +101,11 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
         );
 
         if (!fkColumn || !fkColumn.fk_target) {
+            console.log(`[FK Definition] Not a FK column: ${columnName}`);
             return undefined;
         }
+        
+        console.log(`[FK Definition] FK column found: ${columnName} -> ${fkColumn.fk_target.table}`);
 
         // Look up the target row
         const targetRow = this.indexer.resolveFKTarget(
@@ -87,8 +114,11 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
         );
 
         if (!targetRow) {
+            console.log(`[FK Definition] Target row not found: table=${fkColumn.fk_target.table}, value=${fkValue}`);
             return undefined;
         }
+        
+        console.log(`[FK Definition] Target row found: ${targetRow.file}:${targetRow.lineNumber}`);
 
         // Create location pointing to target row
         const targetUri = vscode.Uri.file(targetRow.file);
