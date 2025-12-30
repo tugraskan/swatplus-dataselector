@@ -462,6 +462,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             color: white;
         }
 
+        #buildIndexBtn {
+            background-color: #7c3aed;
+            color: white;
+        }
+
         /* Selected dataset */
         .selected-dataset {
             background-color: var(--vscode-editor-background);
