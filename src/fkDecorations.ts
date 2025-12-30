@@ -81,19 +81,10 @@ export class SwatFKDecorationProvider {
             return;
         }
 
-        const datasetPath = this.indexer.getDatasetPath();
-        if (!datasetPath) {
-            return;
-        }
-
         // Get the indexed folder path and check if document is in it
         // Uses platform-appropriate path comparison (case-insensitive on Windows)
         const txtInOutPath = this.indexer.getTxtInOutPath();
-        if (!txtInOutPath) {
-            return;
-        }
-        
-        if (!pathStartsWith(editor.document.fileName, txtInOutPath)) {
+        if (!txtInOutPath || !pathStartsWith(editor.document.fileName, txtInOutPath)) {
             return;
         }
 
