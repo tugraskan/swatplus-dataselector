@@ -85,9 +85,17 @@ export class SwatFKDecorationProvider {
             return;
         }
 
-        // Check if document is in TxtInOut
-        const txtInOutPath = path.join(datasetPath, 'TxtInOut');
-        if (!editor.document.fileName.startsWith(txtInOutPath)) {
+        // Check if document is in the indexed folder
+        const txtInOutPath = this.indexer.getTxtInOutPath();
+        if (!txtInOutPath) {
+            return;
+        }
+        
+        // Normalize paths for cross-platform comparison (case-insensitive on Windows)
+        const normalizedDocPath = path.normalize(editor.document.fileName).toLowerCase();
+        const normalizedTxtInOutPath = path.normalize(txtInOutPath).toLowerCase();
+        
+        if (!normalizedDocPath.startsWith(normalizedTxtInOutPath)) {
             return;
         }
 

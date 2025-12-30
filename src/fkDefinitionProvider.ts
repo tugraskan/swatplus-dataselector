@@ -50,9 +50,9 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
             return undefined;
         }
 
-        // Normalize paths for cross-platform compatibility
-        const normalizedDocPath = path.normalize(document.fileName);
-        const normalizedTxtInOutPath = path.normalize(txtInOutPath);
+        // Normalize paths for cross-platform compatibility (case-insensitive on Windows)
+        const normalizedDocPath = path.normalize(document.fileName).toLowerCase();
+        const normalizedTxtInOutPath = path.normalize(txtInOutPath).toLowerCase();
         
         this.outputChannel.appendLine(`[FK Definition] Checking if ${normalizedDocPath} is in ${normalizedTxtInOutPath}`);
         
