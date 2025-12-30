@@ -33,8 +33,12 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
             return undefined;
         }
 
+        // Normalize paths for cross-platform compatibility
         const txtInOutPath = path.join(datasetPath, 'TxtInOut');
-        if (!document.fileName.startsWith(txtInOutPath)) {
+        const normalizedDocPath = path.normalize(document.fileName);
+        const normalizedTxtInOutPath = path.normalize(txtInOutPath);
+        
+        if (!normalizedDocPath.startsWith(normalizedTxtInOutPath)) {
             return undefined;
         }
 

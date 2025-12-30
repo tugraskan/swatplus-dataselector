@@ -15,7 +15,11 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onLanguage:plaintext",
+    "onCommand:swat-dataset-selector.buildIndex",
+    "onCommand:swat-dataset-selector.rebuildIndex"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
