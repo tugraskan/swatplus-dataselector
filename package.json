@@ -2,7 +2,7 @@
   "name": "swat-dataset-selector",
   "displayName": "SWAT+ Dataset Selector",
   "description": "Browse and select SWAT+ dataset folders for debugging",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "publisher": "taciugraskan",
   "repository": {
     "type": "git",
@@ -15,7 +15,11 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onLanguage:plaintext",
+    "onCommand:swat-dataset-selector.buildIndex",
+    "onCommand:swat-dataset-selector.rebuildIndex"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -52,6 +56,16 @@
         "command": "swat-dataset-selector.launchDebug",
         "title": "SWAT+: Debug with Selected Dataset",
         "icon": "$(debug-alt)"
+      },
+      {
+        "command": "swat-dataset-selector.buildIndex",
+        "title": "SWAT+: Build Inputs Index",
+        "icon": "$(database)"
+      },
+      {
+        "command": "swat-dataset-selector.rebuildIndex",
+        "title": "SWAT+: Rebuild Inputs Index",
+        "icon": "$(refresh)"
       }
     ]
   },

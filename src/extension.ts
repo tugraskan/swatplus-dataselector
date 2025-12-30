@@ -2,6 +2,10 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { SwatDatasetWebviewProvider } from './swatWebviewProvider';
+import { SwatIndexer } from './indexer';
+import { SwatFKDefinitionProvider } from './fkDefinitionProvider';
+import { SwatFKDiagnosticsProvider } from './fkDiagnostics';
+import { SwatFKDecorationProvider } from './fkDecorations';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -14,6 +18,32 @@ export function activate(context: vscode.ExtensionContext) {
 	const webviewViewProvider = vscode.window.registerWebviewViewProvider(
 		SwatDatasetWebviewProvider.viewType,
 		swatProvider
+	);
+
+	// Initialize indexer and FK features
+	const indexer = new SwatIndexer(context);
+	const fkDefinitionProvider = new SwatFKDefinitionProvider(indexer);
+	const fkDiagnostics = new SwatFKDiagnosticsProvider(indexer, context);
+	const fkDecorations = new SwatFKDecorationProvider(indexer, context);
+
+	// Register FK definition provider for SWAT+ files
+	// Use a more flexible document selector
+	const definitionProviderDisposable = vscode.languages.registerDefinitionProvider(
+		[
+			{ pattern: '**/TxtInOut/**' },
+			{ pattern: '**/TxtInOut/*' },
+			{ scheme: 'file', pattern: '**/*.hru' },
+			{ scheme: 'file', pattern: '**/*.hyd' },
+			{ scheme: 'file', pattern: '**/*.sol' },
+			{ scheme: 'file', pattern: '**/*.lum' },
+			{ scheme: 'file', pattern: '**/*.ini' },
+			{ scheme: 'file', pattern: '**/*.sno' },
+			{ scheme: 'file', pattern: '**/*.plt' },
+			{ scheme: 'file', pattern: '**/*.dtl' },
+			{ scheme: 'file', pattern: '**/*.fld' },
+			{ scheme: 'file', pattern: '**/*.sch' }
+		],
+		fkDefinitionProvider
 	);
 
 	// Command to select dataset folder
@@ -138,6 +168,37 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
+	// Command: Build Inputs Index (builds or rebuilds)
+	const buildIndex = vscode.commands.registerCommand('swat-dataset-selector.buildIndex', async () => {
+		const selectedPath = swatProvider.getSelectedDataset();
+		if (!selectedPath) {
+			vscode.window.showWarningMessage('Please select a SWAT+ dataset folder first.');
+			return;
+		}
+
+		const success = await indexer.buildIndex(selectedPath);
+		if (success) {
+			// Update diagnostics and decorations
+			fkDiagnostics.updateDiagnostics();
+			fkDecorations.refresh();
+		}
+	});
+
+	// Command: Rebuild Inputs Index
+	const rebuildIndex = vscode.commands.registerCommand('swat-dataset-selector.rebuildIndex', async () => {
+		if (!indexer.isIndexBuilt()) {
+			vscode.window.showWarningMessage('No index exists yet. Use "Build Index" first.');
+			return;
+		}
+
+		const success = await indexer.rebuildIndex();
+		if (success) {
+			// Update diagnostics and decorations
+			fkDiagnostics.updateDiagnostics();
+			fkDecorations.refresh();
+		}
+	});
+
 	// Debug helper: seed test data so the webview shows content for troubleshooting
 	const seedTestData = vscode.commands.registerCommand('swat-dataset-selector.seedTestData', async () => {
 		try {
@@ -157,16 +218,19 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(
 		webviewViewProvider,
+		definitionProviderDisposable,
 		selectDataset,
 		selectAndDebug,
 		launchWithSelected,
 		datasetFolderProvider,
 		selectRecentDataset,
-		showDatasetInfo
-		,openFile
-		,closeFile
-		,closeAllDatasetFiles
-		,seedTestData
+		showDatasetInfo,
+		openFile,
+		closeFile,
+		closeAllDatasetFiles,
+		buildIndex,
+		rebuildIndex,
+		seedTestData
 	);
 }
 
