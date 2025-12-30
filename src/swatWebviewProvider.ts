@@ -7,7 +7,7 @@ import * as fs from 'fs';
  * Escapes HTML special characters to prevent XSS attacks
  */
 function escapeHtml(text: string): string {
-    const s = text == null ? '' : String(text);
+    const s = text === null || text === undefined ? '' : String(text);
     const map: { [key: string]: string } = {
         '&': '&amp;',
         '<': '&lt;',
@@ -19,7 +19,7 @@ function escapeHtml(text: string): string {
 }
 
 function normalizeToPath(value: any): string | undefined {
-    if (value == null) {return undefined;}
+    if (value === null || value === undefined) {return undefined;}
     if (typeof value === 'string') {return value;}
     if (typeof value === 'object') {
         if (typeof (value as any).path === 'string') {return (value as any).path;}
@@ -209,6 +209,12 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         <div class="selected-window-path-scroll" title="${escapeHtml(this.selectedDataset)}">
                             <div class="dataset-header-path">${escapeHtml(this.selectedDataset)}</div>
                         </div>
+                        <div class="selected-window-actions">
+                            <button class="action-button primary" id="buildIndexBtn">
+                                ${svgs.database}
+                                Build Index
+                            </button>
+                        </div>
                         <div class="selected-window-body">
                             <div class="section-content" id="selected-files-content">
                                 <div class="no-dataset">
@@ -255,6 +261,12 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         <!-- Dedicated horizontal scroller for the full dataset path -->
                         <div class="selected-window-path-scroll" title="${escapeHtml(this.selectedDataset)}">
                             <div class="dataset-header-path">${escapeHtml(this.selectedDataset)}</div>
+                        </div>
+                        <div class="selected-window-actions">
+                            <button class="action-button primary" id="buildIndexBtn">
+                                ${svgs.database}
+                                Build Index
+                            </button>
                         </div>
                         <div class="selected-window-body">
                             <div class="section-content" id="selected-files-content">
@@ -462,6 +474,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             color: white;
         }
 
+        #buildIndexBtn {
+            background-color: #7c3aed;
+            color: white;
+        }
+
         /* Selected dataset */
         .selected-dataset {
             background-color: var(--vscode-editor-background);
@@ -553,6 +570,16 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             display: inline-block;
             min-width: 100%;
             white-space: nowrap;
+        }
+
+        .selected-window-actions {
+            padding: 10px;
+            background-color: var(--vscode-editor-background);
+            border-bottom: 1px solid var(--vscode-panel-border);
+        }
+
+        .selected-window-actions .action-button {
+            width: 100%;
         }
 
         .dataset-header-name {
@@ -872,10 +899,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     Debug
                 </button>
             </div>
-            <button class="action-button primary${!this.selectedDataset ? ' disabled' : ''}" id="buildIndexBtn" ${!this.selectedDataset ? 'disabled' : ''}>
-                ${svgs.database}
-                Build Inputs Index
-            </button>
         </div>
 
         <div class="divider"></div>

@@ -16,6 +16,8 @@ This extension provides the following commands:
 - `SWAT+: Select Dataset Folder` - Browse and select a dataset folder (saves selection for later use)
 - `SWAT+: Select Dataset and Debug` - Browse for a dataset folder and immediately launch debug session
 - `SWAT+: Debug with Selected Dataset` - Launch debug with previously selected dataset folder
+- `SWAT+: Build Inputs Index` - Build an index of all SWAT+ input files in the selected dataset
+- `SWAT+: Rebuild Inputs Index` - Rebuild the index for the currently selected dataset
 
 ## Usage
 
@@ -32,6 +34,13 @@ This extension provides the following commands:
 2. Run `SWAT+: Select Dataset Folder`
 3. Browse to your SWAT+ dataset folder
 4. Later, run `SWAT+: Debug with Selected Dataset` to launch debug with the selected folder
+
+### Method 3: Using the Dataset Selector View
+
+1. Open the SWAT+ Dataset view in the activity bar (left sidebar)
+2. Click "Select Folder" to choose your dataset folder
+3. Use the "Debug" button to launch a debug session
+4. Use the "Build Index" button to index all SWAT+ input files in the dataset
 
 ## How It Works
 
