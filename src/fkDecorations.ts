@@ -19,6 +19,13 @@ function calculateColumnPosition(lineText: string, values: string[], columnIndex
     // Find the actual position of the value at columnIndex in the original line
     for (let i = 0; i <= columnIndex && i < values.length; i++) {
         const valueStart = lineText.indexOf(values[i], currentPos);
+        
+        // Handle case where value is not found (should not happen in normal cases)
+        if (valueStart === -1) {
+            // Fallback: return position 0
+            return { start: 0, end: 0 };
+        }
+        
         if (i === columnIndex) {
             return {
                 start: valueStart,
