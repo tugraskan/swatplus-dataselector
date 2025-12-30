@@ -24,7 +24,12 @@ export function normalizePathForComparison(filePath: string): string {
  */
 export function pathStartsWith(fullPath: string, prefixPath: string): boolean {
     const normalizedFull = normalizePathForComparison(fullPath);
-    const normalizedPrefix = normalizePathForComparison(prefixPath);
+    let normalizedPrefix = normalizePathForComparison(prefixPath);
+    
+    // Remove trailing separator from prefix for consistent comparison
+    if (normalizedPrefix.endsWith(path.sep)) {
+        normalizedPrefix = normalizedPrefix.slice(0, -1);
+    }
     
     if (!normalizedFull.startsWith(normalizedPrefix)) {
         return false;
@@ -37,5 +42,5 @@ export function pathStartsWith(fullPath: string, prefixPath: string): boolean {
     }
     
     const charAfterPrefix = normalizedFull.charAt(normalizedPrefix.length);
-    return charAfterPrefix === path.sep || charAfterPrefix === '/';
+    return charAfterPrefix === path.sep;
 }
