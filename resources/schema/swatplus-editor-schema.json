@@ -3284,8 +3284,8 @@
           "is_foreign_key": false
         },
         {
-          "name": "init",
-          "db_column": "init",
+          "name": "cha_ini",
+          "db_column": "cha_ini",
           "type": "ForeignKeyField",
           "nullable": true,
           "is_primary_key": false,
@@ -3296,8 +3296,8 @@
           }
         },
         {
-          "name": "hyd",
-          "db_column": "hyd",
+          "name": "cha_hyd",
+          "db_column": "cha_hyd",
           "type": "ForeignKeyField",
           "nullable": true,
           "is_primary_key": false,
@@ -3308,8 +3308,8 @@
           }
         },
         {
-          "name": "sed",
-          "db_column": "sed",
+          "name": "cha_sed",
+          "db_column": "cha_sed",
           "type": "ForeignKeyField",
           "nullable": true,
           "is_primary_key": false,
@@ -3320,8 +3320,8 @@
           }
         },
         {
-          "name": "nut",
-          "db_column": "nut",
+          "name": "cha_nut",
+          "db_column": "cha_nut",
           "type": "ForeignKeyField",
           "nullable": true,
           "is_primary_key": false,
@@ -3345,32 +3345,32 @@
       ],
       "foreign_keys": [
         {
-          "column": "init",
-          "db_column": "init_id",
+          "column": "cha_ini",
+          "db_column": "cha_ini_id",
           "references": {
             "table": "initial_cha",
             "column": "id"
           }
         },
         {
-          "column": "hyd",
-          "db_column": "hyd_id",
+          "column": "cha_hyd",
+          "db_column": "cha_hyd_id",
           "references": {
             "table": "hyd_sed_lte_cha",
             "column": "id"
           }
         },
         {
-          "column": "sed",
-          "db_column": "sed_id",
+          "column": "cha_sed",
+          "db_column": "cha_sed_id",
           "references": {
             "table": "sediment_cha",
             "column": "id"
           }
         },
         {
-          "column": "nut",
-          "db_column": "nut_id",
+          "column": "cha_nut",
+          "db_column": "cha_nut_id",
           "references": {
             "table": "nutrients_cha",
             "column": "id"
