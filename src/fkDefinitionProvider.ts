@@ -50,13 +50,17 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
             return undefined;
         }
 
-        // Normalize paths for cross-platform compatibility (case-insensitive on Windows)
-        const normalizedDocPath = path.normalize(document.fileName).toLowerCase();
-        const normalizedTxtInOutPath = path.normalize(txtInOutPath).toLowerCase();
+        // Normalize paths for cross-platform compatibility
+        // Use case-insensitive comparison on Windows where file system is case-insensitive
+        const normalizedDocPath = path.normalize(document.fileName);
+        const normalizedTxtInOutPath = path.normalize(txtInOutPath);
+        const isWindows = process.platform === 'win32';
+        const docPathForComparison = isWindows ? normalizedDocPath.toLowerCase() : normalizedDocPath;
+        const txtInOutPathForComparison = isWindows ? normalizedTxtInOutPath.toLowerCase() : normalizedTxtInOutPath;
         
         this.outputChannel.appendLine(`[FK Definition] Checking if ${normalizedDocPath} is in ${normalizedTxtInOutPath}`);
         
-        if (!normalizedDocPath.startsWith(normalizedTxtInOutPath)) {
+        if (!docPathForComparison.startsWith(txtInOutPathForComparison)) {
             this.outputChannel.appendLine('[FK Definition] File not in indexed folder - skipping');
             return undefined;
         }

@@ -91,11 +91,15 @@ export class SwatFKDecorationProvider {
             return;
         }
         
-        // Normalize paths for cross-platform comparison (case-insensitive on Windows)
-        const normalizedDocPath = path.normalize(editor.document.fileName).toLowerCase();
-        const normalizedTxtInOutPath = path.normalize(txtInOutPath).toLowerCase();
+        // Normalize paths for cross-platform compatibility
+        // Use case-insensitive comparison on Windows where file system is case-insensitive
+        const normalizedDocPath = path.normalize(editor.document.fileName);
+        const normalizedTxtInOutPath = path.normalize(txtInOutPath);
+        const isWindows = process.platform === 'win32';
+        const docPathForComparison = isWindows ? normalizedDocPath.toLowerCase() : normalizedDocPath;
+        const txtInOutPathForComparison = isWindows ? normalizedTxtInOutPath.toLowerCase() : normalizedTxtInOutPath;
         
-        if (!normalizedDocPath.startsWith(normalizedTxtInOutPath)) {
+        if (!docPathForComparison.startsWith(txtInOutPathForComparison)) {
             return;
         }
 
