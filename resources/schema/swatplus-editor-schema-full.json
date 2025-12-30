@@ -3386,7 +3386,7 @@
       "source_file": "project/climate.py",
       "has_metadata_line": true,
       "has_header_line": true,
-      "data_starts_after": 2,
+      "data_starts_after": 1,
       "columns": [
         {
           "name": "id",
