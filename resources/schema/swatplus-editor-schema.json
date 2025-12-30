@@ -4694,7 +4694,7 @@
           "is_primary_key": false,
           "is_foreign_key": true,
           "fk_target": {
-            "table": "rout_unit_con",
+            "table": "rout_unit_rtu",
             "column": "id"
           }
         },
@@ -4743,7 +4743,7 @@
           "column": "rtu",
           "db_column": "rtu_id",
           "references": {
-            "table": "rout_unit_con",
+            "table": "rout_unit_rtu",
             "column": "id"
           }
         },
