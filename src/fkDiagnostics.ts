@@ -44,10 +44,14 @@ export class SwatFKDiagnosticsProvider {
 
             // Create diagnostic for this unresolved FK
             const line = ref.sourceLine - 1; // Convert to 0-based
+            
+            // Get the file name for the target table (for better UX)
+            const targetFileName = this.indexer.getFileNameForTable(ref.targetTable) || ref.targetTable;
+            
             const diagnostic = new vscode.Diagnostic(
                 new vscode.Range(line, 0, line, 1000),
                 `Unresolved foreign key: ${ref.sourceColumn} = "${ref.fkValue}" ` +
-                `(expected in ${ref.targetTable})`,
+                `(expected in ${targetFileName})`,
                 vscode.DiagnosticSeverity.Warning
             );
 

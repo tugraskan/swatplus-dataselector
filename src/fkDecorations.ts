@@ -156,11 +156,14 @@ export class SwatFKDecorationProvider {
                     pos.end
                 );
 
+                // Get the file name for the target table (for better UX)
+                const targetFileName = this.indexer.getFileNameForTable(fkRef.targetTable) || fkRef.targetTable;
+
                 const decoration: vscode.DecorationOptions = {
                     range,
                     hoverMessage: fkRef.resolved
-                        ? `FK → ${fkRef.targetTable}: ${fkRef.fkValue}`
-                        : `⚠️ Unresolved FK: ${fkRef.fkValue} not found in ${fkRef.targetTable}`
+                        ? `FK → ${targetFileName}: ${fkRef.fkValue}`
+                        : `⚠️ Unresolved FK: ${fkRef.fkValue} not found in ${targetFileName}`
                 };
 
                 if (fkRef.resolved) {

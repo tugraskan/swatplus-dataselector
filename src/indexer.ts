@@ -82,6 +82,7 @@ export class SwatIndexer {
     private fkReferences: FKReference[] = [];
     private datasetPath: string | null = null;
     private txtInOutPath: string | null = null;
+    private tableToFileMap: Map<string, string> = new Map(); // table_name -> file_name
 
     constructor(private context: vscode.ExtensionContext) {
         this.loadSchema();
@@ -103,6 +104,13 @@ export class SwatIndexer {
 
             const schemaContent = fs.readFileSync(schemaPath, 'utf-8');
             this.schema = JSON.parse(schemaContent);
+            
+            // Build table name to file name mapping
+            if (this.schema) {
+                for (const [fileName, tableInfo] of Object.entries(this.schema.tables)) {
+                    this.tableToFileMap.set(tableInfo.table_name, fileName);
+                }
+            }
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to load SWAT+ schema: ${error}`);
         }
@@ -329,6 +337,13 @@ export class SwatIndexer {
      */
     public getSchema(): Schema | null {
         return this.schema;
+    }
+
+    /**
+     * Get file name for a table name
+     */
+    public getFileNameForTable(tableName: string): string | undefined {
+        return this.tableToFileMap.get(tableName);
     }
 
     /**
