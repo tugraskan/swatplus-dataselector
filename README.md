@@ -7,6 +7,7 @@ A VS Code extension for SWAT+ development that allows you to browse and select d
 - **Select Dataset Folder**: Browse and select a SWAT+ dataset folder
 - **Quick Debug Launch**: Select a dataset folder and immediately start debugging
 - **Seamless Integration**: Works with CMake Tools and gdb debugger configurations
+- **Comprehensive Schema**: Auto-generated schema for all 213 SWAT+ input tables from swatplus-editor
 
 ## Commands
 
@@ -42,11 +43,59 @@ The extension dynamically launches a debug session with:
 
 This replaces the need to manually edit `launch.json` and change the `cwd` parameter each time you want to debug with a different dataset.
 
+## SWAT+ Schema Extraction
+
+This extension includes a powerful schema extraction system that automatically discovers all model classes from the swatplus-editor repository.
+
+### Quick Start
+
+```bash
+# 1. Clone swatplus-editor
+git clone https://github.com/swat-model/swatplus-editor.git /tmp/swatplus-editor
+
+# 2. Run extraction
+python3 scripts/extract_all_models.py
+
+# 3. Result: resources/schema/swatplus-editor-schema-full.json
+#    - 256 models discovered
+#    - 213 unique tables mapped
+#    - 566KB comprehensive schema
+```
+
+### What Gets Extracted
+
+The script automatically scans all Peewee ORM models in swatplus-editor and extracts:
+- **Table definitions**: All 213 input file tables
+- **Column metadata**: Names, types, nullability
+- **Foreign key relationships**: All FK references
+- **Primary keys**: Auto-detected or explicit
+
+### Update When SWAT Editor Changes
+
+No code changes needed! Just re-run the extraction:
+
+```bash
+cd /tmp/swatplus-editor && git pull
+python3 scripts/extract_all_models.py
+```
+
+The schema automatically picks up new tables, columns, and relationships.
+
+### Comparison: Old vs New
+
+| Approach | Tables | Maintainability |
+|----------|--------|-----------------|
+| **Old** (PR #13) | 13 hardcoded MVP tables | ❌ Manual updates required |
+| **New** (This PR) | 213 auto-discovered tables | ✅ Fully automatic |
+
+See [scripts/README.md](scripts/README.md) for complete documentation.
+
 ## Requirements
 
 - CMake Tools extension (for `cmake.launchTargetPath` command)
 - C/C++ extension (for gdb debugging)
 - Properly configured CMake project
+- Python 3.6+ (for schema extraction)
 
 ## Extension Settings
 
