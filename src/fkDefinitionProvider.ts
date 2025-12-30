@@ -10,26 +10,36 @@ import * as path from 'path';
 import { SwatIndexer } from './indexer';
 
 export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
-    constructor(private indexer: SwatIndexer) {}
+    private outputChannel: vscode.OutputChannel;
+    
+    constructor(private indexer: SwatIndexer) {
+        this.outputChannel = vscode.window.createOutputChannel('SWAT+ FK Navigation');
+    }
 
     public async provideDefinition(
         document: vscode.TextDocument,
         position: vscode.Position,
         token: vscode.CancellationToken
     ): Promise<vscode.Definition | undefined> {
+        this.outputChannel.appendLine(`\n[FK Definition] Triggered at ${document.fileName}:${position.line}:${position.character}`);
+        
         // Only provide definitions if index is built
         if (!this.indexer.isIndexBuilt()) {
+            this.outputChannel.appendLine('[FK Definition] Index not built - skipping');
+            vscode.window.showWarningMessage('Please build the SWAT+ inputs index first (Command: SWAT+: Build Inputs Index)');
             return undefined;
         }
 
         const schema = this.indexer.getSchema();
         if (!schema) {
+            this.outputChannel.appendLine('[FK Definition] Schema not loaded');
             return undefined;
         }
 
         // Check if document is in TxtInOut
         const datasetPath = this.indexer.getDatasetPath();
         if (!datasetPath) {
+            this.outputChannel.appendLine('[FK Definition] No dataset path set');
             return undefined;
         }
 
@@ -38,14 +48,19 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
         const normalizedDocPath = path.normalize(document.fileName);
         const normalizedTxtInOutPath = path.normalize(txtInOutPath);
         
+        this.outputChannel.appendLine(`[FK Definition] Checking if ${normalizedDocPath} is in ${normalizedTxtInOutPath}`);
+        
         if (!normalizedDocPath.startsWith(normalizedTxtInOutPath)) {
+            this.outputChannel.appendLine('[FK Definition] File not in TxtInOut folder - skipping');
             return undefined;
         }
 
         // Get the file's schema table
         const fileName = path.basename(document.fileName);
+        this.outputChannel.appendLine(`[FK Definition] File: ${fileName}`);
         const table = schema.tables[fileName];
         if (!table) {
+            this.outputChannel.appendLine(`[FK Definition] No schema found for file: ${fileName}`);
             return undefined;
         }
 
@@ -86,14 +101,14 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
         }
 
         if (columnIndex < 0 || columnIndex >= headers.length) {
-            console.log(`[FK Definition] Column index out of bounds: ${columnIndex}, headers.length: ${headers.length}`);
+            this.outputChannel.appendLine(`[FK Definition] Column index out of bounds: ${columnIndex}, headers.length: ${headers.length}`);
             return undefined;
         }
 
         const columnName = headers[columnIndex];
         const fkValue = values[columnIndex];
         
-        console.log(`[FK Definition] columnIndex: ${columnIndex}, columnName: ${columnName}, fkValue: ${fkValue}`);
+        this.outputChannel.appendLine(`[FK Definition] columnIndex: ${columnIndex}, columnName: ${columnName}, fkValue: ${fkValue}`);
 
         // Check if this column is a FK
         const fkColumn = table.columns.find(
@@ -101,11 +116,11 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
         );
 
         if (!fkColumn || !fkColumn.fk_target) {
-            console.log(`[FK Definition] Not a FK column: ${columnName}`);
+            this.outputChannel.appendLine(`[FK Definition] Not a FK column: ${columnName}`);
             return undefined;
         }
         
-        console.log(`[FK Definition] FK column found: ${columnName} -> ${fkColumn.fk_target.table}`);
+        this.outputChannel.appendLine(`[FK Definition] FK column found: ${columnName} -> ${fkColumn.fk_target.table}`);
 
         // Look up the target row
         const targetRow = this.indexer.resolveFKTarget(
@@ -114,11 +129,13 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
         );
 
         if (!targetRow) {
-            console.log(`[FK Definition] Target row not found: table=${fkColumn.fk_target.table}, value=${fkValue}`);
+            this.outputChannel.appendLine(`[FK Definition] Target row not found: table=${fkColumn.fk_target.table}, value=${fkValue}`);
+            this.outputChannel.show(true); // Show the output channel
             return undefined;
         }
         
-        console.log(`[FK Definition] Target row found: ${targetRow.file}:${targetRow.lineNumber}`);
+        this.outputChannel.appendLine(`[FK Definition] Target row found: ${targetRow.file}:${targetRow.lineNumber}`);
+        this.outputChannel.appendLine('[FK Definition] Success - navigating to target\n');
 
         // Create location pointing to target row
         const targetUri = vscode.Uri.file(targetRow.file);
