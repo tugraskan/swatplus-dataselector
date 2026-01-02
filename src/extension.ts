@@ -6,6 +6,7 @@ import { SwatIndexer } from './indexer';
 import { SwatFKDefinitionProvider } from './fkDefinitionProvider';
 import { SwatFKDiagnosticsProvider } from './fkDiagnostics';
 import { SwatFKDecorationProvider } from './fkDecorations';
+import { SwatFKHoverProvider } from './fkHoverProvider';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -23,6 +24,7 @@ export function activate(context: vscode.ExtensionContext) {
 	// Initialize indexer and FK features
 	const indexer = new SwatIndexer(context);
 	const fkDefinitionProvider = new SwatFKDefinitionProvider(indexer);
+	const fkHoverProvider = new SwatFKHoverProvider(indexer);
 	const fkDiagnostics = new SwatFKDiagnosticsProvider(indexer, context);
 	const fkDecorations = new SwatFKDecorationProvider(indexer, context);
 
@@ -42,6 +44,12 @@ export function activate(context: vscode.ExtensionContext) {
 	const definitionProviderDisposable = vscode.languages.registerDefinitionProvider(
 		documentSelectors,
 		fkDefinitionProvider
+	);
+
+	// Register FK hover provider
+	const hoverProviderDisposable = vscode.languages.registerHoverProvider(
+		documentSelectors,
+		fkHoverProvider
 	);
 
 	// Command to select dataset folder
@@ -217,6 +225,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		webviewViewProvider,
 		definitionProviderDisposable,
+		hoverProviderDisposable,
 		selectDataset,
 		selectAndDebug,
 		launchWithSelected,

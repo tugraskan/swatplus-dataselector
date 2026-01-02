@@ -101,6 +101,7 @@ export class SwatIndexer {
     private metadata: TxtInOutMetadata | null = null;
     private index: Map<string, Map<string, IndexedRow>> = new Map(); // table -> pk_value -> row
     private fkReferences: FKReference[] = [];
+    private reverseIndex: Map<string, FKReference[]> = new Map(); // target_table:pk_value -> FK references
     private datasetPath: string | null = null;
     private txtInOutPath: string | null = null;
     private tableToFileMap: Map<string, string> = new Map(); // table_name -> file_name
@@ -203,6 +204,7 @@ export class SwatIndexer {
         // Clear existing index
         this.index.clear();
         this.fkReferences = [];
+        this.reverseIndex.clear();
 
         // Show progress
         return vscode.window.withProgress({
@@ -342,9 +344,12 @@ export class SwatIndexer {
     }
 
     /**
-     * Resolve FK references by looking up target rows
+     * Resolve FK references by looking up target rows and build reverse index
      */
     private resolveFKReferences(): void {
+        // Clear reverse index
+        this.reverseIndex.clear();
+        
         for (const fkRef of this.fkReferences) {
             const targetTableIndex = this.index.get(fkRef.targetTable);
             if (targetTableIndex) {
@@ -352,6 +357,13 @@ export class SwatIndexer {
                 if (targetRow) {
                     fkRef.resolved = true;
                     fkRef.targetRow = targetRow;
+                    
+                    // Build reverse index: target_table:pk_value -> FK references
+                    const reverseKey = `${fkRef.targetTable}:${fkRef.fkValue}`;
+                    if (!this.reverseIndex.has(reverseKey)) {
+                        this.reverseIndex.set(reverseKey, []);
+                    }
+                    this.reverseIndex.get(reverseKey)!.push(fkRef);
                 }
             }
         }
@@ -461,5 +473,47 @@ export class SwatIndexer {
      */
     public getMetadata(): TxtInOutMetadata | null {
         return this.metadata;
+    }
+
+    /**
+     * Get all FK references that point to a specific row
+     * (reverse lookup - find what references this row)
+     */
+    public getReferencesToRow(tableName: string, pkValue: string): FKReference[] {
+        const reverseKey = `${tableName}:${pkValue}`;
+        return this.reverseIndex.get(reverseKey) || [];
+    }
+
+    /**
+     * Get all FK references from a specific file
+     */
+    public getFKReferencesFromFile(filePath: string): FKReference[] {
+        return this.fkReferences.filter(ref => ref.sourceFile === filePath);
+    }
+
+    /**
+     * Get statistics about the index
+     */
+    public getIndexStats(): {
+        tableCount: number;
+        rowCount: number;
+        fkCount: number;
+        resolvedFkCount: number;
+        unresolvedFkCount: number;
+    } {
+        let rowCount = 0;
+        for (const tableIndex of this.index.values()) {
+            rowCount += tableIndex.size;
+        }
+        
+        const resolvedCount = this.fkReferences.filter(ref => ref.resolved).length;
+        
+        return {
+            tableCount: this.index.size,
+            rowCount,
+            fkCount: this.fkReferences.length,
+            resolvedFkCount: resolvedCount,
+            unresolvedFkCount: this.fkReferences.length - resolvedCount
+        };
     }
 }

@@ -48,10 +48,14 @@ export class SwatFKDiagnosticsProvider {
             // Get the file name for the target table (for better UX)
             const targetFileName = this.indexer.getFileNameForTable(ref.targetTable) || ref.targetTable;
             
+            // Get file purpose from metadata for additional context
+            const filePurpose = this.indexer.getFilePurpose(targetFileName);
+            const purposeText = filePurpose ? ` (${filePurpose})` : '';
+            
             const diagnostic = new vscode.Diagnostic(
                 new vscode.Range(line, 0, line, 1000),
                 `Unresolved foreign key: ${ref.sourceColumn} = "${ref.fkValue}" ` +
-                `(expected in ${targetFileName})`,
+                `(expected in ${targetFileName}${purposeText})`,
                 vscode.DiagnosticSeverity.Warning
             );
 
