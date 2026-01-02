@@ -330,20 +330,44 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                             return 'databases';
                         }
                         
-                        // Default to 'other' for inputs not matching any category
-                        return 'other';
+                        // Default to 'output' for files not matching any input category
+                        return 'output';
                     };
                     
-                    // Separate inputs and outputs
-                    const inputEntries = entries.filter(ent => {
-                        if (ent.isDirectory()) {return true;}
-                        return categorizeFile(ent.name) !== 'output';
-                    });
+                    // Helper function to get categories contained in a directory
+                    const getDirCategories = (dirPath: string): string[] => {
+                        try {
+                            const dirEntries = fs.readdirSync(dirPath, { withFileTypes: true });
+                            const categories = new Set<string>();
+                            
+                            for (const entry of dirEntries) {
+                                if (!entry.isDirectory()) {
+                                    const cat = categorizeFile(entry.name);
+                                    if (cat !== 'output') {
+                                        categories.add(cat);
+                                    }
+                                }
+                            }
+                            
+                            return Array.from(categories);
+                        } catch (e) {
+                            return [];
+                        }
+                    };
                     
-                    const outputEntries = entries.filter(ent => {
-                        if (ent.isDirectory()) {return false;}
-                        return categorizeFile(ent.name) === 'output';
-                    });
+                    // Get all subdirectories
+                    const subdirs = entries.filter(ent => ent.isDirectory());
+                    
+                    // Separate inputs and outputs (both should have subdirs at the top)
+                    const inputEntries = [
+                        ...subdirs,  // Subdirectories at the top
+                        ...entries.filter(ent => !ent.isDirectory() && categorizeFile(ent.name) !== 'output')
+                    ];
+                    
+                    const outputEntries = [
+                        ...subdirs,  // Subdirectories at the top
+                        ...entries.filter(ent => !ent.isDirectory() && categorizeFile(ent.name) === 'output')
+                    ];
                     
                     // Add back button if in subdirectory
                     let backButtonHtml = '';
@@ -364,8 +388,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         const icon = ent.isDirectory() ? svgs.folder : svgs.file;
                         const ext = path.extname(ent.name).toLowerCase();
                         const category = ent.isDirectory() ? 'directory' : categorizeFile(ent.name);
+                        const dirCategories = ent.isDirectory() ? getDirCategories(full).join(',') : '';
                         return `
-                            <div class="txt-item" data-path="${escapeHtml(full)}" data-ext="${escapeHtml(ext)}" data-category="${escapeHtml(category)}" data-isdir="${ent.isDirectory()}">
+                            <div class="txt-item" data-path="${escapeHtml(full)}" data-ext="${escapeHtml(ext)}" data-category="${escapeHtml(category)}" data-isdir="${ent.isDirectory()}" data-dir-categories="${escapeHtml(dirCategories)}">
                                 <button class="icon-button txt-close-btn" data-path="${escapeHtml(full)}" title="Close file">
                                     ${svgs.close}
                                 </button>
@@ -377,13 +402,14 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         `;
                     }).join('');
                     
-                    // Generate HTML for outputs
+                    // Generate HTML for outputs (including subdirectories)
                     const outputsHtml = outputEntries.map(ent => {
                         const full = path.join(viewingDirectory || '', ent.name);
-                        const icon = svgs.file;
+                        const icon = ent.isDirectory() ? svgs.folder : svgs.file;
                         const ext = path.extname(ent.name).toLowerCase();
+                        const category = ent.isDirectory() ? 'directory' : 'output';
                         return `
-                            <div class="txt-item output-item" data-path="${escapeHtml(full)}" data-ext="${escapeHtml(ext)}" data-category="output">
+                            <div class="txt-item output-item" data-path="${escapeHtml(full)}" data-ext="${escapeHtml(ext)}" data-category="${escapeHtml(category)}" data-isdir="${ent.isDirectory()}">
                                 <button class="icon-button txt-close-btn" data-path="${escapeHtml(full)}" title="Close file">
                                     ${svgs.close}
                                 </button>
@@ -426,7 +452,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                             <div class="section-header collapsible" data-section="inputs">
                                 ${svgs.chevronDown}
                                 <span class="section-title">📥 Inputs</span>
-                                <span class="badge">${inputEntries.length}</span>
+                                <span class="badge" id="inputs-badge">${inputEntries.length}</span>
                             </div>
                             <div class="selected-window-body" id="inputs-content">
                                 <div class="section-content" id="selected-files-content">
@@ -434,18 +460,18 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                     ${inputsHtml}
                                 </div>
                                 <div class="filter-toolbar" id="selected-filter-toolbar">
-                                    <label><input type="checkbox" id="filter-simulation" class="filter-checkbox" data-cat="simulation"> ⚙️ Simulation Control</label>
-                                    <label><input type="checkbox" id="filter-climate" class="filter-checkbox" data-cat="climate"> 🌤️ Climate</label>
-                                    <label><input type="checkbox" id="filter-spatial" class="filter-checkbox" data-cat="spatial"> 🗺️ Spatial Objects</label>
-                                    <label><input type="checkbox" id="filter-land" class="filter-checkbox" data-cat="land"> 🏔️ Land Properties</label>
-                                    <label><input type="checkbox" id="filter-landuse" class="filter-checkbox" data-cat="landuse"> 🌾 Land Use & Management</label>
-                                    <label><input type="checkbox" id="filter-operations" class="filter-checkbox" data-cat="operations"> 🚜 Operations & Practices</label>
-                                    <label><input type="checkbox" id="filter-waterbodies" class="filter-checkbox" data-cat="waterbodies"> 🏞️ Water Bodies</label>
-                                    <label><input type="checkbox" id="filter-channels" class="filter-checkbox" data-cat="channels"> 〰️ Channels</label>
-                                    <label><input type="checkbox" id="filter-groundwater" class="filter-checkbox" data-cat="groundwater"> 💧 Groundwater</label>
-                                    <label><input type="checkbox" id="filter-connectivity" class="filter-checkbox" data-cat="connectivity"> 🔗 Connectivity</label>
-                                    <label><input type="checkbox" id="filter-initialization" class="filter-checkbox" data-cat="initialization"> 🔢 Initialization Files</label>
-                                    <label><input type="checkbox" id="filter-databases" class="filter-checkbox" data-cat="databases"> 📚 Databases</label>
+                                    <label><input type="checkbox" id="filter-simulation" class="filter-checkbox" data-cat="simulation" checked> ⚙️ Simulation Control</label>
+                                    <label><input type="checkbox" id="filter-climate" class="filter-checkbox" data-cat="climate" checked> 🌤️ Climate</label>
+                                    <label><input type="checkbox" id="filter-spatial" class="filter-checkbox" data-cat="spatial" checked> 🗺️ Spatial Objects</label>
+                                    <label><input type="checkbox" id="filter-land" class="filter-checkbox" data-cat="land" checked> 🏔️ Land Properties</label>
+                                    <label><input type="checkbox" id="filter-landuse" class="filter-checkbox" data-cat="landuse" checked> 🌾 Land Use & Management</label>
+                                    <label><input type="checkbox" id="filter-operations" class="filter-checkbox" data-cat="operations" checked> 🚜 Operations & Practices</label>
+                                    <label><input type="checkbox" id="filter-waterbodies" class="filter-checkbox" data-cat="waterbodies" checked> 🏞️ Water Bodies</label>
+                                    <label><input type="checkbox" id="filter-channels" class="filter-checkbox" data-cat="channels" checked> 〰️ Channels</label>
+                                    <label><input type="checkbox" id="filter-groundwater" class="filter-checkbox" data-cat="groundwater" checked> 💧 Groundwater</label>
+                                    <label><input type="checkbox" id="filter-connectivity" class="filter-checkbox" data-cat="connectivity" checked> 🔗 Connectivity</label>
+                                    <label><input type="checkbox" id="filter-initialization" class="filter-checkbox" data-cat="initialization" checked> 🔢 Initialization Files</label>
+                                    <label><input type="checkbox" id="filter-databases" class="filter-checkbox" data-cat="databases" checked> 📚 Databases</label>
                                 </div>
                             </div>
                         </div>
@@ -1382,20 +1408,50 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
                 function applyFilter() {
                     const activeCats = checkboxes.filter(cb => cb.checked).map(cb => cb.dataset.cat);
+                    let visibleCount = 0;
 
-                    document.querySelectorAll('.txt-item:not(.output-item)').forEach(it => {
+                    document.querySelectorAll('.txt-item:not(.output-item):not(.back-item)').forEach(it => {
                         const item = it;
                         const category = item.dataset.category || '';
                         const isDir = item.dataset.isdir === 'true';
                         
-                        if (activeCats.length === 0) {
-                            // no specific categories selected -> show all
-                            item.style.display = '';
+                        let shouldShow = false;
+                        
+                        if (isDir) {
+                            // For directories, check if they contain files matching any active category
+                            const dirCats = (item.dataset.dirCategories || '').split(',').filter(c => c);
+                            if (dirCats.length === 0) {
+                                // Empty directory or no input files - show it anyway
+                                shouldShow = true;
+                            } else if (activeCats.length === 0) {
+                                // No categories selected - show all
+                                shouldShow = true;
+                            } else {
+                                // Show if directory contains files matching any active category
+                                shouldShow = dirCats.some(cat => activeCats.indexOf(cat) >= 0);
+                            }
                         } else {
-                            // Show if matches any active category, or if it's a directory
-                            item.style.display = (isDir || activeCats.indexOf(category) >= 0) ? '' : 'none';
+                            // For files
+                            if (activeCats.length === 0) {
+                                // No specific categories selected -> show all
+                                shouldShow = true;
+                            } else {
+                                // Show if matches any active category
+                                shouldShow = activeCats.indexOf(category) >= 0;
+                            }
+                        }
+                        
+                        item.style.display = shouldShow ? '' : 'none';
+                        if (shouldShow) {
+                            visibleCount++;
                         }
                     });
+                    
+                    // Update the badge count
+                    const badge = document.getElementById('inputs-badge');
+                    if (badge) {
+                        badge.textContent = String(visibleCount);
+                    }
                 }
 
                 // Wire up events
