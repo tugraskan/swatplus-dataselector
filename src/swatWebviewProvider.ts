@@ -258,6 +258,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         const ext = path.extname(fileName).toLowerCase();
                         const baseName = path.basename(fileName).toLowerCase();
                         
+                        // Special case: wgn files are climate even if they have .txt extension
+                        if (baseName.includes('wgn')) {
+                            return 'climate';
+                        }
+                        
                         // Output files (anything .txt or .out)
                         if (ext === '.txt' || ext === '.out') {
                             return 'output';
@@ -269,7 +274,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         }
                         
                         // Climate
-                        if (['.cli', '.pcp', '.tmp', '.slr', '.hmd', '.wnd'].includes(ext) || baseName.includes('wgn')) {
+                        if (['.cli', '.pcp', '.tmp', '.slr', '.hmd', '.wnd'].includes(ext)) {
                             return 'climate';
                         }
                         
@@ -321,7 +326,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         }
                         
                         // Databases
-                        if (['.plt', '.frt', '.pes', '.til', '.urb', '.sep'].includes(ext)) {
+                        if (['.plt', '.frt', '.pst', '.pes', '.til', '.urb', '.sep'].includes(ext)) {
                             return 'databases';
                         }
                         
