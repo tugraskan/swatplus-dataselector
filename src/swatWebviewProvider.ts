@@ -492,9 +492,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                 <span class="badge" id="inputs-badge">${inputEntries.length}</span>
                             </div>
                             <div class="selected-window-body" id="inputs-content">
-                                <div class="section-path-info" title="${escapeHtml(viewingDirectoryInputs)}">
-                                    📂 ${escapeHtml(viewingDirectoryInputs)}${isInSubdirectoryInputs ? ' (subdirectory)' : ''}
-                                </div>
                                 <div class="section-content" id="selected-files-content">
                                     ${backButtonHtmlInputs}
                                     ${inputsHtml}
@@ -527,9 +524,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                 <span class="badge">${outputEntries.length}</span>
                             </div>
                             <div class="selected-window-body" id="outputs-content">
-                                <div class="section-path-info" title="${escapeHtml(viewingDirectoryOutputs)}">
-                                    📂 ${escapeHtml(viewingDirectoryOutputs)}${isInSubdirectoryOutputs ? ' (subdirectory)' : ''}
-                                </div>
                                 <div class="section-content" id="output-files-content">
                                     ${backButtonHtmlOutputs}
                                     ${outputsHtml}
