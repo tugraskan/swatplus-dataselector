@@ -7,7 +7,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 ## [Unreleased]
 
 ### Added
-- "Select All / None" button to quickly toggle all input category filters at once
+- "Select All" checkbox to quickly toggle all input category filters at once (with indeterminate state support)
 - Separate navigation state for Inputs and Outputs sections - navigating in one doesn't affect the other
 - Back button in Outputs section for subdirectory navigation
 - Section path info displaying current directory for both Inputs and Outputs sections
