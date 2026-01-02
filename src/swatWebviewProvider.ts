@@ -926,6 +926,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             padding-right: 6px;
             white-space: normal;
             flex: 1 1 auto;
+            max-height: 300px; /* Match outputs section default size */
             min-height: 100px; /* Ensure minimum height for file list visibility */
         }
 
@@ -1101,7 +1102,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             border-top: 1px solid var(--vscode-panel-border);
             background-color: var(--vscode-editor-background);
             flex-wrap: wrap;
-            max-height: 200px; /* Set maximum height for filter toolbar */
+            max-height: 250px; /* Increased from 200px for better checkbox visibility */
             overflow-y: auto; /* Add scrollbar when content exceeds max-height */
             overflow-x: hidden;
         }
