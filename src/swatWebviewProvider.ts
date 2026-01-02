@@ -784,6 +784,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             background-color: var(--vscode-sideBarSectionHeader-background);
             border-bottom: 1px solid var(--vscode-panel-border);
             position: relative;
+            min-height: 50px; /* Ensure header doesn't get cut off */
         }
 
         .selected-window-header-left {
@@ -810,6 +811,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             background-color: var(--vscode-editor-background);
             border-top: 1px solid var(--vscode-panel-border);
             border-bottom: 1px solid var(--vscode-panel-border);
+            min-height: 32px; /* Ensure path section doesn't get cut off */
         }
 
         .selected-window-path-scroll .dataset-header-path {
@@ -864,6 +866,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         .selected-window-body {
             padding: 8px;
             max-height: 432px; /* increased 20% from 360px */
+            min-height: 150px; /* Ensure minimum height for content visibility */
             display: flex;
             flex-direction: column;
             overflow: hidden;
@@ -923,6 +926,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             padding-right: 6px;
             white-space: normal;
             flex: 1 1 auto;
+            min-height: 100px; /* Ensure minimum height for file list visibility */
         }
 
         /* Recent fixed height for ~4 items (reduced ~20%) */
@@ -1097,6 +1101,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             border-top: 1px solid var(--vscode-panel-border);
             background-color: var(--vscode-editor-background);
             flex-wrap: wrap;
+            max-height: 200px; /* Set maximum height for filter toolbar */
+            overflow-y: auto; /* Add scrollbar when content exceeds max-height */
+            overflow-x: hidden;
         }
 
         .filter-toolbar label {
@@ -1168,6 +1175,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             overflow-y: auto;
             padding-right: 6px;
             max-height: 300px;
+            min-height: 100px; /* Ensure minimum height for output files visibility */
         }
 
         .back-item {
