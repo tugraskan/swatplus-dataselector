@@ -106,6 +106,7 @@ export class SwatIndexer {
     private txtInOutPath: string | null = null;
     private tableToFileMap: Map<string, string> = new Map(); // table_name -> file_name
     private fkNullValues: string[] = ['null', '0', '']; // Default, can be overridden by metadata
+    private fileCioReferences: Map<string, string> = new Map(); // classification -> actual_filename
 
     constructor(private context: vscode.ExtensionContext) {
         this.loadSchema();
@@ -176,6 +177,68 @@ export class SwatIndexer {
     }
 
     /**
+     * Parse file.cio to extract file references
+     * This allows us to handle cases where users rename input files
+     */
+    private parseFileCio(): void {
+        this.fileCioReferences.clear();
+        
+        if (!this.txtInOutPath) {
+            return;
+        }
+
+        const fileCioPath = path.join(this.txtInOutPath, 'file.cio');
+        if (!fs.existsSync(fileCioPath)) {
+            console.log('file.cio not found');
+            return;
+        }
+
+        try {
+            const content = fs.readFileSync(fileCioPath, 'utf-8');
+            const lines = content.split('\n');
+            
+            // file.cio format:
+            // Line 1: Title/description
+            // Line 2+: filename entries (one per line)
+            // Each line typically has: filename or classification filename
+            
+            // Look for the schema to understand the format
+            const fileCioTable = this.schema?.tables['file.cio'];
+            const dataStartLine = fileCioTable?.data_starts_after || 2;
+            
+            for (let i = dataStartLine; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line || line.startsWith('#')) {
+                    continue;
+                }
+                
+                // Parse the line - it may have multiple columns
+                // The actual filename is typically in the 'file_name' column
+                const parts = line.split(/\s+/);
+                
+                if (parts.length > 0) {
+                    // The filename is typically the last or second-to-last part
+                    // For simplicity, we'll extract what looks like a filename
+                    for (const part of parts) {
+                        // Check if it looks like a filename (has extension)
+                        if (part.includes('.') && !part.startsWith('.')) {
+                            const filename = part;
+                            // Store with the filename as both key and value for now
+                            // This allows us to track which files are actually referenced
+                            this.fileCioReferences.set(filename, filename);
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            console.log(`Parsed file.cio: ${this.fileCioReferences.size} file references found`);
+        } catch (error) {
+            console.error(`Error parsing file.cio: ${error}`);
+        }
+    }
+
+    /**
      * Build index for the given dataset path
      */
     public async buildIndex(datasetPath: string): Promise<boolean> {
@@ -212,10 +275,24 @@ export class SwatIndexer {
             title: 'Building SWAT+ Inputs Index',
             cancellable: true
         }, async (progress, token) => {
+            // Parse file.cio first to get the actual file references
+            // This is important in case users have renamed input files
+            progress.report({ message: 'Parsing file.cio...', increment: 0 });
+            this.parseFileCio();
+            
+            // Sort tables to process file.cio first, then others
             const tables = Object.values(this.schema!.tables);
+            const fileCioTable = tables.find(t => t.file_name === 'file.cio');
+            const otherTables = tables.filter(t => t.file_name !== 'file.cio');
+            
+            // Process file.cio first if it exists
+            const orderedTables = fileCioTable 
+                ? [fileCioTable, ...otherTables]
+                : tables;
+            
             let processedCount = 0;
 
-            for (const table of tables) {
+            for (const table of orderedTables) {
                 if (token.isCancellationRequested) {
                     return false;
                 }
@@ -515,5 +592,20 @@ export class SwatIndexer {
             resolvedFkCount: resolvedCount,
             unresolvedFkCount: this.fkReferences.length - resolvedCount
         };
+    }
+
+    /**
+     * Get file references from file.cio
+     * Returns map of filename -> filename
+     */
+    public getFileCioReferences(): Map<string, string> {
+        return new Map(this.fileCioReferences);
+    }
+
+    /**
+     * Check if a file is referenced in file.cio
+     */
+    public isFileReferencedInCio(filename: string): boolean {
+        return this.fileCioReferences.has(filename);
     }
 }

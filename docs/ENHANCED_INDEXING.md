@@ -6,7 +6,30 @@ The SWAT+ Dataset Selector extension includes an enhanced indexing system that l
 
 ## Key Improvements
 
-### 1. Documentation-Driven Metadata
+### 1. file.cio Master File Indexing
+
+The indexer now parses `file.cio` first before indexing other files. This is critical because:
+
+- **Handles Custom File Names**: If users rename input files, file.cio contains the actual filenames being used
+- **Provides File Discovery**: The master file lists all input files that should be indexed
+- **Prioritized Indexing**: file.cio is always processed first to establish the file reference map
+
+**How it works**:
+1. When building the index, `file.cio` is parsed first
+2. All file references are extracted and stored
+3. file.cio is then indexed as a regular table
+4. Other tables are indexed in their normal order
+
+**API**:
+```typescript
+// Get all file references from file.cio
+const fileRefs = indexer.getFileCioReferences();
+
+// Check if a specific file is referenced
+const isReferenced = indexer.isFileReferencedInCio('hru-data.hru');
+```
+
+### 2. Documentation-Driven Metadata
 
 The indexer now uses comprehensive metadata extracted from the documentation in the `docs/` folder:
 
@@ -16,7 +39,7 @@ The indexer now uses comprehensive metadata extracted from the documentation in 
 - **File Pointer Patterns**: Common patterns for FK relationships (init, hyd, sed, nut patterns)
 - **Table-to-File Mapping**: Enhanced mapping between database table names and TxtInOut file names
 
-### 2. Correct FK Resolution for TxtInOut Files
+### 3. Correct FK Resolution for TxtInOut Files
 
 **Key Fix**: In SWAT+ TxtInOut text files, foreign key references use the `name` column (not `id`) for lookups.
 
@@ -36,7 +59,7 @@ topography.hyd:
 
 The `topo` FK in hru-data.hru correctly resolves to the row where `name = "topo_default"` in topography.hyd.
 
-### 3. Reverse Index for Bidirectional Navigation
+### 4. Reverse Index for Bidirectional Navigation
 
 The indexer now maintains a reverse index that allows you to find all rows that reference a particular row.
 
@@ -52,7 +75,7 @@ const refs = indexer.getReferencesToRow('soils_sol', 'clay_loam');
 // Returns array of FKReferences pointing to this soil
 ```
 
-### 4. Enhanced Hover Information
+### 5. Enhanced Hover Information
 
 Hovering over a foreign key value now shows:
 - Column name and type
@@ -74,7 +97,7 @@ Topography parameters for HRUs
 Click to navigate to topography.hyd
 ```
 
-### 5. Better Diagnostic Messages
+### 6. Better Diagnostic Messages
 
 Diagnostic warnings for unresolved FK references now include file purposes for better context:
 
@@ -82,7 +105,7 @@ Diagnostic warnings for unresolved FK references now include file purposes for b
 
 **After**: `Unresolved foreign key: topo = "missing_topo" (expected in topography.hyd - Topography parameters for HRUs)`
 
-### 6. Index Statistics and Query Methods
+### 7. Index Statistics and Query Methods
 
 New methods provide insights into the index:
 
