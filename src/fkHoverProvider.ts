@@ -36,6 +36,48 @@ export class SwatFKHoverProvider implements vscode.HoverProvider {
 
         // Get the file's schema table
         const fileName = path.basename(document.fileName);
+        
+        // Special handling for file.cio - it has a unique format
+        // Line 1: Title/description
+        // Line 2+: File references (one per line)
+        // No actual header line despite what schema says
+        if (fileName === 'file.cio') {
+            const line = document.lineAt(position.line);
+            const lineText = line.text.trim();
+            
+            // Skip title line (line 0) and empty lines
+            if (position.line === 0 || !lineText) {
+                return undefined;
+            }
+            
+            // Extract the filename from the line
+            const parts = lineText.split(/\s+/);
+            let targetFileName: string | undefined;
+            
+            for (const part of parts) {
+                if (part.includes('.') && !part.startsWith('.')) {
+                    targetFileName = part;
+                    break;
+                }
+            }
+            
+            if (targetFileName) {
+                const markdown = new vscode.MarkdownString();
+                markdown.isTrusted = true;
+                
+                markdown.appendMarkdown(`**File Reference**\n\n`);
+                markdown.appendMarkdown(`Points to: \`${targetFileName}\`\n\n`);
+                
+                const targetPurpose = this.indexer.getFilePurpose(targetFileName);
+                if (targetPurpose) {
+                    markdown.appendMarkdown(`*${targetPurpose}*\n\n`);
+                }
+                
+                markdown.appendMarkdown(`_Click to navigate to ${targetFileName}_`);
+                return new vscode.Hover(markdown);
+            }
+        }
+        
         const table = schema.tables[fileName];
         if (!table) {
             return undefined;
@@ -87,20 +129,6 @@ export class SwatFKHoverProvider implements vscode.HoverProvider {
         // Build hover content
         const markdown = new vscode.MarkdownString();
         markdown.isTrusted = true;
-
-        // Special handling for file.cio's file_name column
-        if (fileName === 'file.cio' && columnName === 'file_name') {
-            markdown.appendMarkdown(`**File Reference: \`${columnName}\`**\n\n`);
-            markdown.appendMarkdown(`Points to: \`${cellValue}\`\n\n`);
-            
-            const targetPurpose = this.indexer.getFilePurpose(cellValue);
-            if (targetPurpose) {
-                markdown.appendMarkdown(`*${targetPurpose}*\n\n`);
-            }
-            
-            markdown.appendMarkdown(`_Click to navigate to ${cellValue}_`);
-            return new vscode.Hover(markdown);
-        }
 
         // Check if this column is a FK
         const fkColumn = table.columns.find(

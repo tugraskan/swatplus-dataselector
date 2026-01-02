@@ -20,12 +20,22 @@ The indexer now parses `file.cio` first before indexing other files. This is cri
 2. All file references are extracted and stored
 3. file.cio is then indexed as a regular table
 4. Other tables are indexed in their normal order
-5. Special navigation support added for file.cio's `file_name` column
+5. Special navigation support added for file.cio (works without header line)
 
 **Navigation in file.cio**:
-- **Ctrl+Click** on any filename in file.cio to open that file
+- **Ctrl+Click** on any filename in file.cio to open that file (works on any line after line 1)
 - **Hover** over a filename to see the file's purpose
-- Works even though `file_name` isn't a traditional FK in the schema
+- Handles file.cio's unique format (no header line, just file references)
+- Automatically detects filenames by looking for values with file extensions
+
+**file.cio Format**:
+```
+Title: Master SWAT+ Input Files
+climate/weather-sta.cli
+hru-data.hru
+soils.sol
+...
+```
 
 **API**:
 ```typescript
