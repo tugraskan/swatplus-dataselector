@@ -179,8 +179,13 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
             currentPos = valueEnd;
         }
 
-        if (columnIndex < 0 || columnIndex >= headers.length) {
-            this.outputChannel.appendLine(`[FK Definition] Column index out of bounds: ${columnIndex}, headers.length: ${headers.length}`);
+        if (columnIndex < 0) {
+            this.outputChannel.appendLine(`[FK Definition] Cursor not on a valid column (likely in whitespace) - no definition to provide`);
+            return undefined;
+        }
+        
+        if (columnIndex >= headers.length) {
+            this.outputChannel.appendLine(`[FK Definition] Column index ${columnIndex} exceeds number of headers ${headers.length}`);
             return undefined;
         }
 
