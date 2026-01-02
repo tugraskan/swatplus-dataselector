@@ -33,7 +33,8 @@ export function activate(context: vscode.ExtensionContext) {
 	// and common SWAT+ file extensions
 	const swatFileExtensions = [
 		'hru', 'hyd', 'sol', 'lum', 'ini', 'sno', 'plt', 'dtl', 'fld', 'sch',
-		'aqu', 'cha', 'res', 'bsn', 'cli', 'prt', 'ops', 'pst', 'sft', 'cal'
+		'aqu', 'cha', 'res', 'bsn', 'cli', 'prt', 'ops', 'pst', 'sft', 'cal',
+		'cio'  // Add .cio extension for file.cio
 	];
 	const documentSelectors = [
 		{ pattern: '**/TxtInOut/**' },

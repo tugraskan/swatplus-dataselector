@@ -20,6 +20,17 @@ A VS Code extension for SWAT+ development that allows you to browse and select d
 - **[Extension File Schema](docs/EXTENSION_FILE_SCHEMA.md)** - Detailed schema for all SWAT+ files
 - **[Dependency Analysis](docs/DEPENDENCY_ANALYSIS.md)** - Comprehensive FK and file relationships
 - **[Quick Reference](docs/QUICK_REFERENCE.md)** - Quick lookup for common patterns
+- **[Troubleshooting Guide](TROUBLESHOOTING.md)** - Solutions for common issues
+
+## Quick Start
+
+1. **Install the extension** from the VS Code marketplace or build from source
+2. **Reload VS Code** - Press `Ctrl+Shift+P` and run `Developer: Reload Window`
+3. **Open a SWAT+ project** - Open a folder containing SWAT+ datasets
+4. **Build the index** - Press `Ctrl+Shift+P` and run `SWAT+: Build Inputs Index`
+5. **Navigate!** - Ctrl+Click on foreign keys or filenames to navigate
+
+**Note**: After pulling updates, always reload VS Code to ensure the latest version is active.
 
 ## Commands
 
