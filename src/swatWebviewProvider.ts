@@ -506,9 +506,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                     ${inputsHtml}
                                 </div>
                                 <div class="filter-toolbar" id="selected-filter-toolbar">
-                                    <button class="action-button secondary" id="select-all-btn" style="width: 100%; margin-bottom: 8px;">
-                                        Select All / None
-                                    </button>
+                                    <label style="width: 100%; margin-bottom: 8px; font-weight: 600; border-bottom: 1px solid var(--vscode-panel-border); padding-bottom: 6px;">
+                                        <input type="checkbox" id="select-all-checkbox" checked> Select All
+                                    </label>
                                     <label><input type="checkbox" id="filter-simulation" class="filter-checkbox" data-cat="simulation" checked> ⚙️ Simulation Control</label>
                                     <label><input type="checkbox" id="filter-climate" class="filter-checkbox" data-cat="climate" checked> 🌤️ Climate</label>
                                     <label><input type="checkbox" id="filter-spatial" class="filter-checkbox" data-cat="spatial" checked> 🗺️ Spatial Objects</label>
@@ -1519,19 +1519,30 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 checkboxes.forEach(cb => {
                     cb.addEventListener('change', () => {
                         applyFilter();
+                        updateSelectAllCheckbox();
                     });
                 });
 
-                // Select All button handler
-                const selectAllBtn = document.getElementById('select-all-btn');
-                if (selectAllBtn) {
-                    selectAllBtn.addEventListener('click', () => {
-                        // Check if all are checked
+                // Select All checkbox handler
+                const selectAllCheckbox = document.getElementById('select-all-checkbox');
+                
+                function updateSelectAllCheckbox() {
+                    if (selectAllCheckbox) {
                         const allChecked = checkboxes.every(cb => cb.checked);
+                        const noneChecked = checkboxes.every(cb => !cb.checked);
                         
-                        // If all checked, uncheck all; otherwise check all
+                        selectAllCheckbox.checked = allChecked;
+                        selectAllCheckbox.indeterminate = !allChecked && !noneChecked;
+                    }
+                }
+                
+                if (selectAllCheckbox) {
+                    selectAllCheckbox.addEventListener('change', () => {
+                        const shouldCheck = selectAllCheckbox.checked;
+                        
+                        // Set all checkboxes to match the select all checkbox
                         checkboxes.forEach(cb => {
-                            cb.checked = !allChecked;
+                            cb.checked = shouldCheck;
                         });
                         
                         applyFilter();
@@ -1539,6 +1550,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 }
 
                 // ensure starting state
+                updateSelectAllCheckbox();
                 applyFilter();
             })();
 
