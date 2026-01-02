@@ -48,14 +48,27 @@ export class SwatFKDiagnosticsProvider {
             // Get the file name for the target table (for better UX)
             const targetFileName = this.indexer.getFileNameForTable(ref.targetTable) || ref.targetTable;
             
+            // Check if target file is indexed
+            const isTargetFileIndexed = this.indexer.isTableIndexed(ref.targetTable);
+            
             // Get file purpose from metadata for additional context
             const filePurpose = this.indexer.getFilePurpose(targetFileName);
             const purposeText = filePurpose ? ` (${filePurpose})` : '';
             
+            let message: string;
+            if (!isTargetFileIndexed) {
+                // Target file doesn't exist or wasn't indexed
+                message = `Unresolved foreign key: ${ref.sourceColumn} = "${ref.fkValue}" ` +
+                    `- target file ${targetFileName} not found in dataset`;
+            } else {
+                // Target file exists but value not found
+                message = `Unresolved foreign key: ${ref.sourceColumn} = "${ref.fkValue}" ` +
+                    `(value not found in ${targetFileName}${purposeText})`;
+            }
+            
             const diagnostic = new vscode.Diagnostic(
                 new vscode.Range(line, 0, line, 1000),
-                `Unresolved foreign key: ${ref.sourceColumn} = "${ref.fkValue}" ` +
-                `(expected in ${targetFileName}${purposeText})`,
+                message,
                 vscode.DiagnosticSeverity.Warning
             );
 

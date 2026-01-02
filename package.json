@@ -66,6 +66,11 @@
         "command": "swat-dataset-selector.rebuildIndex",
         "title": "SWAT+: Rebuild Inputs Index",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "swat-dataset-selector.showFKReferences",
+        "title": "SWAT+: Show FK References",
+        "icon": "$(references)"
       }
     ]
   },

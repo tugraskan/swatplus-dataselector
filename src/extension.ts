@@ -7,6 +7,7 @@ import { SwatFKDefinitionProvider } from './fkDefinitionProvider';
 import { SwatFKDiagnosticsProvider } from './fkDiagnostics';
 import { SwatFKDecorationProvider } from './fkDecorations';
 import { SwatFKHoverProvider } from './fkHoverProvider';
+import { SwatFKReferencesPanel } from './fkReferencesPanel';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -215,6 +216,11 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
+	// Command: Show FK References Panel
+	const showFKReferences = vscode.commands.registerCommand('swat-dataset-selector.showFKReferences', () => {
+		SwatFKReferencesPanel.createOrShow(indexer);
+	});
+
 	// Debug helper: seed test data so the webview shows content for troubleshooting
 	const seedTestData = vscode.commands.registerCommand('swat-dataset-selector.seedTestData', async () => {
 		try {
@@ -247,6 +253,7 @@ export function activate(context: vscode.ExtensionContext) {
 		closeAllDatasetFiles,
 		buildIndex,
 		rebuildIndex,
+		showFKReferences,
 		seedTestData
 	);
 }

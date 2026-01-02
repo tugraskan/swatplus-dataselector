@@ -483,6 +483,13 @@ export class SwatIndexer {
     }
 
     /**
+     * Get all FK references
+     */
+    public getAllFKReferences(): FKReference[] {
+        return [...this.fkReferences];
+    }
+
+    /**
      * Look up a FK target location
      */
     public resolveFKTarget(tableName: string, pkValue: string): IndexedRow | undefined {
@@ -509,6 +516,13 @@ export class SwatIndexer {
      */
     public isIndexBuilt(): boolean {
         return this.index.size > 0;
+    }
+
+    /**
+     * Check if a specific table is indexed
+     */
+    public isTableIndexed(tableName: string): boolean {
+        return this.index.has(tableName);
     }
 
     /**
