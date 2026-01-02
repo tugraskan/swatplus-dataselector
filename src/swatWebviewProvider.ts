@@ -483,12 +483,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         <div class="selected-window-path-scroll" title="${escapeHtml(this.selectedDataset)}">
                             <div class="dataset-header-path">${escapeHtml(this.selectedDataset)}</div>
                         </div>
-                        <div class="selected-window-actions">
-                            <button class="action-button primary" id="buildIndexBtn">
-                                ${svgs.database}
-                                Build Index
-                            </button>
-                        </div>
                         
                         <!-- Inputs Section -->
                         <div class="dataset-section">
@@ -1228,6 +1222,14 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             <div class="divider" id="recent-divider" title="Recent / Selected separator"><div class="handle"></div></div>
 
             ${combinedHtml}
+        </div>
+
+        <!-- Build Index button placed outside selected dataset section -->
+        <div class="build-index-section" id="build-index-section" style="display: ${this.selectedDataset ? 'block' : 'none'};">
+            <button class="action-button primary" id="buildIndexBtn" style="width: 100%; margin-top: 12px;">
+                ${svgs.database}
+                Build Index
+            </button>
         </div>
 
         <div class="help-text">
