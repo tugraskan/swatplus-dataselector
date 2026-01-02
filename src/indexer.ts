@@ -10,8 +10,28 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// Constants for FK filtering
-const FK_NULL_VALUES = ['null', '0', ''];
+// TxtInOut metadata interface
+interface TxtInOutMetadata {
+    metadata_version: string;
+    description: string;
+    source: string;
+    null_sentinel_values: {
+        global: string[];
+        description: string;
+    };
+    table_name_to_file_name: { [tableName: string]: string };
+    txtinout_fk_behavior: {
+        description: string;
+        default_target_column: string;
+        exceptions: {
+            description: string;
+            files: string[];
+        };
+    };
+    file_purposes: { [fileName: string]: string };
+    file_categories: { [category: string]: string[] };
+    common_pointer_patterns: any;
+}
 
 export interface SchemaColumn {
     name: string;
@@ -78,14 +98,17 @@ export interface FKReference {
 
 export class SwatIndexer {
     private schema: Schema | null = null;
+    private metadata: TxtInOutMetadata | null = null;
     private index: Map<string, Map<string, IndexedRow>> = new Map(); // table -> pk_value -> row
     private fkReferences: FKReference[] = [];
     private datasetPath: string | null = null;
     private txtInOutPath: string | null = null;
     private tableToFileMap: Map<string, string> = new Map(); // table_name -> file_name
+    private fkNullValues: string[] = ['null', '0', '']; // Default, can be overridden by metadata
 
     constructor(private context: vscode.ExtensionContext) {
         this.loadSchema();
+        this.loadMetadata();
     }
 
     private loadSchema(): void {
@@ -113,6 +136,41 @@ export class SwatIndexer {
             }
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to load SWAT+ schema: ${error}`);
+        }
+    }
+
+    private loadMetadata(): void {
+        try {
+            const metadataPath = path.join(
+                this.context.extensionPath,
+                'resources',
+                'schema',
+                'txtinout-metadata.json'
+            );
+            
+            if (!fs.existsSync(metadataPath)) {
+                console.log('TxtInOut metadata file not found, using defaults');
+                return;
+            }
+
+            const metadataContent = fs.readFileSync(metadataPath, 'utf-8');
+            this.metadata = JSON.parse(metadataContent);
+            
+            // Update FK null values from metadata
+            if (this.metadata && this.metadata.null_sentinel_values) {
+                this.fkNullValues = this.metadata.null_sentinel_values.global;
+            }
+
+            // Enhance table to file mapping with metadata
+            if (this.metadata && this.metadata.table_name_to_file_name) {
+                for (const [tableName, fileName] of Object.entries(this.metadata.table_name_to_file_name)) {
+                    if (!this.tableToFileMap.has(tableName)) {
+                        this.tableToFileMap.set(tableName, fileName);
+                    }
+                }
+            }
+        } catch (error) {
+            console.log(`Failed to load TxtInOut metadata: ${error}`);
         }
     }
 
@@ -255,9 +313,14 @@ export class SwatIndexer {
                 tableIndex.set(pkValue, row);
 
                 // Record FK references
+                // In TxtInOut files, FK values typically reference 'name' column in target, not 'id'
                 for (const fk of table.foreign_keys) {
                     const fkValue = valueMap[fk.column];
-                    if (fkValue && !FK_NULL_VALUES.includes(fkValue)) {
+                    if (fkValue && !this.fkNullValues.includes(fkValue)) {
+                        // Use metadata to determine the actual target column in TxtInOut files
+                        // Default is 'name' for TxtInOut files, not 'id' from the database schema
+                        const txtinoutTargetColumn = this.metadata?.txtinout_fk_behavior?.default_target_column || 'name';
+                        
                         this.fkReferences.push({
                             sourceFile: filePath,
                             sourceTable: table.table_name,
@@ -265,7 +328,7 @@ export class SwatIndexer {
                             sourceColumn: fk.column,
                             fkValue,
                             targetTable: fk.references.table,
-                            targetColumn: fk.references.column,
+                            targetColumn: txtinoutTargetColumn,  // Use 'name' for TxtInOut files
                             resolved: false
                         });
                     }
@@ -368,5 +431,35 @@ export class SwatIndexer {
 
     public getTxtInOutPath(): string | null {
         return this.txtInOutPath;
+    }
+
+    /**
+     * Get file purpose from metadata
+     */
+    public getFilePurpose(fileName: string): string | undefined {
+        return this.metadata?.file_purposes?.[fileName];
+    }
+
+    /**
+     * Get file category from metadata
+     */
+    public getFileCategory(fileName: string): string | undefined {
+        if (!this.metadata?.file_categories) {
+            return undefined;
+        }
+        
+        for (const [category, files] of Object.entries(this.metadata.file_categories)) {
+            if (files.includes(fileName)) {
+                return category;
+            }
+        }
+        return undefined;
+    }
+
+    /**
+     * Get metadata for extension use
+     */
+    public getMetadata(): TxtInOutMetadata | null {
+        return this.metadata;
     }
 }
