@@ -180,7 +180,7 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
         }
 
         if (columnIndex < 0) {
-            this.outputChannel.appendLine(`[FK Definition] Cursor not on a valid column (likely in whitespace) - no definition to provide`);
+            this.outputChannel.appendLine(`[FK Definition] Cursor not on a valid column (columnIndex: ${columnIndex}, likely in whitespace) - no definition to provide`);
             return undefined;
         }
         
