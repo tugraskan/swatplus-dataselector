@@ -88,6 +88,20 @@ export class SwatFKHoverProvider implements vscode.HoverProvider {
         const markdown = new vscode.MarkdownString();
         markdown.isTrusted = true;
 
+        // Special handling for file.cio's file_name column
+        if (fileName === 'file.cio' && columnName === 'file_name') {
+            markdown.appendMarkdown(`**File Reference: \`${columnName}\`**\n\n`);
+            markdown.appendMarkdown(`Points to: \`${cellValue}\`\n\n`);
+            
+            const targetPurpose = this.indexer.getFilePurpose(cellValue);
+            if (targetPurpose) {
+                markdown.appendMarkdown(`*${targetPurpose}*\n\n`);
+            }
+            
+            markdown.appendMarkdown(`_Click to navigate to ${cellValue}_`);
+            return new vscode.Hover(markdown);
+        }
+
         // Check if this column is a FK
         const fkColumn = table.columns.find(
             col => col.name === columnName && col.is_foreign_key

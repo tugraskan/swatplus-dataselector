@@ -13,12 +13,19 @@ The indexer now parses `file.cio` first before indexing other files. This is cri
 - **Handles Custom File Names**: If users rename input files, file.cio contains the actual filenames being used
 - **Provides File Discovery**: The master file lists all input files that should be indexed
 - **Prioritized Indexing**: file.cio is always processed first to establish the file reference map
+- **Go-to-Definition Support**: Clicking on filenames in file.cio opens the referenced file
 
 **How it works**:
 1. When building the index, `file.cio` is parsed first
 2. All file references are extracted and stored
 3. file.cio is then indexed as a regular table
 4. Other tables are indexed in their normal order
+5. Special navigation support added for file.cio's `file_name` column
+
+**Navigation in file.cio**:
+- **Ctrl+Click** on any filename in file.cio to open that file
+- **Hover** over a filename to see the file's purpose
+- Works even though `file_name` isn't a traditional FK in the schema
 
 **API**:
 ```typescript

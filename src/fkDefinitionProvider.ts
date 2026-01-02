@@ -7,6 +7,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
 import { pathStartsWith } from './pathUtils';
 
@@ -125,6 +126,36 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
         const fkColumn = table.columns.find(
             col => col.name === columnName && col.is_foreign_key
         );
+
+        // Special handling for file.cio's file_name column
+        // This column contains references to other input files but isn't marked as FK in schema
+        let targetFileName: string | undefined;
+        if (fileName === 'file.cio' && columnName === 'file_name') {
+            this.outputChannel.appendLine(`[FK Definition] Special handling for file.cio:file_name -> ${fkValue}`);
+            
+            // The value is a filename that should exist in the TxtInOut folder
+            targetFileName = fkValue;
+            
+            // Find the file in the TxtInOut directory
+            const txtInOutPath = this.indexer.getTxtInOutPath();
+            if (txtInOutPath) {
+                const targetFilePath = path.join(txtInOutPath, targetFileName);
+                if (fs.existsSync(targetFilePath)) {
+                    this.outputChannel.appendLine(`[FK Definition] File found: ${targetFilePath}`);
+                    
+                    // Navigate to the first line of the target file
+                    const targetUri = vscode.Uri.file(targetFilePath);
+                    const targetPosition = new vscode.Position(0, 0);
+                    
+                    this.outputChannel.appendLine('[FK Definition] Success - navigating to file\n');
+                    return new vscode.Location(targetUri, targetPosition);
+                } else {
+                    this.outputChannel.appendLine(`[FK Definition] File not found: ${targetFilePath}`);
+                    this.outputChannel.show(true);
+                    return undefined;
+                }
+            }
+        }
 
         if (!fkColumn || !fkColumn.fk_target) {
             this.outputChannel.appendLine(`[FK Definition] Not a FK column: ${columnName}`);
