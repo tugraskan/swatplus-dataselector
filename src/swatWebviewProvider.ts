@@ -35,6 +35,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
     private _view?: vscode.WebviewView;
     private selectedDataset: string | undefined;
+    private currentDirectory: string | undefined; // Current directory being viewed (for subdirectory navigation)
     private recentDatasets: string[] = [];
 
     constructor(private readonly context: vscode.ExtensionContext) {
@@ -92,6 +93,24 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                 vscode.commands.executeCommand('swat-dataset-selector.openFile', data.path);
                             }
                             break;
+                        case 'navigateToDirectory':
+                            if (data.path && typeof data.path === 'string') {
+                                this.currentDirectory = data.path;
+                                this._updateWebview();
+                            }
+                            break;
+                        case 'navigateUp':
+                            if (this.currentDirectory && this.selectedDataset) {
+                                const parent = path.dirname(this.currentDirectory);
+                                // Only navigate up if we're still within the selected dataset
+                                if (parent.startsWith(this.selectedDataset)) {
+                                    this.currentDirectory = parent;
+                                } else {
+                                    this.currentDirectory = undefined;
+                                }
+                                this._updateWebview();
+                            }
+                            break;
                         case 'closeFile':
                             if (data.path && typeof data.path === 'string') {
                                 vscode.commands.executeCommand('swat-dataset-selector.closeFile', data.path);
@@ -132,6 +151,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             return;
         }
         this.selectedDataset = p;
+        this.currentDirectory = undefined; // Reset to root when selecting new dataset
 
         // Add to recent datasets
         this.recentDatasets = [p, ...this.recentDatasets.filter(d => d !== p)].slice(0, 10);
@@ -188,7 +208,13 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                </div>`;
         } else {
             try {
+                // Use current directory if navigated into a subdirectory, otherwise use selected dataset
+                const viewingDirectory = this.currentDirectory || this.selectedDataset;
                 const fileCioPath = path.join(this.selectedDataset, 'File.cio');
+                
+                // Check if we're in a subdirectory
+                const isInSubdirectory = this.currentDirectory && this.currentDirectory !== this.selectedDataset;
+                
                 // If File.cio is missing, show a friendly message instead of the directory listing
                 if (!fs.existsSync(fileCioPath)) {
                     combinedHtml = `<div class="selected-window">
@@ -225,23 +251,149 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         </div>
                        </div>`;
                 } else {
-                    const entries = fs.existsSync(this.selectedDataset) ? fs.readdirSync(this.selectedDataset, { withFileTypes: true }) : [];
-                    const itemsHtml = entries.map(ent => {
-                    const full = path.join(this.selectedDataset || '', ent.name);
-                    const icon = ent.isDirectory() ? svgs.folder : svgs.file;
-                    const ext = path.extname(ent.name).toLowerCase();
-                    return `
-                            <div class="txt-item" data-path="${escapeHtml(full)}" data-ext="${escapeHtml(ext)}">
-                                    <button class="icon-button txt-close-btn" data-path="${escapeHtml(full)}" title="Close file">
-                                        ${svgs.close}
-                                    </button>
-                                    ${icon}
-                                    <div class="recent-item-info">
-                                        <div class="recent-item-name">${escapeHtml(ent.name)}</div>
-                                    </div>
+                    const entries = fs.existsSync(viewingDirectory) ? fs.readdirSync(viewingDirectory, { withFileTypes: true }) : [];
+                    
+                    // Helper function to categorize file
+                    const categorizeFile = (fileName: string): string => {
+                        const ext = path.extname(fileName).toLowerCase();
+                        const baseName = path.basename(fileName).toLowerCase();
+                        
+                        // Special case: wgn files are climate even if they have .txt extension
+                        if (baseName.includes('wgn')) {
+                            return 'climate';
+                        }
+                        
+                        // Output files (anything .txt or .out)
+                        if (ext === '.txt' || ext === '.out') {
+                            return 'output';
+                        }
+                        
+                        // Simulation Control
+                        if (['.cio', '.cnt', '.sim', '.prt', '.bsn', '.cal'].includes(ext)) {
+                            return 'simulation';
+                        }
+                        
+                        // Climate
+                        if (['.cli', '.pcp', '.tmp', '.slr', '.hmd', '.wnd'].includes(ext)) {
+                            return 'climate';
+                        }
+                        
+                        // Spatial Objects
+                        if (['.hru', '.rtu', '.def', '.ele'].includes(ext)) {
+                            return 'spatial';
+                        }
+                        
+                        // Land Properties
+                        if (['.sol', '.fld', '.sno'].includes(ext) || (ext === '.hyd' && baseName.includes('topo'))) {
+                            return 'land';
+                        }
+                        
+                        // Land Use & Management
+                        if (['.lum', '.sch', '.dtl'].includes(ext) || baseName === 'plant.ini') {
+                            return 'landuse';
+                        }
+                        
+                        // Operations & Practices
+                        if (['.ops'].includes(ext) || (ext === '.str' && baseName.includes('structural'))) {
+                            return 'operations';
+                        }
+                        
+                        // Water Bodies
+                        if (['.res', '.wet'].includes(ext) || baseName.startsWith('initial.res') || baseName.startsWith('initial.wet')) {
+                            return 'waterbodies';
+                        }
+                        
+                        // Channels
+                        if (['.cha'].includes(ext) || baseName.startsWith('initial.cha')) {
+                            return 'channels';
+                        }
+                        
+                        // Groundwater
+                        if (['.aqu'].includes(ext) || baseName.startsWith('initial.aqu') || baseName.includes('gwflow')) {
+                            return 'groundwater';
+                        }
+                        
+                        // Connectivity
+                        if (['.con', '.lin'].includes(ext)) {
+                            return 'connectivity';
+                        }
+                        
+                        // Initialization Files
+                        if (baseName.startsWith('initial.') || baseName.includes('om_water.ini') || 
+                            baseName.includes('pest_water.ini') || baseName.includes('salt_water.ini') || 
+                            baseName.includes('-ini') || ext === '.ini') {
+                            return 'initialization';
+                        }
+                        
+                        // Databases
+                        if (['.plt', '.frt', '.pst', '.pes', '.til', '.urb', '.sep'].includes(ext)) {
+                            return 'databases';
+                        }
+                        
+                        // Default to 'other' for inputs not matching any category
+                        return 'other';
+                    };
+                    
+                    // Separate inputs and outputs
+                    const inputEntries = entries.filter(ent => {
+                        if (ent.isDirectory()) {return true;}
+                        return categorizeFile(ent.name) !== 'output';
+                    });
+                    
+                    const outputEntries = entries.filter(ent => {
+                        if (ent.isDirectory()) {return false;}
+                        return categorizeFile(ent.name) === 'output';
+                    });
+                    
+                    // Add back button if in subdirectory
+                    let backButtonHtml = '';
+                    if (isInSubdirectory) {
+                        backButtonHtml = `
+                            <div class="txt-item back-item" data-action="navigate-up">
+                                ${svgs.folder}
+                                <div class="recent-item-info">
+                                    <div class="recent-item-name">.. (Up to parent directory)</div>
                                 </div>
+                            </div>
                         `;
-                }).join('');
+                    }
+                    
+                    // Generate HTML for inputs
+                    const inputsHtml = inputEntries.map(ent => {
+                        const full = path.join(viewingDirectory || '', ent.name);
+                        const icon = ent.isDirectory() ? svgs.folder : svgs.file;
+                        const ext = path.extname(ent.name).toLowerCase();
+                        const category = ent.isDirectory() ? 'directory' : categorizeFile(ent.name);
+                        return `
+                            <div class="txt-item" data-path="${escapeHtml(full)}" data-ext="${escapeHtml(ext)}" data-category="${escapeHtml(category)}" data-isdir="${ent.isDirectory()}">
+                                <button class="icon-button txt-close-btn" data-path="${escapeHtml(full)}" title="Close file">
+                                    ${svgs.close}
+                                </button>
+                                ${icon}
+                                <div class="recent-item-info">
+                                    <div class="recent-item-name">${escapeHtml(ent.name)}</div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                    
+                    // Generate HTML for outputs
+                    const outputsHtml = outputEntries.map(ent => {
+                        const full = path.join(viewingDirectory || '', ent.name);
+                        const icon = svgs.file;
+                        const ext = path.extname(ent.name).toLowerCase();
+                        return `
+                            <div class="txt-item output-item" data-path="${escapeHtml(full)}" data-ext="${escapeHtml(ext)}" data-category="output">
+                                <button class="icon-button txt-close-btn" data-path="${escapeHtml(full)}" title="Close file">
+                                    ${svgs.close}
+                                </button>
+                                ${icon}
+                                <div class="recent-item-info">
+                                    <div class="recent-item-name">${escapeHtml(ent.name)}</div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
 
                     combinedHtml = `<div class="selected-window">
                         <div class="selected-window-header">
@@ -259,8 +411,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                             </button>
                         </div>
                         <!-- Dedicated horizontal scroller for the full dataset path -->
-                        <div class="selected-window-path-scroll" title="${escapeHtml(this.selectedDataset)}">
-                            <div class="dataset-header-path">${escapeHtml(this.selectedDataset)}</div>
+                        <div class="selected-window-path-scroll" title="${escapeHtml(viewingDirectory)}">
+                            <div class="dataset-header-path">${escapeHtml(viewingDirectory)}${isInSubdirectory ? ' 📂' : ''}</div>
                         </div>
                         <div class="selected-window-actions">
                             <button class="action-button primary" id="buildIndexBtn">
@@ -268,19 +420,46 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                 Build Index
                             </button>
                         </div>
-                        <div class="selected-window-body">
-                            <div class="section-content" id="selected-files-content">
-                                ${itemsHtml}
+                        
+                        <!-- Inputs Section -->
+                        <div class="dataset-section">
+                            <div class="section-header collapsible" data-section="inputs">
+                                ${svgs.chevronDown}
+                                <span class="section-title">📥 Inputs</span>
+                                <span class="badge">${inputEntries.length}</span>
                             </div>
-                            <div class="filter-toolbar" id="selected-filter-toolbar">
-                                <label><input type="checkbox" id="filter-model" class="filter-checkbox" data-cat="model"> Model setup/control (.bsn, .con, .ini)</label>
-                                <label><input type="checkbox" id="filter-climate" class="filter-checkbox" data-cat="climate"> Climate/forcing (.cli, .pcp, .tmp, .wnd)</label>
-                                <label><input type="checkbox" id="filter-land" class="filter-checkbox" data-cat="land"> Land/HRU definitions (.lum, .ele, .sol, .hru)</label>
-                                <label><input type="checkbox" id="filter-mgmt" class="filter-checkbox" data-cat="mgmt"> Management/operations (.ops, .sch)</label>
-                                <label><input type="checkbox" id="filter-routing" class="filter-checkbox" data-cat="routing"> Routing/structures (.str, .hyd, .swf, .res)</label>
-                                <div class="filter-toggle">
-                                    <div>No Outputs (exclude .txt, .out)</div>
-                                    <label class="toggle"><input type="checkbox" id="filter-no-outputs" class="filter-checkbox" data-cat="no-outputs" checked /> <span class="slider"></span></label>
+                            <div class="selected-window-body" id="inputs-content">
+                                <div class="section-content" id="selected-files-content">
+                                    ${backButtonHtml}
+                                    ${inputsHtml}
+                                </div>
+                                <div class="filter-toolbar" id="selected-filter-toolbar">
+                                    <label><input type="checkbox" id="filter-simulation" class="filter-checkbox" data-cat="simulation"> ⚙️ Simulation Control</label>
+                                    <label><input type="checkbox" id="filter-climate" class="filter-checkbox" data-cat="climate"> 🌤️ Climate</label>
+                                    <label><input type="checkbox" id="filter-spatial" class="filter-checkbox" data-cat="spatial"> 🗺️ Spatial Objects</label>
+                                    <label><input type="checkbox" id="filter-land" class="filter-checkbox" data-cat="land"> 🏔️ Land Properties</label>
+                                    <label><input type="checkbox" id="filter-landuse" class="filter-checkbox" data-cat="landuse"> 🌾 Land Use & Management</label>
+                                    <label><input type="checkbox" id="filter-operations" class="filter-checkbox" data-cat="operations"> 🚜 Operations & Practices</label>
+                                    <label><input type="checkbox" id="filter-waterbodies" class="filter-checkbox" data-cat="waterbodies"> 🏞️ Water Bodies</label>
+                                    <label><input type="checkbox" id="filter-channels" class="filter-checkbox" data-cat="channels"> 〰️ Channels</label>
+                                    <label><input type="checkbox" id="filter-groundwater" class="filter-checkbox" data-cat="groundwater"> 💧 Groundwater</label>
+                                    <label><input type="checkbox" id="filter-connectivity" class="filter-checkbox" data-cat="connectivity"> 🔗 Connectivity</label>
+                                    <label><input type="checkbox" id="filter-initialization" class="filter-checkbox" data-cat="initialization"> 🔢 Initialization Files</label>
+                                    <label><input type="checkbox" id="filter-databases" class="filter-checkbox" data-cat="databases"> 📚 Databases</label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Outputs Section -->
+                        <div class="dataset-section">
+                            <div class="section-header collapsible" data-section="outputs">
+                                ${svgs.chevronDown}
+                                <span class="section-title">📤 Outputs</span>
+                                <span class="badge">${outputEntries.length}</span>
+                            </div>
+                            <div class="selected-window-body" id="outputs-content">
+                                <div class="section-content" id="output-files-content">
+                                    ${outputsHtml}
                                 </div>
                             </div>
                         </div>
@@ -884,6 +1063,56 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             width: 14px;
             height: 14px;
         }
+
+        /* Dataset sections for Inputs and Outputs */
+        .dataset-section {
+            margin-bottom: 12px;
+        }
+
+        .dataset-section .section-header {
+            background-color: var(--vscode-sideBarSectionHeader-background);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .dataset-section .section-header:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+
+        .dataset-section .section-header.collapsed + .selected-window-body {
+            display: none;
+        }
+
+        .dataset-section .selected-window-body {
+            border-left: 2px solid var(--vscode-panel-border);
+            margin-left: 8px;
+            padding-left: 0;
+        }
+
+        .output-item {
+            opacity: 0.85;
+        }
+
+        .output-item:hover {
+            opacity: 1;
+        }
+
+        #output-files-content {
+            overflow-y: auto;
+            padding-right: 6px;
+            max-height: 300px;
+        }
+
+        .back-item {
+            background-color: var(--vscode-list-hoverBackground);
+            font-weight: 600;
+            border-bottom: 1px solid var(--vscode-panel-border);
+            margin-bottom: 4px;
+        }
+
+        .back-item:hover {
+            background-color: var(--vscode-list-activeSelectionBackground);
+        }
     </style>
 </head>
 <body>
@@ -986,10 +1215,26 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             // TXT explorer item handlers
             document.querySelectorAll('.txt-item').forEach(item => {
                 item.addEventListener('click', (e) => {
+                    // Check if this is a back navigation item
+                    if (item.dataset.action === 'navigate-up') {
+                        try { console.log('SWAT webview: navigate-up clicked'); } catch (e) {}
+                        swatHost.postMessage({ type: 'navigateUp' });
+                        return;
+                    }
+                    
                     const p = item.dataset.path;
+                    const isDir = item.dataset.isdir === 'true';
+                    
                     if (p) {
-                        try { console.log('SWAT webview: txt-item clicked', p); } catch (e) {}
-                        swatHost.postMessage({ type: 'openFile', path: p });
+                        if (isDir) {
+                            // Navigate into directory
+                            try { console.log('SWAT webview: navigate to directory', p); } catch (e) {}
+                            swatHost.postMessage({ type: 'navigateToDirectory', path: p });
+                        } else {
+                            // Open file
+                            try { console.log('SWAT webview: txt-item clicked', p); } catch (e) {}
+                            swatHost.postMessage({ type: 'openFile', path: p });
+                        }
                     }
                 });
             });
@@ -1080,10 +1325,27 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     }
                     if (closest && closest('.txt-item')) {
                         const container = tgt.closest('.txt-item');
+                        
+                        // Check if this is a back navigation item
+                        if (container && container.dataset.action === 'navigate-up') {
+                            try { console.log('SWAT webview: delegated navigate-up click'); } catch (e) {}
+                            swatHost.postMessage({ type: 'navigateUp' });
+                            return;
+                        }
+                        
                         const p = container ? container.dataset.path : undefined;
+                        const isDir = container && container.dataset.isdir === 'true';
+                        
                         if (p) {
-                            try { console.log('SWAT webview: delegated txt-item click', p); } catch (e) {}
-                            swatHost.postMessage({ type: 'openFile', path: p });
+                            if (isDir) {
+                                // Navigate into directory
+                                try { console.log('SWAT webview: delegated navigate to directory', p); } catch (e) {}
+                                swatHost.postMessage({ type: 'navigateToDirectory', path: p });
+                            } else {
+                                // Open file
+                                try { console.log('SWAT webview: delegated txt-item click', p); } catch (e) {}
+                                swatHost.postMessage({ type: 'openFile', path: p });
+                            }
                         }
                         return;
                     }
@@ -1113,44 +1375,30 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             setInitialMiddleHeights();
             window.addEventListener('resize', () => setInitialMiddleHeights());
 
-            // Filter toolbar behavior: map extensions to categories and filter displayed rows
+            // Filter toolbar behavior: map files to categories and filter displayed rows
             (function setupFilterToolbar() {
-                const extToCategory = {
-                    '.bsn': 'model', '.con': 'model', '.ini': 'model',
-                    '.cli': 'climate', '.pcp': 'climate', '.tmp': 'climate', '.wnd': 'climate',
-                    '.lum': 'land', '.ele': 'land', '.sol': 'land', '.hru': 'land',
-                    '.ops': 'mgmt', '.sch': 'mgmt',
-                    '.str': 'routing', '.hyd': 'routing', '.swf': 'routing', '.res': 'routing'
-                };
-
-                const filterNoOutputs = document.getElementById('filter-no-outputs');
                 const checkboxes = Array.from(document.querySelectorAll('.filter-checkbox'));
-                if (!checkboxes.length) return;
+                if (!checkboxes.length) {return;}
 
                 function applyFilter() {
-                    const noOutputsChecked = filterNoOutputs && filterNoOutputs.checked;
-                    const activeCats = checkboxes.filter(cb => cb.id !== 'filter-no-outputs' && cb.checked)
-                        .map(cb => cb.dataset.cat);
+                    const activeCats = checkboxes.filter(cb => cb.checked).map(cb => cb.dataset.cat);
 
-                    document.querySelectorAll('.txt-item').forEach(it => {
+                    document.querySelectorAll('.txt-item:not(.output-item)').forEach(it => {
                         const item = it;
-                        const ext = (item.dataset.ext || '').toLowerCase();
-                        const cat = extToCategory[ext] || null;
-                        // If 'No Outputs' is checked, hide .txt and .out files regardless of category selection
-                        if (noOutputsChecked && (ext === '.txt' || ext === '.out')) {
-                            item.style.display = 'none';
-                            return;
-                        }
+                        const category = item.dataset.category || '';
+                        const isDir = item.dataset.isdir === 'true';
+                        
                         if (activeCats.length === 0) {
-                            // no specific categories selected -> show all (unless noTxt hides .txt)
+                            // no specific categories selected -> show all
                             item.style.display = '';
                         } else {
-                            item.style.display = (cat && activeCats.indexOf(cat) >= 0) ? '' : 'none';
+                            // Show if matches any active category, or if it's a directory
+                            item.style.display = (isDir || activeCats.indexOf(category) >= 0) ? '' : 'none';
                         }
                     });
                 }
 
-                // Wire up events: categories are independent; 'No txt' toggles exclusion of .txt files
+                // Wire up events
                 checkboxes.forEach(cb => {
                     cb.addEventListener('change', () => {
                         applyFilter();
