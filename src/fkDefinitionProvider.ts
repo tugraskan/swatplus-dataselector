@@ -8,6 +8,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { SwatIndexer } from './indexer';
+import { pathStartsWith } from './pathUtils';
 
 export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
     private outputChannel: vscode.OutputChannel;
@@ -50,13 +51,11 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
             return undefined;
         }
 
-        // Normalize paths for cross-platform compatibility
-        const normalizedDocPath = path.normalize(document.fileName);
-        const normalizedTxtInOutPath = path.normalize(txtInOutPath);
+        // Check if document is in the indexed folder
+        // Uses platform-appropriate path comparison (case-insensitive on Windows)
+        this.outputChannel.appendLine(`[FK Definition] Checking if ${document.fileName} is in ${txtInOutPath}`);
         
-        this.outputChannel.appendLine(`[FK Definition] Checking if ${normalizedDocPath} is in ${normalizedTxtInOutPath}`);
-        
-        if (!normalizedDocPath.startsWith(normalizedTxtInOutPath)) {
+        if (!pathStartsWith(document.fileName, txtInOutPath)) {
             this.outputChannel.appendLine('[FK Definition] File not in indexed folder - skipping');
             return undefined;
         }
@@ -96,6 +95,12 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
         // Find which value the cursor is in
         for (let i = 0; i < values.length; i++) {
             const valueStart = line.text.indexOf(values[i], currentPos);
+            
+            // Handle case where value is not found
+            if (valueStart === -1) {
+                continue;
+            }
+            
             const valueEnd = valueStart + values[i].length;
             
             if (position.character >= valueStart && position.character <= valueEnd) {

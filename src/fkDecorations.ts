@@ -7,15 +7,36 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { SwatIndexer } from './indexer';
+import { pathStartsWith } from './pathUtils';
 
 /**
  * Calculate the character position of a column value in a whitespace-separated line
+ * by finding its actual position in the original line text.
  */
-function calculateColumnPosition(values: string[], columnIndex: number): { start: number; end: number } {
-    const valuesBefore = values.slice(0, columnIndex);
-    const startChar = valuesBefore.join(' ').length + valuesBefore.length;
-    const endChar = startChar + values[columnIndex].length;
-    return { start: startChar, end: endChar };
+function calculateColumnPosition(lineText: string, values: string[], columnIndex: number): { start: number; end: number } {
+    let currentPos = 0;
+    
+    // Find the actual position of the value at columnIndex in the original line
+    for (let i = 0; i <= columnIndex && i < values.length; i++) {
+        const valueStart = lineText.indexOf(values[i], currentPos);
+        
+        // Handle case where value is not found (should not happen in normal cases)
+        if (valueStart === -1) {
+            // Fallback: return position 0
+            return { start: 0, end: 0 };
+        }
+        
+        if (i === columnIndex) {
+            return {
+                start: valueStart,
+                end: valueStart + values[i].length
+            };
+        }
+        currentPos = valueStart + values[i].length;
+    }
+    
+    // Fallback (should not reach here)
+    return { start: 0, end: 0 };
 }
 
 export class SwatFKDecorationProvider {
@@ -80,14 +101,10 @@ export class SwatFKDecorationProvider {
             return;
         }
 
-        const datasetPath = this.indexer.getDatasetPath();
-        if (!datasetPath) {
-            return;
-        }
-
-        // Check if document is in TxtInOut
-        const txtInOutPath = path.join(datasetPath, 'TxtInOut');
-        if (!editor.document.fileName.startsWith(txtInOutPath)) {
+        // Get the indexed folder path and check if document is in it
+        // Uses platform-appropriate path comparison (case-insensitive on Windows)
+        const txtInOutPath = this.indexer.getTxtInOutPath();
+        if (!txtInOutPath || !pathStartsWith(editor.document.fileName, txtInOutPath)) {
             return;
         }
 
@@ -146,8 +163,8 @@ export class SwatFKDecorationProvider {
                     continue;
                 }
 
-                // Calculate position of the FK value in the line
-                const pos = calculateColumnPosition(values, columnIndex);
+                // Calculate position of the FK value in the line using actual line text
+                const pos = calculateColumnPosition(line.text, values, columnIndex);
 
                 const range = new vscode.Range(
                     lineNum,

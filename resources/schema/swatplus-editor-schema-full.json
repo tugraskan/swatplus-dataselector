@@ -3284,8 +3284,8 @@
           "is_foreign_key": false
         },
         {
-          "name": "init",
-          "db_column": "init",
+          "name": "cha_ini",
+          "db_column": "cha_ini",
           "type": "ForeignKeyField",
           "nullable": true,
           "is_primary_key": false,
@@ -3296,8 +3296,8 @@
           }
         },
         {
-          "name": "hyd",
-          "db_column": "hyd",
+          "name": "cha_hyd",
+          "db_column": "cha_hyd",
           "type": "ForeignKeyField",
           "nullable": true,
           "is_primary_key": false,
@@ -3308,8 +3308,8 @@
           }
         },
         {
-          "name": "sed",
-          "db_column": "sed",
+          "name": "cha_sed",
+          "db_column": "cha_sed",
           "type": "ForeignKeyField",
           "nullable": true,
           "is_primary_key": false,
@@ -3320,8 +3320,8 @@
           }
         },
         {
-          "name": "nut",
-          "db_column": "nut",
+          "name": "cha_nut",
+          "db_column": "cha_nut",
           "type": "ForeignKeyField",
           "nullable": true,
           "is_primary_key": false,
@@ -3345,32 +3345,32 @@
       ],
       "foreign_keys": [
         {
-          "column": "init",
-          "db_column": "init_id",
+          "column": "cha_ini",
+          "db_column": "cha_ini_id",
           "references": {
             "table": "initial_cha",
             "column": "id"
           }
         },
         {
-          "column": "hyd",
-          "db_column": "hyd_id",
+          "column": "cha_hyd",
+          "db_column": "cha_hyd_id",
           "references": {
             "table": "hyd_sed_lte_cha",
             "column": "id"
           }
         },
         {
-          "column": "sed",
-          "db_column": "sed_id",
+          "column": "cha_sed",
+          "db_column": "cha_sed_id",
           "references": {
             "table": "sediment_cha",
             "column": "id"
           }
         },
         {
-          "column": "nut",
-          "db_column": "nut_id",
+          "column": "cha_nut",
+          "db_column": "cha_nut_id",
           "references": {
             "table": "nutrients_cha",
             "column": "id"
@@ -3386,7 +3386,7 @@
       "source_file": "project/climate.py",
       "has_metadata_line": true,
       "has_header_line": true,
-      "data_starts_after": 2,
+      "data_starts_after": 1,
       "columns": [
         {
           "name": "id",
@@ -3648,42 +3648,62 @@
         {
           "name": "pcp",
           "db_column": "pcp",
-          "type": "CharField",
+          "type": "ForeignKeyField",
           "nullable": true,
           "is_primary_key": false,
-          "is_foreign_key": false
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "weather_pcp_pcp",
+            "column": "id"
+          }
         },
         {
           "name": "tmp",
           "db_column": "tmp",
-          "type": "CharField",
+          "type": "ForeignKeyField",
           "nullable": true,
           "is_primary_key": false,
-          "is_foreign_key": false
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "weather_tmp_tmp",
+            "column": "id"
+          }
         },
         {
           "name": "slr",
           "db_column": "slr",
-          "type": "CharField",
+          "type": "ForeignKeyField",
           "nullable": true,
           "is_primary_key": false,
-          "is_foreign_key": false
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "weather_slr_slr",
+            "column": "id"
+          }
         },
         {
           "name": "hmd",
           "db_column": "hmd",
-          "type": "CharField",
+          "type": "ForeignKeyField",
           "nullable": true,
           "is_primary_key": false,
-          "is_foreign_key": false
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "weather_hmd_hmd",
+            "column": "id"
+          }
         },
         {
           "name": "wnd",
           "db_column": "wnd",
-          "type": "CharField",
+          "type": "ForeignKeyField",
           "nullable": true,
           "is_primary_key": false,
-          "is_foreign_key": false
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "weather_wnd_wnd",
+            "column": "id"
+          }
         },
         {
           "name": "wnd_dir",
@@ -3735,6 +3755,46 @@
           "db_column": "wgn_id",
           "references": {
             "table": "weather_wgn_cli",
+            "column": "id"
+          }
+        },
+        {
+          "column": "pcp",
+          "db_column": "pcp_id",
+          "references": {
+            "table": "weather_pcp_pcp",
+            "column": "id"
+          }
+        },
+        {
+          "column": "tmp",
+          "db_column": "tmp_id",
+          "references": {
+            "table": "weather_tmp_tmp",
+            "column": "id"
+          }
+        },
+        {
+          "column": "slr",
+          "db_column": "slr_id",
+          "references": {
+            "table": "weather_slr_slr",
+            "column": "id"
+          }
+        },
+        {
+          "column": "hmd",
+          "db_column": "hmd_id",
+          "references": {
+            "table": "weather_hmd_hmd",
+            "column": "id"
+          }
+        },
+        {
+          "column": "wnd",
+          "db_column": "wnd_id",
+          "references": {
+            "table": "weather_wnd_wnd",
             "column": "id"
           }
         }
@@ -4694,7 +4754,7 @@
           "is_primary_key": false,
           "is_foreign_key": true,
           "fk_target": {
-            "table": "rout_unit_con",
+            "table": "rout_unit_rtu",
             "column": "id"
           }
         },
@@ -4743,7 +4803,7 @@
           "column": "rtu",
           "db_column": "rtu_id",
           "references": {
-            "table": "rout_unit_con",
+            "table": "rout_unit_rtu",
             "column": "id"
           }
         },
@@ -21937,6 +21997,366 @@
         }
       ],
       "notes": "Auto-generated via dynamic scan"
+    },
+    "weather-pcp.pcp": {
+      "file_name": "weather-pcp.pcp",
+      "table_name": "weather_pcp_pcp",
+      "model_class": "project.climate.Weather_pcp_pcp",
+      "source_file": "project/climate.py",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "nbyr",
+          "db_column": "nbyr",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "tstep",
+          "db_column": "tstep",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lat",
+          "db_column": "lat",
+          "type": "DoubleField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lon",
+          "db_column": "lon",
+          "type": "DoubleField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elev",
+          "db_column": "elev",
+          "type": "DoubleField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Auto-generated schema for Precipitation weather data files"
+    },
+    "weather-tmp.tmp": {
+      "file_name": "weather-tmp.tmp",
+      "table_name": "weather_tmp_tmp",
+      "model_class": "project.climate.Weather_tmp_tmp",
+      "source_file": "project/climate.py",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "nbyr",
+          "db_column": "nbyr",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "tstep",
+          "db_column": "tstep",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lat",
+          "db_column": "lat",
+          "type": "DoubleField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lon",
+          "db_column": "lon",
+          "type": "DoubleField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elev",
+          "db_column": "elev",
+          "type": "DoubleField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Auto-generated schema for Temperature weather data files"
+    },
+    "weather-slr.slr": {
+      "file_name": "weather-slr.slr",
+      "table_name": "weather_slr_slr",
+      "model_class": "project.climate.Weather_slr_slr",
+      "source_file": "project/climate.py",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "nbyr",
+          "db_column": "nbyr",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "tstep",
+          "db_column": "tstep",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lat",
+          "db_column": "lat",
+          "type": "DoubleField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lon",
+          "db_column": "lon",
+          "type": "DoubleField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elev",
+          "db_column": "elev",
+          "type": "DoubleField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Auto-generated schema for Solar Radiation weather data files"
+    },
+    "weather-hmd.hmd": {
+      "file_name": "weather-hmd.hmd",
+      "table_name": "weather_hmd_hmd",
+      "model_class": "project.climate.Weather_hmd_hmd",
+      "source_file": "project/climate.py",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "nbyr",
+          "db_column": "nbyr",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "tstep",
+          "db_column": "tstep",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lat",
+          "db_column": "lat",
+          "type": "DoubleField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lon",
+          "db_column": "lon",
+          "type": "DoubleField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elev",
+          "db_column": "elev",
+          "type": "DoubleField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Auto-generated schema for Humidity weather data files"
+    },
+    "weather-wnd.wnd": {
+      "file_name": "weather-wnd.wnd",
+      "table_name": "weather_wnd_wnd",
+      "model_class": "project.climate.Weather_wnd_wnd",
+      "source_file": "project/climate.py",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "nbyr",
+          "db_column": "nbyr",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "tstep",
+          "db_column": "tstep",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lat",
+          "db_column": "lat",
+          "type": "DoubleField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lon",
+          "db_column": "lon",
+          "type": "DoubleField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elev",
+          "db_column": "elev",
+          "type": "DoubleField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Auto-generated schema for Wind Speed weather data files"
     }
   },
   "statistics": {
