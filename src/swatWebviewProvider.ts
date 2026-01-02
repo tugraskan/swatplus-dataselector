@@ -1428,7 +1428,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                 shouldShow = true;
                             } else {
                                 // Show if directory contains files matching any active category
-                                shouldShow = dirCats.some(cat => activeCats.indexOf(cat) >= 0);
+                                shouldShow = dirCats.some(cat => activeCats.includes(cat));
                             }
                         } else {
                             // For files
@@ -1437,7 +1437,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                 shouldShow = true;
                             } else {
                                 // Show if matches any active category
-                                shouldShow = activeCats.indexOf(category) >= 0;
+                                shouldShow = activeCats.includes(category);
                             }
                         }
                         
