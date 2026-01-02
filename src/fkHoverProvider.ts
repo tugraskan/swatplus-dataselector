@@ -39,30 +39,51 @@ export class SwatFKHoverProvider implements vscode.HoverProvider {
         const fileName = path.basename(document.fileName);
         
         // Special handling for file.cio - it has a unique format
-        // Line 1: Title/description
-        // Line 2+: File references (one per line)
-        // No actual header line despite what schema says
+        // Based on schema:
+        // Line 0: Metadata line
+        // Line 1: Header (id classification order_in_class file_name customization)
+        // Line 2+: Data rows
+        // Column 3 (index 3) contains the file_name
         if (fileName === 'file.cio') {
             const line = document.lineAt(position.line);
             const lineText = line.text.trim();
             
-            // Skip title line (line 0) and empty lines
-            if (position.line === 0 || !lineText) {
+            // Skip metadata line (line 0), header line (line 1), and empty lines
+            if (position.line < 2 || !lineText) {
                 return undefined;
             }
             
-            // Extract the filename from the line
+            // Extract the filename from column 3 (file_name column)
             const parts = lineText.split(/\s+/);
-            let targetFileName: string | undefined;
+            const FILE_NAME_COLUMN_INDEX = 3;
             
-            for (const part of parts) {
-                if (part.includes('.') && !part.startsWith('.')) {
-                    targetFileName = part;
-                    break;
-                }
+            if (parts.length <= FILE_NAME_COLUMN_INDEX) {
+                return undefined;
             }
             
-            if (targetFileName) {
+            const targetFileName = parts[FILE_NAME_COLUMN_INDEX];
+            
+            // Check if cursor is on the file_name column
+            let columnIndex = -1;
+            let currentPos = 0;
+            
+            for (let i = 0; i < parts.length; i++) {
+                const valueStart = line.text.indexOf(parts[i], currentPos);
+                if (valueStart === -1) {
+                    continue;
+                }
+                
+                const valueEnd = valueStart + parts[i].length;
+                if (position.character >= valueStart && position.character <= valueEnd) {
+                    columnIndex = i;
+                    break;
+                }
+                
+                currentPos = valueEnd;
+            }
+            
+            // Only provide hover if cursor is on the file_name column
+            if (columnIndex === FILE_NAME_COLUMN_INDEX) {
                 const markdown = new vscode.MarkdownString();
                 markdown.isTrusted = true;
                 
