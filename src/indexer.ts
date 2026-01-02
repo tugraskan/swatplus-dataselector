@@ -361,7 +361,7 @@ export class SwatIndexer {
                 const line = lines[i].trim();
                 if (!line) {continue;}
 
-                const values = line.split(/\s+/);
+                const values = line.split(/\s+/).map(v => v.trim()); // Trim each value
                 if (values.length < headers.length) {
                     console.warn(`Malformed line ${i + 1} in ${filePath}`);
                     continue;
@@ -385,7 +385,7 @@ export class SwatIndexer {
                 
                 // Log first few rows for debugging
                 if (i - dataStartLine < 3) {
-                    console.log(`[Indexer]   Row ${i + 1}: pkColumn=${pkColumn}, pkValue="${pkValue}", values: ${JSON.stringify(valueMap).substring(0, 100)}...`);
+                    console.log(`[Indexer]   Row ${i + 1}: pkColumn=${pkColumn}, pkValue="${pkValue}" (length=${pkValue.length}), first few values: ${JSON.stringify(Object.fromEntries(Object.entries(valueMap).slice(0, 5)))}`);
                 }
 
                 const row: IndexedRow = {
@@ -456,8 +456,14 @@ export class SwatIndexer {
                 } else {
                     unresolvedCount++;
                     // Log first few unresolved for debugging
-                    if (unresolvedCount <= 5) {
-                        console.log(`[Indexer]   Unresolved FK: ${fkRef.sourceColumn}="${fkRef.fkValue}" -> ${fkRef.targetTable}, indexed keys: ${Array.from(targetTableIndex.keys()).slice(0, 5).join(', ')}`);
+                    if (unresolvedCount <= 10) {
+                        const indexedKeys = Array.from(targetTableIndex.keys()).slice(0, 10);
+                        console.log(`[Indexer]   Unresolved FK: ${fkRef.sourceColumn}="${fkRef.fkValue}" (length=${fkRef.fkValue.length}) -> ${fkRef.targetTable}`);
+                        console.log(`[Indexer]     Indexed keys (first 10): ${indexedKeys.map(k => `"${k}" (len=${k.length})`).join(', ')}`);
+                        console.log(`[Indexer]     FK value bytes: [${Array.from(fkRef.fkValue).map(c => c.charCodeAt(0)).join(', ')}]`);
+                        if (indexedKeys.length > 0) {
+                            console.log(`[Indexer]     First key bytes: [${Array.from(indexedKeys[0]).map(c => c.charCodeAt(0)).join(', ')}]`);
+                        }
                     }
                 }
             } else {
