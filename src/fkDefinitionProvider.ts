@@ -7,6 +7,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
 import { pathStartsWith } from './pathUtils';
 
@@ -63,6 +64,54 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
         // Get the file's schema table
         const fileName = path.basename(document.fileName);
         this.outputChannel.appendLine(`[FK Definition] File: ${fileName}`);
+        
+        // Special handling for file.cio - it has a unique format
+        // Line 1: Title/description
+        // Line 2+: File references (one per line)
+        // No actual header line despite what schema says
+        if (fileName === 'file.cio') {
+            const line = document.lineAt(position.line);
+            const lineText = line.text.trim();
+            
+            // Skip title line (line 0) and empty lines
+            if (position.line === 0 || !lineText) {
+                return undefined;
+            }
+            
+            // Extract the filename from the line
+            // file.cio format can be: "filename" or "classification order filename customization"
+            // We look for anything that looks like a filename (has a dot)
+            const parts = lineText.split(/\s+/);
+            let targetFileName: string | undefined;
+            
+            for (const part of parts) {
+                if (part.includes('.') && !part.startsWith('.')) {
+                    targetFileName = part;
+                    break;
+                }
+            }
+            
+            if (targetFileName) {
+                this.outputChannel.appendLine(`[FK Definition] file.cio special handling - target: ${targetFileName}`);
+                
+                const txtInOutPath = this.indexer.getTxtInOutPath();
+                if (txtInOutPath) {
+                    const targetFilePath = path.join(txtInOutPath, targetFileName);
+                    if (fs.existsSync(targetFilePath)) {
+                        this.outputChannel.appendLine(`[FK Definition] File found: ${targetFilePath}`);
+                        const targetUri = vscode.Uri.file(targetFilePath);
+                        const targetPosition = new vscode.Position(0, 0);
+                        this.outputChannel.appendLine('[FK Definition] Success - navigating to file\n');
+                        return new vscode.Location(targetUri, targetPosition);
+                    } else {
+                        this.outputChannel.appendLine(`[FK Definition] File not found: ${targetFilePath}`);
+                    }
+                }
+            }
+            
+            // If we're still here, file.cio handling didn't work, continue with normal flow
+        }
+        
         const table = schema.tables[fileName];
         if (!table) {
             this.outputChannel.appendLine(`[FK Definition] No schema found for file: ${fileName}`);

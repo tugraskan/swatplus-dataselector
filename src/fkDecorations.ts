@@ -6,6 +6,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
 import { pathStartsWith } from './pathUtils';
 
@@ -110,6 +111,13 @@ export class SwatFKDecorationProvider {
 
         // Get the file's schema table
         const fileName = path.basename(editor.document.fileName);
+        
+        // Special handling for file.cio - decorate file references
+        if (fileName === 'file.cio') {
+            this.decorateFileCio(editor, txtInOutPath);
+            return;
+        }
+        
         const table = schema.tables[fileName];
         if (!table) {
             return;
@@ -188,6 +196,73 @@ export class SwatFKDecorationProvider {
                 } else {
                     unresolvedDecorations.push(decoration);
                 }
+            }
+        }
+
+        // Apply decorations
+        editor.setDecorations(this.fkDecorationType, resolvedDecorations);
+        editor.setDecorations(this.unresolvedFkDecorationType, unresolvedDecorations);
+    }
+
+    /**
+     * Decorate file references in file.cio
+     */
+    private decorateFileCio(editor: vscode.TextEditor, txtInOutPath: string): void {
+        const resolvedDecorations: vscode.DecorationOptions[] = [];
+        const unresolvedDecorations: vscode.DecorationOptions[] = [];
+
+        // file.cio format:
+        // Line 0: Title/description
+        // Line 1+: File references (one per line)
+        for (let lineNum = 1; lineNum < editor.document.lineCount; lineNum++) {
+            const line = editor.document.lineAt(lineNum);
+            const lineText = line.text.trim();
+            
+            if (!lineText) {
+                continue;
+            }
+
+            // Extract filename from line (look for value with extension)
+            const parts = lineText.split(/\s+/);
+            let targetFileName: string | undefined;
+            let filenameStart = -1;
+            
+            for (const part of parts) {
+                if (part.includes('.') && !part.startsWith('.')) {
+                    targetFileName = part;
+                    // Find position in original line
+                    filenameStart = line.text.indexOf(part);
+                    break;
+                }
+            }
+
+            if (!targetFileName || filenameStart === -1) {
+                continue;
+            }
+
+            // Check if file exists
+            const targetFilePath = path.join(txtInOutPath, targetFileName);
+            const fileExists = fs.existsSync(targetFilePath);
+
+            const range = new vscode.Range(
+                lineNum,
+                filenameStart,
+                lineNum,
+                filenameStart + targetFileName.length
+            );
+
+            const filePurpose = this.indexer.getFilePurpose(targetFileName);
+            const decoration: vscode.DecorationOptions = {
+                range,
+                hoverMessage: fileExists
+                    ? `File reference → ${targetFileName}${filePurpose ? '\n' + filePurpose : ''}`
+                    : `⚠️ File not found: ${targetFileName}`
+            };
+
+            if (fileExists) {
+                resolvedDecorations.push(decoration);
+            } else {
+                unresolvedDecorations.push(decoration);
             }
         }
 
