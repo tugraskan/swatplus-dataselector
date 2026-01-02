@@ -30,16 +30,25 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Register FK definition provider for SWAT+ files
 	// Use a more flexible document selector that matches all files in TxtInOut
-	// and common SWAT+ file extensions
+	// and all SWAT+ file extensions found in the schema and documentation
 	const swatFileExtensions = [
+		// Common input files
 		'hru', 'hyd', 'sol', 'lum', 'ini', 'sno', 'plt', 'dtl', 'fld', 'sch',
 		'aqu', 'cha', 'res', 'bsn', 'cli', 'prt', 'ops', 'pst', 'sft', 'cal',
-		'cio'  // Add .cio extension for file.cio
+		'cio', 'cnt', 'sim', 'wet', 'str', 'sep', 'frt', 'til', 'urb',
+		// Data and configuration files
+		'aa', 'act', 'allo', 'alt', 'auto', 'base', 'code', 'col', 'conc', 'cond',
+		'cs', 'dat', 'days', 'def', 'del', 'dr', 'ele', 'elem', 'exc', 'file',
+		'grid', 'hmd', 'hrus', 'int', 'item', 'lin', 'locs', 'lsus', 'mon', 'mtl',
+		'ob', 'op', 'out', 'pcp', 'pth', 'rec', 'road', 'rtu', 'slr', 'slt',
+		'src', 'sta', 'tmp', 'txt', 'val', 'wnd', 'wro', 'yr', 'zone',
+		// Pesticide and path files
+		'pes', 'con'
 	];
 	const documentSelectors = [
 		{ pattern: '**/TxtInOut/**' },
 		{ pattern: '**/TxtInOut/*' },
-		// Register for all common SWAT+ file extensions
+		// Register for all SWAT+ file extensions
 		...swatFileExtensions.map(ext => ({ scheme: 'file' as const, pattern: `**/*.${ext}` }))
 	];
 	const definitionProviderDisposable = vscode.languages.registerDefinitionProvider(
