@@ -7,6 +7,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
 import { pathStartsWith } from './pathUtils';
 
@@ -66,14 +67,27 @@ export class SwatFKHoverProvider implements vscode.HoverProvider {
                 markdown.isTrusted = true;
                 
                 markdown.appendMarkdown(`**File Reference**\n\n`);
-                markdown.appendMarkdown(`Points to: \`${targetFileName}\`\n\n`);
+                
+                // Make the filename clickable if the file exists
+                const txtInOutPath = this.indexer.getTxtInOutPath();
+                if (txtInOutPath) {
+                    const targetFilePath = path.join(txtInOutPath, targetFileName);
+                    if (fs.existsSync(targetFilePath)) {
+                        const commandUri = vscode.Uri.parse(`command:vscode.open?${encodeURIComponent(JSON.stringify([vscode.Uri.file(targetFilePath)]))}`);
+                        markdown.appendMarkdown(`Points to: [${targetFileName}](${commandUri})\n\n`);
+                    } else {
+                        markdown.appendMarkdown(`Points to: \`${targetFileName}\` _(file not found)_\n\n`);
+                    }
+                } else {
+                    markdown.appendMarkdown(`Points to: \`${targetFileName}\`\n\n`);
+                }
                 
                 const targetPurpose = this.indexer.getFilePurpose(targetFileName);
                 if (targetPurpose) {
                     markdown.appendMarkdown(`*${targetPurpose}*\n\n`);
                 }
                 
-                markdown.appendMarkdown(`_Click to navigate to ${targetFileName}_`);
+                markdown.appendMarkdown(`_Click filename above to navigate_`);
                 return new vscode.Hover(markdown);
             }
         }
@@ -143,7 +157,19 @@ export class SwatFKHoverProvider implements vscode.HoverProvider {
             markdown.appendMarkdown(`**Foreign Key: \`${columnName}\`**\n\n`);
             
             if (targetFileName) {
-                markdown.appendMarkdown(`Points to: \`${targetFileName}\`\n\n`);
+                // Make the filename clickable if the file exists
+                const txtInOutPath = this.indexer.getTxtInOutPath();
+                if (txtInOutPath) {
+                    const targetFilePath = path.join(txtInOutPath, targetFileName);
+                    if (fs.existsSync(targetFilePath)) {
+                        const commandUri = vscode.Uri.parse(`command:vscode.open?${encodeURIComponent(JSON.stringify([vscode.Uri.file(targetFilePath)]))}`);
+                        markdown.appendMarkdown(`Points to: [${targetFileName}](${commandUri})\n\n`);
+                    } else {
+                        markdown.appendMarkdown(`Points to: \`${targetFileName}\`\n\n`);
+                    }
+                } else {
+                    markdown.appendMarkdown(`Points to: \`${targetFileName}\`\n\n`);
+                }
             }
             
             if (targetPurpose) {

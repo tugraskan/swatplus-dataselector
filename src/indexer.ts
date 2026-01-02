@@ -354,6 +354,8 @@ export class SwatIndexer {
             // Index data rows
             const dataStartLine = table.data_starts_after;
             const tableIndex = new Map<string, IndexedRow>();
+            
+            console.log(`[Indexer] Indexing ${table.table_name} (${path.basename(filePath)}), data starts at line ${dataStartLine}, headers: ${headers.join(', ')}`);
 
             for (let i = dataStartLine; i < lines.length; i++) {
                 const line = lines[i].trim();
@@ -380,6 +382,11 @@ export class SwatIndexer {
                     pkColumn = 'name';
                 }
                 const pkValue = valueMap[pkColumn] || '';
+                
+                // Log first few rows for debugging
+                if (i - dataStartLine < 3) {
+                    console.log(`[Indexer]   Row ${i + 1}: pkColumn=${pkColumn}, pkValue="${pkValue}", values: ${JSON.stringify(valueMap).substring(0, 100)}...`);
+                }
 
                 const row: IndexedRow = {
                     file: filePath,
@@ -427,6 +434,10 @@ export class SwatIndexer {
         // Clear reverse index
         this.reverseIndex.clear();
         
+        console.log(`[Indexer] Resolving ${this.fkReferences.length} FK references...`);
+        let resolvedCount = 0;
+        let unresolvedCount = 0;
+        
         for (const fkRef of this.fkReferences) {
             const targetTableIndex = this.index.get(fkRef.targetTable);
             if (targetTableIndex) {
@@ -434,6 +445,7 @@ export class SwatIndexer {
                 if (targetRow) {
                     fkRef.resolved = true;
                     fkRef.targetRow = targetRow;
+                    resolvedCount++;
                     
                     // Build reverse index: target_table:pk_value -> FK references
                     const reverseKey = `${fkRef.targetTable}:${fkRef.fkValue}`;
@@ -441,9 +453,23 @@ export class SwatIndexer {
                         this.reverseIndex.set(reverseKey, []);
                     }
                     this.reverseIndex.get(reverseKey)!.push(fkRef);
+                } else {
+                    unresolvedCount++;
+                    // Log first few unresolved for debugging
+                    if (unresolvedCount <= 5) {
+                        console.log(`[Indexer]   Unresolved FK: ${fkRef.sourceColumn}="${fkRef.fkValue}" -> ${fkRef.targetTable}, indexed keys: ${Array.from(targetTableIndex.keys()).slice(0, 5).join(', ')}`);
+                    }
+                }
+            } else {
+                unresolvedCount++;
+                // Log missing target table
+                if (unresolvedCount <= 5) {
+                    console.log(`[Indexer]   Unresolved FK (table not indexed): ${fkRef.sourceColumn}="${fkRef.fkValue}" -> ${fkRef.targetTable}`);
                 }
             }
         }
+        
+        console.log(`[Indexer] FK resolution complete: ${resolvedCount} resolved, ${unresolvedCount} unresolved`);
     }
 
     /**
