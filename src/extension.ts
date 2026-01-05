@@ -9,6 +9,7 @@ import { SwatFKDecorationProvider } from './fkDecorations';
 import { SwatFKHoverProvider } from './fkHoverProvider';
 import { SwatFKReferencesPanel } from './fkReferencesPanel';
 import { SwatTableViewerPanel } from './tableViewerPanel';
+import { SwatSingleTableViewerPanel } from './singleTableViewerPanel';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -228,14 +229,18 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Command: Show table viewer
 	const showTableViewer = vscode.commands.registerCommand('swat-dataset-selector.showTableViewer', (filePath?: string) => {
-		let focusedTable: string | undefined;
-		
-		// If a file path is provided, try to find the corresponding table
+		// If a file path is provided, open the single table viewer for that specific file
 		if (filePath && typeof filePath === 'string') {
-			focusedTable = indexer.getTableNameFromFile(filePath);
+			const tableName = indexer.getTableNameFromFile(filePath);
+			if (tableName) {
+				SwatSingleTableViewerPanel.createOrShow(indexer, tableName);
+			} else {
+				vscode.window.showWarningMessage(`Could not find table for file: ${filePath}`);
+			}
+		} else {
+			// Otherwise, show the all-tables viewer
+			SwatTableViewerPanel.createOrShow(indexer);
 		}
-		
-		SwatTableViewerPanel.createOrShow(indexer, focusedTable);
 	});
 
 	// Command: Export index to JSON file for inspection
