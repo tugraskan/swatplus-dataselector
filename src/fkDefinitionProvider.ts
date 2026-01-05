@@ -242,6 +242,13 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
         
         this.outputChannel.appendLine(`[FK Definition] columnIndex: ${columnIndex}, columnName: ${columnName}, fkValue: ${fkValue}`);
 
+        // Check if this column is a file pointer (not a true FK reference)
+        const metadata = this.indexer.getMetadata();
+        if (metadata?.file_pointer_columns?.[fileName]?.[columnName]) {
+            this.outputChannel.appendLine(`[FK Definition] Column ${columnName} is a file pointer, not a FK reference - skipping navigation`);
+            return undefined;
+        }
+
         // Special handling for management.sch child lines (auto operations and explicit operations)
         if (fileName === 'management.sch' && position.line > table.data_starts_after) {
             // Check if this is a child line by looking for parent schedule in previous lines

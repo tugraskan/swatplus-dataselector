@@ -34,10 +34,19 @@ export class SwatFKDiagnosticsProvider {
         // Get unresolved FK references
         const unresolvedRefs = this.indexer.getUnresolvedFKReferences();
 
+        // Get metadata to check for file pointer columns
+        const metadata = this.indexer.getMetadata();
+
         // Group by file
         const diagnosticsByFile = new Map<string, vscode.Diagnostic[]>();
 
         for (const ref of unresolvedRefs) {
+            // Skip diagnostics for file pointer columns (not true FK references)
+            const sourceFileName = path.basename(ref.sourceFile);
+            if (metadata?.file_pointer_columns?.[sourceFileName]?.[ref.sourceColumn]) {
+                continue; // Skip file pointer columns
+            }
+
             if (!diagnosticsByFile.has(ref.sourceFile)) {
                 diagnosticsByFile.set(ref.sourceFile, []);
             }

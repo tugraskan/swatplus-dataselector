@@ -3,7 +3,11 @@
   "description": "Additional metadata for SWAT+ TxtInOut files based on documentation analysis",
   "source": "Extracted from docs/EXTENSION_FILE_SCHEMA.md, DEPENDENCY_ANALYSIS.md, and related documentation",
   "null_sentinel_values": {
-    "global": ["null", "0", ""],
+    "global": [
+      "null",
+      "0",
+      ""
+    ],
     "description": "Values that should be treated as 'no reference' or null in FK relationships"
   },
   "table_name_to_file_name": {
@@ -124,57 +128,185 @@
     "object.prt": "Object-specific printing configuration"
   },
   "file_categories": {
-    "master_config": ["file.cio", "codes.bsn", "parameters.bsn", "object.cnt", "time.sim", "print.prt", "object.prt"],
-    "climate": ["weather-sta.cli", "weather-wgn.cli", "pcp.cli", "tmp.cli", "slr.cli", "hmd.cli", "wnd.cli", "atmo.cli"],
-    "hru": ["hru-data.hru", "topography.hyd", "hydrology.hyd", "field.fld"],
-    "soils": ["soils.sol"],
-    "landuse": ["landuse.lum", "plant.ini", "management.sch", "cntable.lum", "cons_practice.lum", "ovn_table.lum"],
-    "structural_practices": ["tiledrain.str", "septic.str", "filterstrip.str", "grassedww.str", "bmpuser.str"],
-    "initialization": ["soil_plant.ini", "initial.aqu", "initial.cha", "initial.res", "om_water.ini", "pest_water.ini", "salt_water.ini", "path_water.ini", "hmet_water.ini", "snow.sno"],
-    "aquifers": ["aquifer.aqu", "initial.aqu"],
-    "channels": ["channel.cha", "initial.cha", "hydrology.cha", "sediment.cha", "nutrients.cha"],
-    "reservoirs": ["reservoir.res", "initial.res", "hydrology.res", "sediment.res", "nutrients.res"],
-    "wetlands": ["wetland.wet"],
-    "routing": ["rout_unit.rtu", "rout_unit.def", "rout_unit.ele"],
-    "databases": ["plants.plt", "fertilizer.frt", "pesticide.pes", "tillage.til", "urban.urb", "septic.sep"]
+    "master_config": [
+      "file.cio",
+      "codes.bsn",
+      "parameters.bsn",
+      "object.cnt",
+      "time.sim",
+      "print.prt",
+      "object.prt"
+    ],
+    "climate": [
+      "weather-sta.cli",
+      "weather-wgn.cli",
+      "pcp.cli",
+      "tmp.cli",
+      "slr.cli",
+      "hmd.cli",
+      "wnd.cli",
+      "atmo.cli"
+    ],
+    "hru": [
+      "hru-data.hru",
+      "topography.hyd",
+      "hydrology.hyd",
+      "field.fld"
+    ],
+    "soils": [
+      "soils.sol"
+    ],
+    "landuse": [
+      "landuse.lum",
+      "plant.ini",
+      "management.sch",
+      "cntable.lum",
+      "cons_practice.lum",
+      "ovn_table.lum"
+    ],
+    "structural_practices": [
+      "tiledrain.str",
+      "septic.str",
+      "filterstrip.str",
+      "grassedww.str",
+      "bmpuser.str"
+    ],
+    "initialization": [
+      "soil_plant.ini",
+      "initial.aqu",
+      "initial.cha",
+      "initial.res",
+      "om_water.ini",
+      "pest_water.ini",
+      "salt_water.ini",
+      "path_water.ini",
+      "hmet_water.ini",
+      "snow.sno"
+    ],
+    "aquifers": [
+      "aquifer.aqu",
+      "initial.aqu"
+    ],
+    "channels": [
+      "channel.cha",
+      "initial.cha",
+      "hydrology.cha",
+      "sediment.cha",
+      "nutrients.cha"
+    ],
+    "reservoirs": [
+      "reservoir.res",
+      "initial.res",
+      "hydrology.res",
+      "sediment.res",
+      "nutrients.res"
+    ],
+    "wetlands": [
+      "wetland.wet"
+    ],
+    "routing": [
+      "rout_unit.rtu",
+      "rout_unit.def",
+      "rout_unit.ele"
+    ],
+    "databases": [
+      "plants.plt",
+      "fertilizer.frt",
+      "pesticide.pes",
+      "tillage.til",
+      "urban.urb",
+      "septic.sep"
+    ]
   },
   "common_pointer_patterns": {
     "init_pattern": {
       "description": "Files with 'init' field pointing to initialization files",
       "examples": [
-        {"file": "aquifer.aqu", "field": "aqu_init", "target": "initial.aqu"},
-        {"file": "reservoir.res", "field": "init", "target": "initial.res"},
-        {"file": "channel.cha", "field": "init", "target": "initial.cha"}
+        {
+          "file": "aquifer.aqu",
+          "field": "aqu_init",
+          "target": "initial.aqu"
+        },
+        {
+          "file": "reservoir.res",
+          "field": "init",
+          "target": "initial.res"
+        },
+        {
+          "file": "channel.cha",
+          "field": "init",
+          "target": "initial.cha"
+        }
       ]
     },
     "hyd_pattern": {
       "description": "Files with 'hyd' field pointing to hydrology parameter files",
       "examples": [
-        {"file": "hru-data.hru", "field": "hydro", "target": "hydrology.hyd"},
-        {"file": "reservoir.res", "field": "hyd", "target": "hydrology.res"},
-        {"file": "channel.cha", "field": "hyd", "target": "hydrology.cha"}
+        {
+          "file": "hru-data.hru",
+          "field": "hydro",
+          "target": "hydrology.hyd"
+        },
+        {
+          "file": "reservoir.res",
+          "field": "hyd",
+          "target": "hydrology.res"
+        },
+        {
+          "file": "channel.cha",
+          "field": "hyd",
+          "target": "hydrology.cha"
+        }
       ]
     },
     "sed_pattern": {
       "description": "Files with 'sed' field pointing to sediment parameter files",
       "examples": [
-        {"file": "reservoir.res", "field": "sed", "target": "sediment.res"},
-        {"file": "channel.cha", "field": "sed", "target": "sediment.cha"}
+        {
+          "file": "reservoir.res",
+          "field": "sed",
+          "target": "sediment.res"
+        },
+        {
+          "file": "channel.cha",
+          "field": "sed",
+          "target": "sediment.cha"
+        }
       ]
     },
     "nut_pattern": {
       "description": "Files with 'nut' field pointing to nutrient parameter files",
       "examples": [
-        {"file": "reservoir.res", "field": "nut", "target": "nutrients.res"},
-        {"file": "channel.cha", "field": "nut", "target": "nutrients.cha"}
+        {
+          "file": "reservoir.res",
+          "field": "nut",
+          "target": "nutrients.res"
+        },
+        {
+          "file": "channel.cha",
+          "field": "nut",
+          "target": "nutrients.cha"
+        }
       ]
     },
     "constituent_init_pattern": {
       "description": "Initialization files with constituent pointers",
       "examples": [
-        {"file": "initial.aqu", "field": "org_min", "target": "om_water.ini"},
-        {"file": "initial.aqu", "field": "pest", "target": "pest_water.ini"},
-        {"file": "initial.aqu", "field": "salt", "target": "salt_water.ini"}
+        {
+          "file": "initial.aqu",
+          "field": "org_min",
+          "target": "om_water.ini"
+        },
+        {
+          "file": "initial.aqu",
+          "field": "pest",
+          "target": "pest_water.ini"
+        },
+        {
+          "file": "initial.aqu",
+          "field": "salt",
+          "target": "salt_water.ini"
+        }
       ]
     }
   },
@@ -239,6 +371,31 @@
         "child_line_count_field": null,
         "child_line_count_fixed": 13,
         "indexing_strategy": "Index only the main record line; skip 1 header line + 12 monthly data lines"
+      }
+    }
+  },
+  "file_pointer_columns": {
+    "description": "Columns that contain file names/paths rather than FK references to table rows",
+    "weather-sta.cli": {
+      "pcp": {
+        "description": "Precipitation data file name",
+        "file_pattern": "*.pcp"
+      },
+      "tmp": {
+        "description": "Temperature data file name",
+        "file_pattern": "*.tmp"
+      },
+      "slr": {
+        "description": "Solar radiation data file name",
+        "file_pattern": "*.slr"
+      },
+      "hmd": {
+        "description": "Humidity data file name",
+        "file_pattern": "*.hmd"
+      },
+      "wnd": {
+        "description": "Wind data file name",
+        "file_pattern": "*.wnd"
       }
     }
   }
