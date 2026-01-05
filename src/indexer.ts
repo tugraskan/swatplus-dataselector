@@ -483,7 +483,8 @@ export class SwatIndexer {
                     'acts': acts.toString()
                 }
             };
-            tableIndex.set(dtblName, row);
+            // Store with lowercase key for case-insensitive lookup
+            tableIndex.set(dtblName.toLowerCase(), row);
 
             currentLine++; // Move past decision table header
 
@@ -792,7 +793,8 @@ export class SwatIndexer {
                     values: valueMap
                 };
 
-                tableIndex.set(pkValue, row);
+                // Store with lowercase key for case-insensitive lookup
+                tableIndex.set(pkValue.toLowerCase(), row);
 
                 // Record FK references
                 // In TxtInOut files, FK values typically reference 'name' column in target, not 'id'
@@ -863,10 +865,10 @@ export class SwatIndexer {
                     actualTargetTable = targetRow.tableName;
                 }
             } else {
-                // Standard FK resolution
+                // Standard FK resolution with case-insensitive lookup
                 const targetTableIndex = this.index.get(fkRef.targetTable);
                 if (targetTableIndex) {
-                    targetRow = targetTableIndex.get(fkRef.fkValue);
+                    targetRow = targetTableIndex.get(fkRef.fkValue.toLowerCase());
                 }
             }
             
@@ -960,7 +962,7 @@ export class SwatIndexer {
      */
     public resolveFKTarget(tableName: string, pkValue: string): IndexedRow | undefined {
         const tableIndex = this.index.get(tableName);
-        return tableIndex?.get(pkValue);
+        return tableIndex?.get(pkValue.toLowerCase());
     }
 
     /**
@@ -968,11 +970,12 @@ export class SwatIndexer {
      * Decision tables can be in any *.dtl file, so we search all DTL tables
      */
     public resolveDecisionTable(dtlName: string): IndexedRow | undefined {
-        // Search through all indexed tables
+        // Search through all indexed tables with case-insensitive lookup
+        const lowerDtlName = dtlName.toLowerCase();
         for (const [tableName, tableIndex] of this.index.entries()) {
             // Check if this is a DTL table (table name typically contains 'dtl')
             if (tableName.includes('dtl')) {
-                const row = tableIndex.get(dtlName);
+                const row = tableIndex.get(lowerDtlName);
                 if (row) {
                     return row;
                 }
@@ -1055,7 +1058,7 @@ export class SwatIndexer {
      * (reverse lookup - find what references this row)
      */
     public getReferencesToRow(tableName: string, pkValue: string): FKReference[] {
-        const reverseKey = `${tableName}:${pkValue}`;
+        const reverseKey = `${tableName}:${pkValue.toLowerCase()}`;
         return this.reverseIndex.get(reverseKey) || [];
     }
 
