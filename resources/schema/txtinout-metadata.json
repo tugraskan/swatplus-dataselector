@@ -203,11 +203,11 @@
     "management.sch": {
       "description": "Management schedules with main record line followed by operation detail lines",
       "structure": {
-        "main_record_format": "Main line contains schedule name, numb_ops, and numb_auto (count of auto operations)",
-        "child_line_format": "Following lines contain operation names (one per line, indented)",
+        "main_record_format": "Main line contains schedule name, numb_ops (explicit operations), and numb_auto (decision table references)",
+        "child_line_format": "Following lines: first numb_auto lines are decision table references (from lum.dtl), then numb_ops lines are explicit operations",
         "main_record_identifier": "First data field is the schedule name (primary key)",
-        "child_line_count_field": "numb_auto",
-        "indexing_strategy": "Index only the main record line; skip operation detail lines"
+        "child_line_count_field": "numb_auto+numb_ops",
+        "indexing_strategy": "Index only the main record line; skip numb_auto decision table reference lines + numb_ops explicit operation lines"
       }
     },
     "d_table.dtl": {

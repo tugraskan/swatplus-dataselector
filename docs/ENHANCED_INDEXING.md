@@ -337,20 +337,22 @@ oak          ...       ...        ...    <- plant 1
 **Structure**:
 ```
 Management Schedule
-name         numb_ops  numb_auto  ...
-agrl_rot     0         2          ...   <- main record
-    pl_hv_agro                          <- operation 1 (indented)
-    fert_stress                         <- operation 2 (indented)
-rice140_rot  0         7          ...   <- main record
-    plow                                <- operation 1
-    weir60r                             <- operation 2
-    ...
+name                      numb_ops  numb_auto  ...
+agrl_rot                  0         2          ...   <- main record (2 auto ops)
+    pl_hv_agro                                      <- auto op 1 (dtl reference)
+    fert_stress                                     <- auto op 2 (dtl reference)
+hay_cmz_60__dry_101531    3         1          ...   <- main record (1 auto + 3 explicit)
+    hay_fesc                                        <- auto op 1 (dtl reference)
+    fert          0  0  0.2  mhp  broadcast  31.87  <- explicit op 1
+    fert          0  0  0.2  mhn  broadcast  74.88  <- explicit op 2
+    skip          0  0  0    null null       0      <- explicit op 3
 ```
 
 **Detection Logic**:
-- Main records have `numb_auto` field specifying count of auto operations
-- Child records (operation names) follow main record on indented lines
-- Count field `numb_auto` specifies number of child lines to skip
+- Main records have `numb_ops` and `numb_auto` fields
+- Child records follow in order: first `numb_auto` lines (decision table references to lum.dtl), then `numb_ops` lines (explicit operations)
+- Total skip count = `numb_auto + numb_ops`
+- Decision table references (auto ops) are FK references to `lum.dtl`
 
 #### Decision Tables (*.dtl)
 

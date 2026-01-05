@@ -88,21 +88,27 @@ oak          ...       ...         ...   <- CHILD 1 (skipped)
 Used when operations are listed on child lines following the main record.
 
 **Logic:**
-- Parse the `numb_auto` field from main record
-- Skip exactly N lines after processing the main record
+- Parse both `numb_auto` and `numb_ops` fields from main record
+- Total child lines = `numb_auto + numb_ops`
+- First `numb_auto` lines are decision table references (FK to lum.dtl)
+- Next `numb_ops` lines are explicit operations with parameters
+- Skip total lines after processing the main record
 - Validate count (must be positive, capped at 1000)
 
 **Example:**
 ```
-name         numb_ops  numb_auto  ...
-agrl_rot     0         2          ...   <- MAIN RECORD (numb_auto=2)
-    pl_hv_agro                          <- CHILD 1 (skipped)
-    fert_stress                         <- CHILD 2 (skipped)
-rice140_rot  0         7          ...   <- MAIN RECORD (numb_auto=7)
-    plow                                <- CHILD 1 (skipped)
-    weir60r                             <- CHILD 2 (skipped)
-    ...                                 <- Children 3-7 (skipped)
+name                      numb_ops  numb_auto  ...
+agrl_rot                  0         2          ...   <- MAIN RECORD (skip 0+2=2 lines)
+    pl_hv_agro                                      <- CHILD 1: dtl ref (skipped)
+    fert_stress                                     <- CHILD 2: dtl ref (skipped)
+hay_cmz_60__dry_101531    3         1          ...   <- MAIN RECORD (skip 3+1=4 lines)
+    hay_fesc                                        <- CHILD 1: dtl ref (skipped)
+    fert          0  0  0.2  mhp  broadcast  31.87  <- CHILD 2: explicit op (skipped)
+    fert          0  0  0.2  mhn  broadcast  74.88  <- CHILD 3: explicit op (skipped)
+    skip          0  0  0    null null       0      <- CHILD 4: explicit op (skipped)
 ```
+
+**Note:** The first `numb_auto` child lines are FK references to decision tables in `lum.dtl` file.
 
 ### 4. Implementation Details
 
@@ -119,8 +125,22 @@ rice140_rot  0         7          ...   <- MAIN RECORD (numb_auto=7)
 
 **`getChildLineCount(valueMap, config, fileName): number`**
 - Extracts explicit child count from configured field
+- Supports multi-field syntax (e.g., "numb_auto+numb_ops") to sum multiple fields
 - Validates count (negative/excessive values)
 - Returns 0 if no explicit count available
+
+**Multi-Field Count Support:**
+```typescript
+// Configuration in metadata
+"child_line_count_field": "numb_auto+numb_ops"
+
+// Implementation sums both fields
+const fields = countField.split('+');  // ["numb_auto", "numb_ops"]
+let totalCount = 0;
+for (const field of fields) {
+    totalCount += parseInt(valueMap[field], 10) || 0;
+}
+```
 
 **Modified `indexTable()` Loop**
 ```typescript

@@ -226,23 +226,55 @@ export class SwatIndexer {
         // Check if there's a field that specifies the child line count
         const countField = config.structure.child_line_count_field;
         
-        if (countField && valueMap[countField]) {
-            // Parse the count from the field value
-            const count = parseInt(valueMap[countField], 10);
-            
-            // Validate the count
-            if (isNaN(count) || count < 0) {
-                console.warn(`[Indexer] Invalid child line count in ${fileName}: ${valueMap[countField]}`);
-                return 0;
+        if (countField) {
+            // Handle special case for multiple fields (e.g., "numb_auto+numb_ops")
+            if (countField.includes('+')) {
+                const fields = countField.split('+').map(f => f.trim());
+                let totalCount = 0;
+                
+                for (const field of fields) {
+                    if (valueMap[field]) {
+                        const count = parseInt(valueMap[field], 10);
+                        if (!isNaN(count) && count > 0) {
+                            totalCount += count;
+                        }
+                    }
+                }
+                
+                // Validate the total count
+                if (totalCount < 0) {
+                    console.warn(`[Indexer] Invalid total child line count in ${fileName}: ${totalCount}`);
+                    return 0;
+                }
+                
+                // Sanity check: prevent excessive line skipping
+                if (totalCount > 1000) {
+                    console.warn(`[Indexer] Suspiciously large child line count in ${fileName}: ${totalCount}. Capping at 1000.`);
+                    return 1000;
+                }
+                
+                return totalCount;
             }
             
-            // Sanity check: prevent excessive line skipping
-            if (count > 1000) {
-                console.warn(`[Indexer] Suspiciously large child line count in ${fileName}: ${count}. Capping at 1000.`);
-                return 1000;
+            // Handle single field case
+            if (valueMap[countField]) {
+                // Parse the count from the field value
+                const count = parseInt(valueMap[countField], 10);
+                
+                // Validate the count
+                if (isNaN(count) || count < 0) {
+                    console.warn(`[Indexer] Invalid child line count in ${fileName}: ${valueMap[countField]}`);
+                    return 0;
+                }
+                
+                // Sanity check: prevent excessive line skipping
+                if (count > 1000) {
+                    console.warn(`[Indexer] Suspiciously large child line count in ${fileName}: ${count}. Capping at 1000.`);
+                    return 1000;
+                }
+                
+                return count;
             }
-            
-            return count;
         }
         
         // For files without explicit count field, return 0
