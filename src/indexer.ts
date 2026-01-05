@@ -13,6 +13,7 @@ import * as path from 'path';
 // Constants for hierarchical file handling
 const NUMERIC_VALUE_PATTERN = /^\d+(\.\d+)?$/;
 const DEBUG_OUTPUT_LINE_LIMIT = 10;
+const MAX_EXTRA_COLUMN_WARNINGS = 3; // Only show first few warnings to avoid log spam
 
 // TxtInOut metadata interface
 interface TxtInOutMetadata {
@@ -767,7 +768,7 @@ export class SwatIndexer {
 
                 // Warn if there are more values than headers (potential parsing issue)
                 if (!isHierarchical && values.length > headers.length) {
-                    if (i - dataStartLine < 3) {
+                    if (i - dataStartLine < MAX_EXTRA_COLUMN_WARNINGS) {
                         console.warn(`[Indexer] Line ${i + 1} in ${filePath} has more values (${values.length}) than headers (${headers.length})`);
                         console.warn(`[Indexer]   Extra values will be ignored: [${values.slice(headers.length).join(', ')}]`);
                     }
@@ -776,7 +777,7 @@ export class SwatIndexer {
                 // Build value map with consistent whitespace-normalized values
                 const valueMap: { [key: string]: string } = {};
                 for (let j = 0; j < headers.length && j < values.length; j++) {
-                    // Values are already trimmed by split on trimmed line, but normalize anyway
+                    // Defensive trim: values should already be trimmed from split, but ensure consistency
                     valueMap[headers[j]] = values[j].trim();
                 }
                 
