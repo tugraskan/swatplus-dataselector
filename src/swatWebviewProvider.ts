@@ -92,8 +92,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                             if (data.path && typeof data.path === 'string') {
                                 const section = data.section || 'outputs'; // Default to outputs for backward compatibility
                                 if (section === 'inputs') {
-                                    // For input files, show table viewer instead of opening the raw file
-                                    vscode.commands.executeCommand('swat-dataset-selector.showTableViewer');
+                                    // For input files, show table viewer with the specific file focused
+                                    vscode.commands.executeCommand('swat-dataset-selector.showTableViewer', data.path);
                                 } else {
                                     // For output files, open the file in an editor
                                     vscode.commands.executeCommand('swat-dataset-selector.openFile', data.path);

@@ -225,8 +225,15 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	// Command: Show table viewer
-	const showTableViewer = vscode.commands.registerCommand('swat-dataset-selector.showTableViewer', () => {
-		SwatTableViewerPanel.createOrShow(indexer);
+	const showTableViewer = vscode.commands.registerCommand('swat-dataset-selector.showTableViewer', (filePath?: string) => {
+		let focusedTable: string | undefined;
+		
+		// If a file path is provided, try to find the corresponding table
+		if (filePath && typeof filePath === 'string') {
+			focusedTable = indexer.getTableNameFromFile(filePath);
+		}
+		
+		SwatTableViewerPanel.createOrShow(indexer, focusedTable);
 	});
 
 	// Command: Export index to JSON file for inspection

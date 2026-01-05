@@ -13,12 +13,15 @@ export class SwatTableViewerPanel {
     public static currentPanel: SwatTableViewerPanel | undefined;
     private readonly _panel: vscode.WebviewPanel;
     private _disposables: vscode.Disposable[] = [];
+    private _focusedTable: string | undefined; // Table to auto-expand and scroll to
 
     private constructor(
         panel: vscode.WebviewPanel,
-        private indexer: SwatIndexer
+        private indexer: SwatIndexer,
+        focusedTable?: string
     ) {
         this._panel = panel;
+        this._focusedTable = focusedTable;
 
         // Set the webview's initial html content
         this._update();
@@ -45,13 +48,14 @@ export class SwatTableViewerPanel {
         );
     }
 
-    public static createOrShow(indexer: SwatIndexer) {
+    public static createOrShow(indexer: SwatIndexer, focusedTable?: string) {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
 
-        // If we already have a panel, show it
+        // If we already have a panel, show it and update with the new focused table
         if (SwatTableViewerPanel.currentPanel) {
+            SwatTableViewerPanel.currentPanel._focusedTable = focusedTable;
             SwatTableViewerPanel.currentPanel._panel.reveal(column);
             SwatTableViewerPanel.currentPanel._update();
             return;
@@ -68,7 +72,7 @@ export class SwatTableViewerPanel {
             }
         );
 
-        SwatTableViewerPanel.currentPanel = new SwatTableViewerPanel(panel, indexer);
+        SwatTableViewerPanel.currentPanel = new SwatTableViewerPanel(panel, indexer, focusedTable);
     }
 
     public dispose() {
@@ -135,15 +139,19 @@ export class SwatTableViewerPanel {
             const schemaTable = schema.tables[this.indexer.getFileNameForTable(tableName) || ''];
             const rowCount = tableData.size;
             
+            // Check if this is the focused table
+            const isFocused = this._focusedTable && tableName === this._focusedTable;
+            const collapsedClass = isFocused ? '' : 'collapsed';
+            
             tablesHtml += `
-                <div class="table-section">
-                    <h3 class="table-header" onclick="toggleTable('${tableName}')">
+                <div class="table-section" ${isFocused ? 'id="focused-table"' : ''}>
+                    <h3 class="table-header ${collapsedClass}" onclick="toggleTable('${tableName}')">
                         <span class="toggle-icon">▼</span>
                         ${tableName}
                         <span class="badge">${rowCount} rows</span>
                         ${schemaTable ? `<span class="file-badge">${schemaTable.file_name}</span>` : ''}
                     </h3>
-                    <div id="${tableName}" class="table-content">
+                    <div id="${tableName}" class="table-content ${collapsedClass}">
                         ${this._getTableHtml(tableName, tableData, schemaTable)}
                     </div>
                 </div>
@@ -540,6 +548,14 @@ export class SwatTableViewerPanel {
                     line: line
                 });
             }
+
+            // Scroll to focused table on load
+            window.addEventListener('load', function() {
+                const focusedTable = document.getElementById('focused-table');
+                if (focusedTable) {
+                    focusedTable.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
         `;
     }
 }
