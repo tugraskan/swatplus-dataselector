@@ -211,10 +211,14 @@ export class SwatFKDecorationProvider {
         const resolvedDecorations: vscode.DecorationOptions[] = [];
         const unresolvedDecorations: vscode.DecorationOptions[] = [];
 
-        // file.cio format:
-        // Line 0: Title/description
-        // Line 1+: File references (one per line)
-        for (let lineNum = 1; lineNum < editor.document.lineCount; lineNum++) {
+        // file.cio format (based on schema):
+        // Line 0: Title/description (metadata line)
+        // Line 1: Header (id classification order_in_class file_name customization)
+        // Line 2+: Data rows
+        // Column 3 (index 3) contains the file_name
+        const FILE_NAME_COLUMN_INDEX = 3;
+        
+        for (let lineNum = 2; lineNum < editor.document.lineCount; lineNum++) {
             const line = editor.document.lineAt(lineNum);
             const lineText = line.text.trim();
             
@@ -222,21 +226,31 @@ export class SwatFKDecorationProvider {
                 continue;
             }
 
-            // Extract filename from line (look for value with extension)
+            // Extract filename from column 3 (file_name column)
             const parts = lineText.split(/\s+/);
-            let targetFileName: string | undefined;
-            let filenameStart = -1;
             
-            for (const part of parts) {
-                if (part.includes('.') && !part.startsWith('.')) {
-                    targetFileName = part;
-                    // Find position in original line
-                    filenameStart = line.text.indexOf(part);
+            if (parts.length <= FILE_NAME_COLUMN_INDEX) {
+                continue;
+            }
+            
+            const targetFileName = parts[FILE_NAME_COLUMN_INDEX];
+            
+            // Find position in original line
+            let currentPos = 0;
+            let filenameStart = -1;
+            for (let i = 0; i <= FILE_NAME_COLUMN_INDEX && i < parts.length; i++) {
+                const valueStart = line.text.indexOf(parts[i], currentPos);
+                if (valueStart === -1) {
                     break;
                 }
+                if (i === FILE_NAME_COLUMN_INDEX) {
+                    filenameStart = valueStart;
+                    break;
+                }
+                currentPos = valueStart + parts[i].length;
             }
 
-            if (!targetFileName || filenameStart === -1) {
+            if (filenameStart === -1) {
                 continue;
             }
 
