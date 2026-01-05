@@ -186,7 +186,7 @@
         "main_record_format": "Main line contains soil name and properties, plus layer count",
         "child_line_format": "Following lines contain layer-specific data (one line per layer)",
         "main_record_identifier": "First data field is the soil name (primary key)",
-        "child_line_count_field": "Not explicitly stored in header; layers are implied by data structure",
+        "child_line_count_field": null,
         "indexing_strategy": "Index only the main record line; skip child layer lines"
       }
     },
@@ -196,7 +196,7 @@
         "main_record_format": "Main line contains community name, rotation year, and plant count",
         "child_line_format": "Following lines contain individual plant details (one line per plant in community)",
         "main_record_identifier": "First data field is the community name (primary key)",
-        "child_line_count_field": "plnt_cnt field specifies number of following plant detail lines",
+        "child_line_count_field": "plnt_cnt",
         "indexing_strategy": "Index only the main record line; skip plant detail lines"
       }
     },
@@ -206,6 +206,7 @@
         "main_record_format": "Multi-line format with conditions and actions",
         "child_line_format": "Action lines follow condition lines",
         "main_record_identifier": "Each decision rule set is a logical record",
+        "child_line_count_field": null,
         "indexing_strategy": "Index main decision lines; specific format varies by decision table type"
       }
     },
@@ -214,6 +215,8 @@
       "structure": {
         "main_record_format": "Condition lines followed by action lines",
         "child_line_format": "Action specifications on separate lines",
+        "main_record_identifier": null,
+        "child_line_count_field": null,
         "indexing_strategy": "Index main decision lines; skip action detail lines"
       }
     }

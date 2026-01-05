@@ -42,8 +42,8 @@ interface HierarchicalFileConfig {
     structure: {
         main_record_format: string;
         child_line_format: string;
-        main_record_identifier: string;
-        child_line_count_field?: string;
+        main_record_identifier: string | null;
+        child_line_count_field?: string | null;
         indexing_strategy: string;
     };
 }
@@ -225,11 +225,24 @@ export class SwatIndexer {
         if (countField && valueMap[countField]) {
             // Parse the count from the field value
             const count = parseInt(valueMap[countField], 10);
-            return isNaN(count) ? 0 : count;
+            
+            // Validate the count
+            if (isNaN(count) || count < 0) {
+                console.warn(`[Indexer] Invalid child line count in ${fileName}: ${valueMap[countField]}`);
+                return 0;
+            }
+            
+            // Sanity check: prevent excessive line skipping
+            if (count > 1000) {
+                console.warn(`[Indexer] Suspiciously large child line count in ${fileName}: ${count}. Capping at 1000.`);
+                return 1000;
+            }
+            
+            return count;
         }
         
         // For files without explicit count field, return 0
-        // We'll use a different strategy - detect child lines on-the-fly
+        // We'll use heuristic detection instead
         return 0;
     }
 
@@ -468,16 +481,27 @@ export class SwatIndexer {
                     valueMap[headers[j]] = values[j];
                 }
 
-                // For hierarchical files, check if this is a main record or child line
+                // For hierarchical files, determine if this is a main record or child line
+                let skipCount = 0;
                 if (isHierarchical && hierarchicalConfig) {
-                    const isMainRecord = this.isMainRecordLine(valueMap, table.file_name, headers);
-                    if (!isMainRecord) {
-                        // This is a child line - skip it
-                        if (i - dataStartLine < 10) {
-                            console.log(`[Indexer]   Skipping child line ${i + 1}`);
+                    // First, try explicit child count (e.g., plant.ini with plnt_cnt field)
+                    const explicitCount = this.getChildLineCount(valueMap, hierarchicalConfig, table.file_name);
+                    
+                    if (explicitCount > 0) {
+                        // This file has explicit child counts - use them
+                        // The current line is a main record, and we'll skip children after processing
+                        skipCount = explicitCount;
+                    } else {
+                        // No explicit count - use heuristic detection (e.g., soils.sol)
+                        const isMainRecord = this.isMainRecordLine(valueMap, table.file_name, headers);
+                        if (!isMainRecord) {
+                            // This is a child line - skip it
+                            if (i - dataStartLine < 10) {
+                                console.log(`[Indexer]   Skipping child line ${i + 1}`);
+                            }
+                            i++;
+                            continue;
                         }
-                        i++;
-                        continue;
                     }
                 }
 
@@ -528,13 +552,10 @@ export class SwatIndexer {
                     }
                 }
 
-                // Handle hierarchical files with explicit child count
-                if (isHierarchical && hierarchicalConfig) {
-                    const childLineCount = this.getChildLineCount(valueMap, hierarchicalConfig, table.file_name);
-                    if (childLineCount > 0) {
-                        console.log(`[Indexer]   Skipping ${childLineCount} child lines for record "${pkValue}"`);
-                        i += childLineCount; // Skip the child lines
-                    }
+                // Skip child lines if we have an explicit count (e.g., plant.ini)
+                if (skipCount > 0) {
+                    console.log(`[Indexer]   Skipping ${skipCount} child lines for record "${pkValue}"`);
+                    i += skipCount;
                 }
 
                 i++;
