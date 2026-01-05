@@ -40,9 +40,9 @@ export class SwatSingleTableViewerPanel {
                             this.navigateToLocation(message.file, message.line);
                         }
                         break;
-                    case 'peekFKRow':
-                        if (message.file && message.line) {
-                            this.peekLocation(message.file, message.line);
+                    case 'getFKRowData':
+                        if (message.tableName && message.fkValue) {
+                            this.sendFKRowData(message.tableName, message.fkValue);
                         }
                         break;
                     case 'openTableInNewTab':
@@ -53,6 +53,11 @@ export class SwatSingleTableViewerPanel {
                     case 'openInputFile':
                         if (message.file) {
                             this.openFileInEditor(message.file);
+                        }
+                        break;
+                    case 'openFileForTable':
+                        if (message.tableName) {
+                            this.openFileForTable(message.tableName);
                         }
                         break;
                 }
@@ -117,21 +122,49 @@ export class SwatSingleTableViewerPanel {
         }
     }
 
-    private async peekLocation(file: string, line: number) {
+    private sendFKRowData(tableName: string, fkValue: string) {
         try {
-            const document = await vscode.workspace.openTextDocument(file);
-            const position = new vscode.Position(line - 1, 0);
-            const uri = vscode.Uri.file(file);
+            const schema = this.indexer.getSchema();
+            const indexData = this.indexer.getIndexData();
             
-            // Use the peek definition command to show a peek view
-            await vscode.commands.executeCommand('editor.action.peekLocations', 
-                uri, 
-                position, 
-                [new vscode.Location(uri, position)],
-                'peek'
-            );
+            if (!schema || !indexData) {
+                return;
+            }
+            
+            // Get the target table data
+            const targetTableData = indexData.get(tableName);
+            if (!targetTableData) {
+                return;
+            }
+            
+            // Find the row with the matching FK value
+            const targetRow = this.indexer.resolveFKTarget(tableName, fkValue);
+            if (!targetRow) {
+                return;
+            }
+            
+            // Get schema for the target table to get column names
+            const fileName = this.indexer.getFileNameForTable(tableName);
+            const schemaTable = fileName && schema.tables[fileName] ? schema.tables[fileName] : undefined;
+            
+            let columns: string[] = [];
+            if (schemaTable && schemaTable.columns) {
+                columns = schemaTable.columns.map((col: any) => col.name);
+            } else {
+                columns = Object.keys(targetRow.values || {});
+            }
+            
+            // Send the row data back to the webview
+            this._panel.webview.postMessage({
+                command: 'showFKRowData',
+                tableName: tableName,
+                fileName: fileName || tableName,
+                columns: columns,
+                rowData: targetRow.values,
+                lineNumber: targetRow.lineNumber
+            });
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to peek at ${file}:${line}`);
+            console.error('Failed to get FK row data', error);
         }
     }
 
@@ -146,6 +179,32 @@ export class SwatSingleTableViewerPanel {
             await vscode.window.showTextDocument(document, { preview: false });
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to open file ${file}`);
+        }
+    }
+
+    private async openFileForTable(tableName: string) {
+        try {
+            const fileName = this.indexer.getFileNameForTable(tableName);
+            if (!fileName) {
+                vscode.window.showErrorMessage(`Could not find file for table: ${tableName}`);
+                return;
+            }
+            
+            // Get the first row to find the file path
+            const indexData = this.indexer.getIndexData();
+            const tableData = indexData.get(tableName);
+            if (!tableData || tableData.size === 0) {
+                vscode.window.showErrorMessage(`No data found for table: ${tableName}`);
+                return;
+            }
+            
+            const firstRow = Array.from(tableData.values())[0];
+            if (firstRow && firstRow.file) {
+                const document = await vscode.workspace.openTextDocument(firstRow.file);
+                await vscode.window.showTextDocument(document, { preview: false });
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to open file for table ${tableName}`);
         }
     }
 
@@ -196,7 +255,7 @@ export class SwatSingleTableViewerPanel {
             <div class="header">
                 <h1>${this.tableName}</h1>
                 <div class="stats">
-                    <span class="stat-item">File: ${fileName}</span>
+                    <span class="stat-item">File: <a href="#" onclick="openFileForTable('${this._escapeJs(this.tableName)}'); return false;" class="file-link" title="Click to open file">${fileName}</a></span>
                     <span class="stat-item">Rows: ${rowCount}</span>
                 </div>
             </div>
@@ -263,7 +322,10 @@ export class SwatSingleTableViewerPanel {
                     if (fkInfo) {
                         const targetRow = this.indexer.resolveFKTarget(fkInfo.references.table, value);
                         if (targetRow) {
-                            tableHtml += `<td class="fk-cell" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-table="${this._escapeHtml(fkInfo.references.table)}"><a href="#" onclick="peekFKRow('${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber}); return false;" oncontextmenu="showFKContextMenu(event, '${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber}, '${this._escapeJs(fkInfo.references.table)}'); return false;" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
+                            // Embed the FK row data as JSON in data attributes
+                            const fkRowDataJson = JSON.stringify(targetRow.values).replace(/"/g, '&quot;');
+                            const fileName = this.indexer.getFileNameForTable(fkInfo.references.table) || fkInfo.references.table;
+                            tableHtml += `<td class="fk-cell" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" onclick="toggleFKPeek(this, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" oncontextmenu="showFKContextMenu(event, '${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber}, '${this._escapeJs(fkInfo.references.table)}'); return false;" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
                         } else {
                             tableHtml += `<td class="fk-cell unresolved" title="Unresolved FK to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</td>`;
                         }
@@ -499,6 +561,46 @@ export class SwatSingleTableViewerPanel {
                 text-decoration: underline;
                 color: var(--vscode-textLink-activeForeground);
             }
+            .file-link {
+                color: var(--vscode-textLink-foreground);
+                text-decoration: none;
+                cursor: pointer;
+            }
+            .file-link:hover {
+                text-decoration: underline;
+                color: var(--vscode-textLink-activeForeground);
+            }
+            /* FK Peek Row Display */
+            .fk-peek-row {
+                margin: 8px 0;
+                padding: 12px;
+                background-color: var(--vscode-editor-background);
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                font-size: 0.85em;
+            }
+            .fk-peek-header {
+                font-weight: 600;
+                margin-bottom: 8px;
+                padding-bottom: 6px;
+                border-bottom: 1px solid var(--vscode-panel-border);
+                color: var(--vscode-foreground);
+            }
+            .fk-peek-table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            .fk-peek-table th {
+                text-align: left;
+                padding: 4px 8px;
+                background-color: var(--vscode-editorGroupHeader-tabsBackground);
+                font-weight: 600;
+                font-size: 0.9em;
+            }
+            .fk-peek-table td {
+                padding: 4px 8px;
+                border-bottom: 1px solid var(--vscode-panel-border);
+            }
             /* FK Context Menu Styles */
             .fk-context-menu {
                 position: fixed;
@@ -544,12 +646,28 @@ export class SwatSingleTableViewerPanel {
                 });
             }
 
-            function peekFKRow(file, line) {
+            function openFileForTable(tableName) {
                 vscode.postMessage({
-                    command: 'peekFKRow',
-                    file: file,
-                    line: line
+                    command: 'openFileForTable',
+                    tableName: tableName
                 });
+            }
+
+            function toggleFKPeek(element, tableName, fkValue) {
+                const cell = element.closest('td');
+                const existingPeek = cell.querySelector('.fk-peek-row');
+                
+                if (existingPeek) {
+                    // Remove existing peek
+                    existingPeek.remove();
+                } else {
+                    // Request FK row data from extension
+                    vscode.postMessage({
+                        command: 'getFKRowData',
+                        tableName: tableName,
+                        fkValue: fkValue
+                    });
+                }
             }
 
             function showFKContextMenu(event, file, line, tableName) {
@@ -572,7 +690,10 @@ export class SwatSingleTableViewerPanel {
                     {
                         label: 'Peek Row (default)',
                         action: () => {
-                            peekFKRow(file, line);
+                            const link = event.target.closest('a');
+                            if (link) {
+                                link.click();
+                            }
                             menu.remove();
                         }
                     },
@@ -618,6 +739,74 @@ export class SwatSingleTableViewerPanel {
                 setTimeout(() => {
                     document.addEventListener('click', closeMenu);
                 }, 0);
+            }
+
+            // Listen for FK row data from extension
+            window.addEventListener('message', event => {
+                const message = event.data;
+                if (message.command === 'showFKRowData') {
+                    displayFKPeek(message.tableName, message.fileName, message.columns, message.rowData, message.lineNumber);
+                }
+            });
+
+            function displayFKPeek(tableName, fileName, columns, rowData, lineNumber) {
+                // Find all FK cells with this table name and remove any existing peeks
+                const fkCells = document.querySelectorAll(\`td.fk-cell[data-fk-table="\${tableName}"]\`);
+                
+                fkCells.forEach(cell => {
+                    const existingPeek = cell.querySelector('.fk-peek-row');
+                    if (existingPeek) {
+                        existingPeek.remove();
+                    }
+                    
+                    // Check if this is the cell that was clicked (it should have the matching FK value)
+                    const cellFkValue = cell.getAttribute('data-fk-value');
+                    const cellFkTable = cell.getAttribute('data-fk-table');
+                    
+                    // Create peek display
+                    const peekDiv = document.createElement('div');
+                    peekDiv.className = 'fk-peek-row';
+                    
+                    const header = document.createElement('div');
+                    header.className = 'fk-peek-header';
+                    header.textContent = \`\${tableName} (File: \${fileName}, Line: \${lineNumber})\`;
+                    peekDiv.appendChild(header);
+                    
+                    const table = document.createElement('table');
+                    table.className = 'fk-peek-table';
+                    
+                    const thead = document.createElement('thead');
+                    const headerRow = document.createElement('tr');
+                    columns.forEach(col => {
+                        const th = document.createElement('th');
+                        th.textContent = col;
+                        headerRow.appendChild(th);
+                    });
+                    thead.appendChild(headerRow);
+                    table.appendChild(thead);
+                    
+                    const tbody = document.createElement('tbody');
+                    const dataRow = document.createElement('tr');
+                    columns.forEach(col => {
+                        const td = document.createElement('td');
+                        td.textContent = rowData[col] || '';
+                        dataRow.appendChild(td);
+                    });
+                    tbody.appendChild(dataRow);
+                    table.appendChild(tbody);
+                    
+                    peekDiv.appendChild(table);
+                    
+                    // Insert the peek row after the current row in the main table
+                    const currentRow = cell.closest('tr');
+                    const newRow = document.createElement('tr');
+                    newRow.className = 'peek-row-container';
+                    const newCell = document.createElement('td');
+                    newCell.colSpan = currentRow.children.length;
+                    newCell.appendChild(peekDiv);
+                    newRow.appendChild(newCell);
+                    currentRow.after(newRow);
+                });
             }
         `;
     }
