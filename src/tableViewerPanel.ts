@@ -220,7 +220,7 @@ export class SwatTableViewerPanel {
 
         for (const row of rows.slice(0, 1000)) { // Limit to 1000 rows for performance
             tableHtml += `<tr>`;
-            tableHtml += `<td class="line-col"><a href="#" onclick="navigateToFile('${row.file}', ${row.lineNumber})">${row.lineNumber}</a></td>`;
+            tableHtml += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(row.file)}', ${row.lineNumber})">${row.lineNumber}</a></td>`;
             
             for (const col of columns) {
                 const value = row.values[col] || '';
@@ -232,9 +232,9 @@ export class SwatTableViewerPanel {
                     if (fkInfo) {
                         const targetRow = this.indexer.resolveFKTarget(fkInfo.references.table, value);
                         if (targetRow) {
-                            tableHtml += `<td class="fk-cell"><a href="#" onclick="navigateToTarget('${targetRow.file}', ${targetRow.lineNumber})" class="fk-link" title="Navigate to ${fkInfo.references.table}">${this._escapeHtml(value)}</a></td>`;
+                            tableHtml += `<td class="fk-cell"><a href="#" onclick="navigateToTarget('${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber})" class="fk-link" title="Navigate to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</a></td>`;
                         } else {
-                            tableHtml += `<td class="fk-cell unresolved" title="Unresolved FK to ${fkInfo.references.table}">${this._escapeHtml(value)}</td>`;
+                            tableHtml += `<td class="fk-cell unresolved" title="Unresolved FK to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</td>`;
                         }
                     } else {
                         tableHtml += `<td>${this._escapeHtml(value)}</td>`;
@@ -267,13 +267,23 @@ export class SwatTableViewerPanel {
     }
 
     private _escapeHtml(text: string): string {
-        const div = { textContent: text } as any;
-        return div.textContent
+        return text
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
+    }
+
+    private _escapeJs(text: string): string {
+        // Escape for use in JavaScript string literals
+        return text
+            .replace(/\\/g, '\\\\')
+            .replace(/'/g, "\\'")
+            .replace(/"/g, '\\"')
+            .replace(/\n/g, '\\n')
+            .replace(/\r/g, '\\r')
+            .replace(/\t/g, '\\t');
     }
 
     private _getNoIndexHtml(): string {
