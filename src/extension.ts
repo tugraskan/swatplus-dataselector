@@ -8,6 +8,7 @@ import { SwatFKDiagnosticsProvider } from './fkDiagnostics';
 import { SwatFKDecorationProvider } from './fkDecorations';
 import { SwatFKHoverProvider } from './fkHoverProvider';
 import { SwatFKReferencesPanel } from './fkReferencesPanel';
+import { SwatTableViewerPanel } from './tableViewerPanel';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -221,6 +222,32 @@ export function activate(context: vscode.ExtensionContext) {
 		SwatFKReferencesPanel.createOrShow(indexer);
 	});
 
+	// Command: Show table viewer
+	const showTableViewer = vscode.commands.registerCommand('swat-dataset-selector.showTableViewer', () => {
+		SwatTableViewerPanel.createOrShow(indexer);
+	});
+
+	// Command: Export index to JSON file for inspection
+	const exportIndexCmd = vscode.commands.registerCommand('swat-dataset-selector.exportIndex', async () => {
+		if (!indexer.isIndexBuilt()) {
+			vscode.window.showWarningMessage('Index has not been built yet. Run Build Inputs Index first.');
+			return;
+		}
+
+		const outFile = await indexer.exportIndexToFile();
+		if (outFile) {
+			try {
+				const doc = await vscode.workspace.openTextDocument(outFile);
+				await vscode.window.showTextDocument(doc, { preview: false });
+				vscode.window.showInformationMessage(`Index exported: ${outFile}`);
+			} catch (err) {
+				vscode.window.showInformationMessage(`Index exported to ${outFile} (could not open automatically)`);
+			}
+		} else {
+			vscode.window.showErrorMessage('Failed to export index. See Output for details.');
+		}
+	});
+
 	// Debug helper: seed test data so the webview shows content for troubleshooting
 	const seedTestData = vscode.commands.registerCommand('swat-dataset-selector.seedTestData', async () => {
 		try {
@@ -254,6 +281,8 @@ export function activate(context: vscode.ExtensionContext) {
 		buildIndex,
 		rebuildIndex,
 		showFKReferences,
+		showTableViewer,
+		exportIndexCmd,
 		seedTestData
 	);
 }

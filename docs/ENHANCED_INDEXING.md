@@ -4,9 +4,9 @@
 
 The SWAT+ Dataset Selector extension includes an enhanced indexing system that leverages pandas DataFrames and detailed documentation about SWAT+ input files to provide better navigation, validation, and understanding of the file relationships.
 
-## Pandas-First Architecture
+## Pandas-Only Architecture
 
-The indexing system uses a **pandas-backed indexer** as the primary indexing method with several advantages:
+The indexing system **requires** a pandas-backed indexer with several advantages:
 
 - **Vectorized Operations**: Fast filtering and FK detection using pandas vectorized operations
 - **Hierarchical File Support**: Handles multi-line records in soils.sol, plant.ini, and management.sch
@@ -14,7 +14,7 @@ The indexing system uses a **pandas-backed indexer** as the primary indexing met
 - **Memory Efficient**: DataFrame-based processing scales better with large datasets
 - **Maintainable**: Python code is easier to debug and extend than TypeScript parsing logic
 
-The extension automatically attempts to use the pandas indexer first. If pandas is not available (e.g., Python or pandas not installed), it falls back to a TypeScript-based indexer.
+**Requirements**: Python 3 and pandas must be installed for the indexer to work. If not available, index building will fail with a clear error message.
 
 ## Key Improvements
 
