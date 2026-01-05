@@ -362,8 +362,11 @@ export class SwatIndexer {
                 if (!line) {continue;}
 
                 const values = line.split(/\s+/).map(v => v.trim()); // Trim each value
-                if (values.length < headers.length) {
-                    console.warn(`Malformed line ${i + 1} in ${filePath}`);
+                
+                // Allow rows with fewer values than headers (for optional trailing columns)
+                // Only warn if the row seems severely malformed (less than half the expected columns)
+                if (values.length < headers.length / 2) {
+                    console.warn(`Malformed line ${i + 1} in ${filePath}: expected ${headers.length} columns, got ${values.length}`);
                     continue;
                 }
 
@@ -371,6 +374,11 @@ export class SwatIndexer {
                 const valueMap: { [key: string]: string } = {};
                 for (let j = 0; j < headers.length && j < values.length; j++) {
                     valueMap[headers[j]] = values[j];
+                }
+                
+                // Fill in missing columns with empty strings
+                for (let j = values.length; j < headers.length; j++) {
+                    valueMap[headers[j]] = '';
                 }
 
                 // Get primary key value
