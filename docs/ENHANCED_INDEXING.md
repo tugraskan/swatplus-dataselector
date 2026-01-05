@@ -23,19 +23,24 @@ The indexer now parses `file.cio` first before indexing other files. This is cri
 5. Special navigation support added for file.cio (works without header line)
 
 **Navigation in file.cio**:
-- **Ctrl+Click** on any filename in file.cio to open that file (works on any line after line 1)
+- **Ctrl+Click** on any filename in file.cio to open that file (works on any line after the title line)
 - **Hover** over a filename to see the file's purpose
-- Handles file.cio's unique format (no header line, just file references)
-- Automatically detects filenames by looking for values with file extensions
+- Handles file.cio's actual format with multiple files per line
 
 **file.cio Format**:
 ```
 Title: Master SWAT+ Input Files
-climate/weather-sta.cli
-hru-data.hru
-soils.sol
+simulation    time.sim    print.prt    object.prt    object.cnt
+basin         codes.bsn    parameters.bsn
+climate       weather-sta.cli    weather-wgn.cli
+connect       hru.con    hru-lte.con    rout_unit.con    aquifer.con
+hru           hru-data.hru
 ...
 ```
+
+- Line 0: Title/description (metadata line)
+- Line 1+: classification_name  file1  file2  file3  ...
+- Column 0 is the classification name, columns 1+ are filenames
 
 **API**:
 ```typescript

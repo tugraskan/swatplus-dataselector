@@ -54,22 +54,26 @@ The extension expects file.cio in this format:
 
 ```
 Title: Master SWAT+ Input Files
-hru-data.hru
-soils.sol
-landuse.lum
-climate/weather-sta.cli
+simulation    time.sim    print.prt    object.prt    object.cnt
+basin         codes.bsn    parameters.bsn
+climate       weather-sta.cli    weather-wgn.cli
+connect       hru.con    hru-lte.con    rout_unit.con    aquifer.con
+hru           hru-data.hru
 ...
 ```
 
-- Line 1: Title/description
-- Line 2+: One filename per line (or classification + filename)
-- The extension auto-detects filenames by looking for values with dots (e.g., `.hru`, `.sol`)
+- Line 1: Title/description (metadata line)
+- Line 2+: classification_name  file1  file2  file3  ...
+- Column 0 is the classification name (e.g., "simulation", "basin", "connect")
+- Columns 1+ are filenames that belong to that classification
+- The extension auto-detects filenames by looking for values with dots (e.g., `.sim`, `.con`, `.hru`)
+- Null values (represented as "null") are skipped
 
 ### 6. Test with Output Channel Open
 
 1. Open Output panel and select "SWAT+ FK Navigation"
 2. Open file.cio in your TxtInOut folder
-3. Hover over a filename (e.g., `hru-data.hru`)
+3. Hover over a filename (e.g., `time.sim` or `hru.con`)
 4. You should see a tooltip with file purpose
 5. Ctrl+Click the filename
 6. Check output for diagnostic messages

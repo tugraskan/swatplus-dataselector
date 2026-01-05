@@ -551,37 +551,30 @@ export class SwatIndexer {
             const content = fs.readFileSync(fileCioPath, 'utf-8');
             const lines = content.split('\n');
             
-            // file.cio format:
-            // Line 1: Title/description
-            // Line 2+: filename entries (one per line)
-            // Each line typically has: filename or classification filename
+            // file.cio actual format:
+            // Line 0: Title/description (metadata line)
+            // Line 1+: classification_name  file1  file2  file3  ...
+            // Column 0 is classification name, columns 1+ are filenames
             
-            // Look for the schema to understand the format
-            const fileCioTable = this.schema?.tables['file.cio'];
-            const dataStartLine = fileCioTable?.data_starts_after || 2;
-            
-            for (let i = dataStartLine; i < lines.length; i++) {
+            for (let i = 1; i < lines.length; i++) {
                 const line = lines[i].trim();
                 if (!line || line.startsWith('#')) {
                     continue;
                 }
                 
-                // Parse the line - it may have multiple columns
-                // The actual filename is typically in the 'file_name' column
+                // Parse the line - split by whitespace
                 const parts = line.split(/\s+/);
                 
-                if (parts.length > 0) {
-                    // The filename is typically the last or second-to-last part
-                    // For simplicity, we'll extract what looks like a filename
-                    for (const part of parts) {
-                        // Check if it looks like a filename (has extension)
-                        if (part.includes('.') && !part.startsWith('.')) {
-                            const filename = part;
-                            // Store with the filename as both key and value for now
-                            // This allows us to track which files are actually referenced
-                            this.fileCioReferences.set(filename, filename);
-                            break;
-                        }
+                // Skip classification name (column 0), process filenames from column 1 onwards
+                for (let j = 1; j < parts.length; j++) {
+                    const part = parts[j];
+                    
+                    // Check if it looks like a filename (has extension) and not null
+                    if (part.includes('.') && part !== 'null') {
+                        const filename = part;
+                        // Store with the filename as both key and value
+                        // This allows us to track which files are actually referenced
+                        this.fileCioReferences.set(filename, filename);
                     }
                 }
             }
@@ -745,6 +738,11 @@ export class SwatIndexer {
                 const valueMap: { [key: string]: string } = {};
                 for (let j = 0; j < headers.length && j < values.length; j++) {
                     valueMap[headers[j]] = values[j];
+                }
+                
+                // Fill in missing columns with empty strings
+                for (let j = values.length; j < headers.length; j++) {
+                    valueMap[headers[j]] = '';
                 }
 
                 // For hierarchical files, determine if this is a main record or child line
