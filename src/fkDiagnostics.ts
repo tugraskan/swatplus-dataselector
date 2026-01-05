@@ -44,7 +44,7 @@ export class SwatFKDiagnosticsProvider {
             // Skip diagnostics for file pointer columns (not true FK references)
             const sourceFileName = path.basename(ref.sourceFile);
             const filePointerConfig = metadata?.file_pointer_columns?.[sourceFileName];
-            if (filePointerConfig && typeof filePointerConfig === 'object' && filePointerConfig[ref.sourceColumn]) {
+            if (filePointerConfig && typeof filePointerConfig === 'object' && !Array.isArray(filePointerConfig) && filePointerConfig[ref.sourceColumn]) {
                 continue; // Skip file pointer columns
             }
 

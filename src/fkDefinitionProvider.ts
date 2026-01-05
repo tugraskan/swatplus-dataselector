@@ -245,7 +245,7 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
         // Check if this column is a file pointer (not a true FK reference)
         const metadata = this.indexer.getMetadata();
         const filePointerConfig = metadata?.file_pointer_columns?.[fileName];
-        if (filePointerConfig && typeof filePointerConfig === 'object' && filePointerConfig[columnName]) {
+        if (filePointerConfig && typeof filePointerConfig === 'object' && !Array.isArray(filePointerConfig) && filePointerConfig[columnName]) {
             this.outputChannel.appendLine(`[FK Definition] Column ${columnName} is a file pointer, not a FK reference - skipping navigation`);
             return undefined;
         }
