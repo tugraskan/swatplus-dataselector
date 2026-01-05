@@ -18,6 +18,35 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
         this.outputChannel = vscode.window.createOutputChannel('SWAT+ FK Navigation');
     }
 
+    /**
+     * Find the column index for a cursor position, considering both direct hits and whitespace after values
+     */
+    private findColumnIndex(
+        cursorPosition: number,
+        positions: Array<{ index: number; start: number; end: number }>,
+        lineLength: number
+    ): number {
+        // First, check if cursor is directly within a value
+        const directMatch = positions.find(pos => 
+            cursorPosition >= pos.start && cursorPosition <= pos.end
+        );
+        if (directMatch) {
+            return directMatch.index;
+        }
+        
+        // If not directly on a value, check if cursor is in whitespace after a value
+        for (let i = 0; i < positions.length; i++) {
+            const pos = positions[i];
+            const nextPos = i < positions.length - 1 ? positions[i + 1] : null;
+            const whitespaceEnd = nextPos ? nextPos.start : lineLength;
+            if (cursorPosition > pos.end && cursorPosition < whitespaceEnd) {
+                return pos.index;
+            }
+        }
+        
+        return -1; // Not found
+    }
+
     public async provideDefinition(
         document: vscode.TextDocument,
         position: vscode.Position,
@@ -91,7 +120,6 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
             const targetFileName = parts[FILE_NAME_COLUMN_INDEX];
             
             // Check if cursor is on the file_name column
-            let columnIndex = -1;
             let currentPos = 0;
             
             // Build an array of value positions
@@ -107,25 +135,7 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
             }
             
             // Find which column the cursor is in or closest to
-            for (const pos of partPositions) {
-                if (position.character >= pos.start && position.character <= pos.end) {
-                    columnIndex = pos.index;
-                    break;
-                }
-            }
-            
-            // If not directly on a value, check if cursor is in whitespace after a value
-            if (columnIndex < 0) {
-                for (let i = 0; i < partPositions.length; i++) {
-                    const pos = partPositions[i];
-                    const nextPos = i < partPositions.length - 1 ? partPositions[i + 1] : null;
-                    const whitespaceEnd = nextPos ? nextPos.start : line.text.length;
-                    if (position.character > pos.end && position.character < whitespaceEnd) {
-                        columnIndex = pos.index;
-                        break;
-                    }
-                }
-            }
+            const columnIndex = this.findColumnIndex(position.character, partPositions, line.text.length);
             
             // Only provide definition if cursor is on the file_name column
             if (columnIndex === FILE_NAME_COLUMN_INDEX) {
@@ -186,7 +196,7 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
             
             // Handle case where value is not found
             if (valueStart === -1) {
-                // Value not found from current position, try to continue but log warning
+                // Value not found from current position, trying to continue but log warning
                 this.outputChannel.appendLine(`[FK Definition] Warning: value "${values[i]}" not found from position ${currentPos}`);
                 continue;
             }
@@ -198,29 +208,19 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
         }
         
         // Find which value/column the cursor is in or closest to
-        // First, check if cursor is directly within a value
-        for (const pos of valuePositions) {
-            if (position.character >= pos.start && position.character <= pos.end) {
-                columnIndex = pos.index;
-                this.outputChannel.appendLine(`[FK Definition] Cursor at ${position.character} is within value "${pos.value}" at [${pos.start}, ${pos.end}]`);
-                break;
-            }
-        }
+        columnIndex = this.findColumnIndex(
+            position.character, 
+            valuePositions.map(vp => ({ index: vp.index, start: vp.start, end: vp.end })),
+            line.text.length
+        );
         
-        // If not directly on a value, check if cursor is in whitespace between values
-        // Associate with the value that comes before the whitespace
-        if (columnIndex < 0) {
-            for (let i = 0; i < valuePositions.length; i++) {
-                const pos = valuePositions[i];
-                const nextPos = i < valuePositions.length - 1 ? valuePositions[i + 1] : null;
-                
-                // Check if cursor is in the whitespace after this value and before the next
-                const whitespaceEnd = nextPos ? nextPos.start : line.text.length;
-                if (position.character > pos.end && position.character < whitespaceEnd) {
-                    columnIndex = pos.index;
-                    this.outputChannel.appendLine(`[FK Definition] Cursor at ${position.character} is in whitespace after value "${pos.value}" at [${pos.start}, ${pos.end}], treating as column ${columnIndex}`);
-                    break;
-                }
+        // Log details about the match
+        if (columnIndex >= 0 && columnIndex < valuePositions.length) {
+            const matchedPos = valuePositions[columnIndex];
+            if (position.character >= matchedPos.start && position.character <= matchedPos.end) {
+                this.outputChannel.appendLine(`[FK Definition] Cursor at ${position.character} is within value "${matchedPos.value}" at [${matchedPos.start}, ${matchedPos.end}]`);
+            } else {
+                this.outputChannel.appendLine(`[FK Definition] Cursor at ${position.character} is in whitespace after value "${matchedPos.value}" at [${matchedPos.start}, ${matchedPos.end}], treating as column ${columnIndex}`);
             }
         }
 
