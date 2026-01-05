@@ -206,7 +206,14 @@ This script is part of the swatplus-dataselector project. See LICENSE for detail
 
 ## Pandas-backed indexing helper
 
-To generate an index using pandas dataframes (for richer filtering and FK detection), install the optional dependencies and run:
+The extension uses a pandas-backed indexing system by default for improved performance and maintainability. The pandas indexer handles:
+
+- **Hierarchical files**: soils.sol, plant.ini, management.sch (multi-line records)
+- **Decision tables**: *.dtl files with complex condition-action structures
+- **FK references**: Automatic detection and tracking including child line references
+- **Vectorized filtering**: Fast null value detection using pandas operations
+
+To manually test the indexer:
 
 ```bash
 pip install -r scripts/requirements.txt
@@ -216,3 +223,5 @@ python3 scripts/pandas_indexer.py --dataset /path/to/TxtInOut \
 ```
 
 This prints a JSON payload containing table rows and foreign key references using the same shape consumed by the VS Code extension.
+
+The extension automatically uses this indexer when building the index. If the pandas indexer is not available (e.g., Python or pandas not installed), the extension falls back to a TypeScript-based indexer.

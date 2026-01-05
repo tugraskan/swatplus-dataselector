@@ -8,7 +8,9 @@ A VS Code extension for SWAT+ development that allows you to browse and select d
 - **Quick Debug Launch**: Select a dataset folder and immediately start debugging
 - **Seamless Integration**: Works with CMake Tools and gdb debugger configurations
 - **Comprehensive Schema**: Auto-generated schema for all 213 SWAT+ input tables from swatplus-editor
-- **Enhanced Indexing**: Documentation-driven indexing with FK navigation, hover info, and validation
+- **Enhanced Indexing**: Pandas-backed indexing system with FK navigation, hover info, and validation
+  - Handles hierarchical files (soils.sol, plant.ini, management.sch)
+  - Decision table parsing (*.dtl files)
   - Go-to-Definition for foreign keys (Ctrl+Click to navigate)
   - Hover tooltips showing file purposes and FK targets
   - Warnings for unresolved references
