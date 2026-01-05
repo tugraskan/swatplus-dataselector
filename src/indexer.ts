@@ -835,23 +835,46 @@ export class SwatIndexer {
         let unresolvedCount = 0;
         
         for (const fkRef of this.fkReferences) {
-            const targetTableIndex = this.index.get(fkRef.targetTable);
-            if (targetTableIndex) {
-                const targetRow = targetTableIndex.get(fkRef.fkValue);
+            let targetRow: IndexedRow | undefined;
+            let actualTargetTable = fkRef.targetTable;
+            
+            // Special handling for decision table references
+            // Decision tables can be in any *.dtl file, so we search across all DTL tables
+            if (fkRef.sourceColumn === 'auto_op_dtl' || fkRef.targetTable.includes('dtl')) {
+                targetRow = this.resolveDecisionTable(fkRef.fkValue);
                 if (targetRow) {
-                    fkRef.resolved = true;
-                    fkRef.targetRow = targetRow;
-                    resolvedCount++;
-                    
-                    // Build reverse index: target_table:pk_value -> FK references
-                    const reverseKey = `${fkRef.targetTable}:${fkRef.fkValue}`;
-                    if (!this.reverseIndex.has(reverseKey)) {
-                        this.reverseIndex.set(reverseKey, []);
+                    // Update the actual target table to the one where we found it
+                    actualTargetTable = targetRow.tableName;
+                }
+            } else {
+                // Standard FK resolution
+                const targetTableIndex = this.index.get(fkRef.targetTable);
+                if (targetTableIndex) {
+                    targetRow = targetTableIndex.get(fkRef.fkValue);
+                }
+            }
+            
+            if (targetRow) {
+                fkRef.resolved = true;
+                fkRef.targetRow = targetRow;
+                resolvedCount++;
+                
+                // Build reverse index: target_table:pk_value -> FK references
+                const reverseKey = `${actualTargetTable}:${fkRef.fkValue}`;
+                if (!this.reverseIndex.has(reverseKey)) {
+                    this.reverseIndex.set(reverseKey, []);
+                }
+                this.reverseIndex.get(reverseKey)!.push(fkRef);
+            } else {
+                unresolvedCount++;
+                const targetTableIndex = this.index.get(fkRef.targetTable);
+                if (!targetTableIndex && !(fkRef.sourceColumn === 'auto_op_dtl')) {
+                    // Log missing target table (but not for decision tables since they might be in any DTL file)
+                    if (unresolvedCount <= 5) {
+                        console.log(`[Indexer]   Unresolved FK (table not indexed): ${fkRef.sourceColumn}="${fkRef.fkValue}" -> ${fkRef.targetTable}`);
                     }
-                    this.reverseIndex.get(reverseKey)!.push(fkRef);
-                } else {
-                    unresolvedCount++;
-                    // Log first few unresolved for debugging
+                } else if (targetTableIndex) {
+                    // Log unresolved FK with debugging info
                     if (unresolvedCount <= 10) {
                         const indexedKeys = Array.from(targetTableIndex.keys()).slice(0, 10);
                         console.log(`[Indexer]   Unresolved FK: ${fkRef.sourceColumn}="${fkRef.fkValue}" (length=${fkRef.fkValue.length}) -> ${fkRef.targetTable}`);
@@ -861,12 +884,11 @@ export class SwatIndexer {
                             console.log(`[Indexer]     First key bytes: [${Array.from(indexedKeys[0]).map(c => c.charCodeAt(0)).join(', ')}]`);
                         }
                     }
-                }
-            } else {
-                unresolvedCount++;
-                // Log missing target table
-                if (unresolvedCount <= 5) {
-                    console.log(`[Indexer]   Unresolved FK (table not indexed): ${fkRef.sourceColumn}="${fkRef.fkValue}" -> ${fkRef.targetTable}`);
+                } else if (fkRef.sourceColumn === 'auto_op_dtl') {
+                    // Decision table not found in any DTL file
+                    if (unresolvedCount <= 10) {
+                        console.log(`[Indexer]   Unresolved FK: ${fkRef.sourceColumn}="${fkRef.fkValue}" (decision table not found in any DTL file)`);
+                    }
                 }
             }
         }
@@ -923,6 +945,24 @@ export class SwatIndexer {
     public resolveFKTarget(tableName: string, pkValue: string): IndexedRow | undefined {
         const tableIndex = this.index.get(tableName);
         return tableIndex?.get(pkValue);
+    }
+
+    /**
+     * Look up a decision table across all indexed DTL files
+     * Decision tables can be in any *.dtl file, so we search all DTL tables
+     */
+    public resolveDecisionTable(dtlName: string): IndexedRow | undefined {
+        // Search through all indexed tables
+        for (const [tableName, tableIndex] of this.index.entries()) {
+            // Check if this is a DTL table (table name typically contains 'dtl')
+            if (tableName.includes('dtl')) {
+                const row = tableIndex.get(dtlName);
+                if (row) {
+                    return row;
+                }
+            }
+        }
+        return undefined;
     }
 
     /**

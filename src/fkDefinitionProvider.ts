@@ -238,11 +238,11 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
                     // Determine if this is an auto operation (decision table ref) or explicit operation
                     if (childLineOffset <= numb_auto) {
                         // This is an auto operation - decision table reference
-                        this.outputChannel.appendLine(`[FK Definition] Auto operation (decision table reference) -> lum_dtl`);
+                        this.outputChannel.appendLine(`[FK Definition] Auto operation (decision table reference) -> decision table files`);
                         const dtlName = fkValue;
                         
-                        // Look up the decision table
-                        const targetRow = this.indexer.resolveFKTarget('lum_dtl', dtlName);
+                        // Look up the decision table across all DTL files
+                        const targetRow = this.indexer.resolveDecisionTable(dtlName);
                         
                         if (!targetRow) {
                             this.outputChannel.appendLine(`[FK Definition] Decision table not found: ${dtlName}`);
