@@ -1,21 +1,25 @@
 import * as assert from 'assert';
 
+// Shared constant for hierarchical file detection
+// This matches the pattern used in indexer.ts to detect numeric values
+const NUMERIC_VALUE_PATTERN = /^\d+(\.\d+)?$/;
+
 suite('Hierarchical File Indexing Test Suite', () => {
     
     test('Main record detection for soils.sol', () => {
         // Test that numeric values in name field are detected as child lines
         const numericName = '150.0';
-        const isNumeric = /^\d+(\.\d+)?$/.test(numericName);
+        const isNumeric = NUMERIC_VALUE_PATTERN.test(numericName);
         assert.strictEqual(isNumeric, true, 'Numeric value should be detected as child line');
 
         // Test that text values in name field are detected as main records
         const textName = 'clay_loam';
-        const isText = /^\d+(\.\d+)?$/.test(textName);
+        const isText = NUMERIC_VALUE_PATTERN.test(textName);
         assert.strictEqual(isText, false, 'Text value should be detected as main record');
 
         // Test edge cases
         const mixedName = 'soil_1';
-        const isMixed = /^\d+(\.\d+)?$/.test(mixedName);
+        const isMixed = NUMERIC_VALUE_PATTERN.test(mixedName);
         assert.strictEqual(isMixed, false, 'Mixed alphanumeric should be detected as main record');
     });
 

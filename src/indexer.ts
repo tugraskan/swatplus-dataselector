@@ -10,6 +10,10 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// Constants for hierarchical file handling
+const NUMERIC_VALUE_PATTERN = /^\d+(\.\d+)?$/;
+const DEBUG_OUTPUT_LINE_LIMIT = 10;
+
 // TxtInOut metadata interface
 interface TxtInOutMetadata {
     metadata_version: string;
@@ -33,7 +37,7 @@ interface TxtInOutMetadata {
     common_pointer_patterns: any;
     hierarchical_files?: {
         description: string;
-        [fileName: string]: any;
+        [fileName: string]: HierarchicalFileConfig | string; // Config objects or description string
     };
 }
 
@@ -257,7 +261,7 @@ export class SwatIndexer {
             const nameValue = valueMap['name'] || '';
             // Main record has a non-empty name that's not purely numeric
             // This is a heuristic - child lines might have numeric values or be empty in name position
-            return nameValue.length > 0 && !/^\d+(\.\d+)?$/.test(nameValue);
+            return nameValue.length > 0 && !NUMERIC_VALUE_PATTERN.test(nameValue);
         }
         
         // For plant.ini: Main record has plnt_cnt field
@@ -496,7 +500,7 @@ export class SwatIndexer {
                         const isMainRecord = this.isMainRecordLine(valueMap, table.file_name, headers);
                         if (!isMainRecord) {
                             // This is a child line - skip it
-                            if (i - dataStartLine < 10) {
+                            if (i - dataStartLine < DEBUG_OUTPUT_LINE_LIMIT) {
                                 console.log(`[Indexer]   Skipping child line ${i + 1}`);
                             }
                             i++;
