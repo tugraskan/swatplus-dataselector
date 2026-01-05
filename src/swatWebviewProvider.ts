@@ -90,8 +90,14 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                             break;
                         case 'openFile':
                             if (data.path && typeof data.path === 'string') {
-                                // Ask host to open the file in an editor
-                                vscode.commands.executeCommand('swat-dataset-selector.openFile', data.path);
+                                const section = data.section || 'outputs'; // Default to outputs for backward compatibility
+                                if (section === 'inputs') {
+                                    // For input files, show table viewer with the specific file focused
+                                    vscode.commands.executeCommand('swat-dataset-selector.showTableViewer', data.path);
+                                } else {
+                                    // For output files, open the file in an editor
+                                    vscode.commands.executeCommand('swat-dataset-selector.openFile', data.path);
+                                }
                             }
                             break;
                         case 'navigateToDirectory':
@@ -1327,9 +1333,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                             try { console.log('SWAT webview: navigate to directory', p, 'section:', section); } catch (e) {}
                             swatHost.postMessage({ type: 'navigateToDirectory', path: p, section: section });
                         } else {
-                            // Open file
-                            try { console.log('SWAT webview: txt-item clicked', p); } catch (e) {}
-                            swatHost.postMessage({ type: 'openFile', path: p });
+                            // Open file - pass section to distinguish inputs from outputs
+                            try { console.log('SWAT webview: txt-item clicked', p, 'section:', section); } catch (e) {}
+                            swatHost.postMessage({ type: 'openFile', path: p, section: section });
                         }
                     }
                 });
@@ -1440,9 +1446,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                 try { console.log('SWAT webview: delegated navigate to directory', p, 'section:', section); } catch (e) {}
                                 swatHost.postMessage({ type: 'navigateToDirectory', path: p, section: section });
                             } else {
-                                // Open file
-                                try { console.log('SWAT webview: delegated txt-item click', p); } catch (e) {}
-                                swatHost.postMessage({ type: 'openFile', path: p });
+                                // Open file - pass section to distinguish inputs from outputs
+                                try { console.log('SWAT webview: delegated txt-item click', p, 'section:', section); } catch (e) {}
+                                swatHost.postMessage({ type: 'openFile', path: p, section: section });
                             }
                         }
                         return;

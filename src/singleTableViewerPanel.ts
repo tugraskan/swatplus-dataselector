@@ -1,7 +1,7 @@
 /**
- * SWAT+ Table Viewer Panel
+ * SWAT+ Single Table Viewer Panel
  * 
- * Provides a webview panel that displays indexed SWAT+ input tables in a grid format
+ * Provides a webview panel that displays a single indexed SWAT+ input table
  * with clickable FK and file pointer navigation.
  */
 
@@ -9,19 +9,18 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { SwatIndexer } from './indexer';
 
-export class SwatTableViewerPanel {
-    public static currentPanel: SwatTableViewerPanel | undefined;
+export class SwatSingleTableViewerPanel {
+    private static panels: Map<string, SwatSingleTableViewerPanel> = new Map();
+    private static readonly MAX_ROWS_TO_DISPLAY = 1000; // Limit rows for performance
     private readonly _panel: vscode.WebviewPanel;
     private _disposables: vscode.Disposable[] = [];
-    private _focusedTable: string | undefined; // Table to auto-expand and scroll to
 
     private constructor(
         panel: vscode.WebviewPanel,
         private indexer: SwatIndexer,
-        focusedTable?: string
+        private tableName: string
     ) {
         this._panel = panel;
-        this._focusedTable = focusedTable;
 
         // Set the webview's initial html content
         this._update();
@@ -48,23 +47,24 @@ export class SwatTableViewerPanel {
         );
     }
 
-    public static createOrShow(indexer: SwatIndexer, focusedTable?: string) {
+    public static createOrShow(indexer: SwatIndexer, tableName: string) {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
 
-        // If we already have a panel, show it and update with the new focused table
-        if (SwatTableViewerPanel.currentPanel) {
-            SwatTableViewerPanel.currentPanel._focusedTable = focusedTable;
-            SwatTableViewerPanel.currentPanel._panel.reveal(column);
-            SwatTableViewerPanel.currentPanel._update();
+        // If we already have a panel for this table, show it
+        if (SwatSingleTableViewerPanel.panels.has(tableName)) {
+            const existingPanel = SwatSingleTableViewerPanel.panels.get(tableName)!;
+            existingPanel._panel.reveal(column);
+            existingPanel._update();
             return;
         }
 
-        // Otherwise, create a new panel
+        // Otherwise, create a new panel for this table
+        const fileName = indexer.getFileNameForTable(tableName) || tableName;
         const panel = vscode.window.createWebviewPanel(
-            'swatTableViewer',
-            'SWAT+ Table Viewer',
+            'swatSingleTableViewer',
+            `SWAT+ Table: ${fileName}`,
             column || vscode.ViewColumn.One,
             {
                 enableScripts: true,
@@ -72,11 +72,12 @@ export class SwatTableViewerPanel {
             }
         );
 
-        SwatTableViewerPanel.currentPanel = new SwatTableViewerPanel(panel, indexer, focusedTable);
+        const newPanel = new SwatSingleTableViewerPanel(panel, indexer, tableName);
+        SwatSingleTableViewerPanel.panels.set(tableName, newPanel);
     }
 
     public dispose() {
-        SwatTableViewerPanel.currentPanel = undefined;
+        SwatSingleTableViewerPanel.panels.delete(this.tableName);
 
         // Clean up our resources
         this._panel.dispose();
@@ -107,7 +108,8 @@ export class SwatTableViewerPanel {
 
     private _update() {
         const webview = this._panel.webview;
-        this._panel.title = 'SWAT+ Table Viewer';
+        const fileName = this.indexer.getFileNameForTable(this.tableName) || this.tableName;
+        this._panel.title = `SWAT+ Table: ${fileName}`;
         this._panel.webview.html = this._getHtmlForWebview(webview);
     }
 
@@ -116,69 +118,43 @@ export class SwatTableViewerPanel {
             return this._getNoIndexHtml();
         }
 
-        const stats = this.indexer.getIndexStats();
         const schema = this.indexer.getSchema();
-        
         if (!schema) {
             return this._getNoSchemaHtml();
         }
 
-        // Get all indexed data
+        // Get data for this specific table
         const indexData = this.indexer.getIndexData();
+        const tableData = indexData.get(this.tableName);
         
-        // Create table list
-        let tablesHtml = '';
-        const tables = Array.from(indexData.keys()).sort();
-        
-        for (const tableName of tables) {
-            const tableData = indexData.get(tableName);
-            if (!tableData || tableData.size === 0) {
-                continue;
-            }
-
-            const schemaTable = schema.tables[this.indexer.getFileNameForTable(tableName) || ''];
-            const rowCount = tableData.size;
-            
-            // Check if this is the focused table
-            const isFocused = this._focusedTable && tableName === this._focusedTable;
-            const collapsedClass = isFocused ? '' : 'collapsed';
-            
-            tablesHtml += `
-                <div class="table-section" ${isFocused ? 'id="focused-table"' : ''}>
-                    <h3 class="table-header ${collapsedClass}" onclick="toggleTable('${tableName}')">
-                        <span class="toggle-icon">▼</span>
-                        ${tableName}
-                        <span class="badge">${rowCount} rows</span>
-                        ${schemaTable ? `<span class="file-badge">${schemaTable.file_name}</span>` : ''}
-                    </h3>
-                    <div id="${tableName}" class="table-content ${collapsedClass}">
-                        ${this._getTableHtml(tableName, tableData, schemaTable)}
-                    </div>
-                </div>
-            `;
+        if (!tableData || tableData.size === 0) {
+            return this._getNoDataHtml();
         }
+
+        const fileName = this.indexer.getFileNameForTable(this.tableName) || this.tableName;
+        const schemaTable = fileName && schema.tables[fileName] ? schema.tables[fileName] : undefined;
+        const rowCount = tableData.size;
 
         return `<!DOCTYPE html>
         <html lang="en">
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>SWAT+ Table Viewer</title>
+            <title>SWAT+ Table: ${fileName}</title>
             <style>
                 ${this._getStyles()}
             </style>
         </head>
         <body>
             <div class="header">
-                <h1>SWAT+ Table Viewer</h1>
+                <h1>${this.tableName}</h1>
                 <div class="stats">
-                    <span class="stat-item">Tables: ${stats.tableCount}</span>
-                    <span class="stat-item">Rows: ${stats.rowCount}</span>
-                    <span class="stat-item">FK References: ${stats.fkCount}</span>
+                    <span class="stat-item">File: ${fileName}</span>
+                    <span class="stat-item">Rows: ${rowCount}</span>
                 </div>
             </div>
             <div class="content">
-                ${tablesHtml}
+                ${this._getTableHtml(tableData, schemaTable)}
             </div>
             <script>
                 ${this._getScript()}
@@ -187,7 +163,7 @@ export class SwatTableViewerPanel {
         </html>`;
     }
 
-    private _getTableHtml(tableName: string, tableData: Map<string, any>, schemaTable: any): string {
+    private _getTableHtml(tableData: Map<string, any>, schemaTable: any): string {
         const rows = Array.from(tableData.values());
         if (rows.length === 0) {
             return '<p class="empty-message">No data</p>';
@@ -226,7 +202,7 @@ export class SwatTableViewerPanel {
                     <tbody>
         `;
 
-        for (const row of rows.slice(0, 1000)) { // Limit to 1000 rows for performance
+        for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
             tableHtml += `<tr>`;
             tableHtml += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(row.file)}', ${row.lineNumber})">${row.lineNumber}</a></td>`;
             
@@ -255,11 +231,11 @@ export class SwatTableViewerPanel {
             tableHtml += `</tr>`;
         }
 
-        if (rows.length > 1000) {
+        if (rows.length > SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY) {
             tableHtml += `
                 <tr>
                     <td colspan="${columns.length + 1}" class="truncated-message">
-                        Showing first 1000 of ${rows.length} rows
+                        Showing first ${SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY} of ${rows.length} rows
                     </td>
                 </tr>
             `;
@@ -331,6 +307,25 @@ export class SwatTableViewerPanel {
         </html>`;
     }
 
+    private _getNoDataHtml(): string {
+        return `<!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>SWAT+ Table Viewer</title>
+            <style>${this._getStyles()}</style>
+        </head>
+        <body>
+            <div class="no-index">
+                <h1>No Data Found</h1>
+                <p>No data found for table: <code>${this.tableName}</code></p>
+                <p>The table may not be indexed yet or may not exist in the dataset.</p>
+            </div>
+        </body>
+        </html>`;
+    }
+
     private _getStyles(): string {
         return `
             body {
@@ -369,59 +364,6 @@ export class SwatTableViewerPanel {
             .content {
                 padding: 20px;
             }
-            .table-section {
-                margin-bottom: 30px;
-                border: 1px solid var(--vscode-panel-border);
-                border-radius: 4px;
-                overflow: hidden;
-            }
-            .table-header {
-                padding: 12px 15px;
-                margin: 0;
-                background-color: var(--vscode-editorGroupHeader-tabsBackground);
-                cursor: pointer;
-                user-select: none;
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                font-size: 1.1em;
-                font-weight: 600;
-            }
-            .table-header:hover {
-                background-color: var(--vscode-list-hoverBackground);
-            }
-            .toggle-icon {
-                font-size: 0.8em;
-                transition: transform 0.2s;
-                display: inline-block;
-                width: 16px;
-            }
-            .table-header.collapsed .toggle-icon {
-                transform: rotate(-90deg);
-            }
-            .badge {
-                font-size: 0.75em;
-                padding: 3px 8px;
-                background-color: var(--vscode-badge-background);
-                color: var(--vscode-badge-foreground);
-                border-radius: 10px;
-                font-weight: normal;
-            }
-            .file-badge {
-                font-size: 0.75em;
-                padding: 3px 8px;
-                background-color: var(--vscode-button-background);
-                color: var(--vscode-button-foreground);
-                border-radius: 3px;
-                font-weight: normal;
-            }
-            .table-content {
-                padding: 0;
-                overflow-x: auto;
-            }
-            .table-content.collapsed {
-                display: none;
-            }
             .table-wrapper {
                 overflow-x: auto;
             }
@@ -436,9 +378,6 @@ export class SwatTableViewerPanel {
                 text-align: left;
                 font-weight: 600;
                 border-bottom: 2px solid var(--vscode-panel-border);
-                position: sticky;
-                top: 0;
-                z-index: 10;
             }
             .data-table th.fk-col {
                 background-color: var(--vscode-inputOption-activeBackground);
@@ -520,19 +459,6 @@ export class SwatTableViewerPanel {
         return `
             const vscode = acquireVsCodeApi();
 
-            function toggleTable(tableId) {
-                const content = document.getElementById(tableId);
-                const header = content.previousElementSibling;
-                
-                if (content.classList.contains('collapsed')) {
-                    content.classList.remove('collapsed');
-                    header.classList.remove('collapsed');
-                } else {
-                    content.classList.add('collapsed');
-                    header.classList.add('collapsed');
-                }
-            }
-
             function navigateToFile(file, line) {
                 vscode.postMessage({
                     command: 'navigateToFile',
@@ -548,17 +474,6 @@ export class SwatTableViewerPanel {
                     line: line
                 });
             }
-
-            // Scroll to focused table on load
-            document.addEventListener('DOMContentLoaded', function() {
-                const focusedTable = document.getElementById('focused-table');
-                if (focusedTable) {
-                    // Use setTimeout to ensure rendering is complete
-                    setTimeout(function() {
-                        focusedTable.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }, 100);
-                }
-            });
         `;
     }
 }

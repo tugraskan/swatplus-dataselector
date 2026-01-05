@@ -583,6 +583,23 @@ export class SwatIndexer {
     }
 
     /**
+     * Get table name from file path
+     * Returns the table name that corresponds to the given file path
+     */
+    public getTableNameFromFile(filePath: string): string | undefined {
+        const fileName = path.basename(filePath).toLowerCase();
+        
+        // Search through the tableToFileMap to find matching table
+        for (const [tableName, mappedFileName] of this.tableToFileMap.entries()) {
+            if (mappedFileName.toLowerCase() === fileName) {
+                return tableName;
+            }
+        }
+        
+        return undefined;
+    }
+
+    /**
      * Check if index is built
      */
     public isIndexBuilt(): boolean {
