@@ -9,6 +9,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { spawnSync } from 'child_process';
 
 // Constants for hierarchical file handling
 const NUMERIC_VALUE_PATTERN = /^\d+(\.\d+)?$/;
@@ -589,6 +590,64 @@ export class SwatIndexer {
     }
 
     /**
+     * Build the index using the pandas helper script for tabular processing
+     */
+    private buildIndexWithPandas(datasetPath: string): { success: boolean; tableCount: number; fkCount: number } {
+        const scriptPath = path.join(this.context.extensionPath, 'scripts', 'pandas_indexer.py');
+        if (!fs.existsSync(scriptPath)) {
+            console.log('[Indexer] pandas_indexer.py not found, skipping pandas pipeline');
+            return { success: false, tableCount: 0, fkCount: 0 };
+        }
+
+        const schemaPath = path.join(this.context.extensionPath, 'resources', 'schema', 'swatplus-editor-schema.json');
+        const metadataPath = path.join(this.context.extensionPath, 'resources', 'schema', 'txtinout-metadata.json');
+        const txtInOutPath = this.txtInOutPath ?? datasetPath;
+
+        const pythonExecutable = process.env.SWATPLUS_PYTHON || 'python3';
+        const args = [scriptPath, '--dataset', txtInOutPath, '--schema', schemaPath, '--metadata', metadataPath];
+
+        console.log(`[Indexer] Attempting pandas-backed indexing via ${pythonExecutable}`);
+        const result = spawnSync(pythonExecutable, args, { encoding: 'utf-8' });
+
+        if (result.error) {
+            console.warn(`[Indexer] pandas pipeline failed to start: ${result.error.message}`);
+            return { success: false, tableCount: 0, fkCount: 0 };
+        }
+
+        if (result.status !== 0) {
+            console.warn(`[Indexer] pandas pipeline exited with code ${result.status}: ${result.stderr}`);
+            return { success: false, tableCount: 0, fkCount: 0 };
+        }
+
+        try {
+            const payload = JSON.parse(result.stdout);
+
+            this.index.clear();
+            this.fkReferences = [];
+            this.reverseIndex.clear();
+
+            for (const [tableName, rows] of Object.entries(payload.tables || {})) {
+                const tableIndex = new Map<string, IndexedRow>();
+                (rows as IndexedRow[]).forEach((row) => {
+                    tableIndex.set(row.pkValue.toLowerCase(), row);
+                });
+                this.index.set(tableName, tableIndex);
+            }
+
+            this.fkReferences = (payload.fkReferences || []) as FKReference[];
+
+            return {
+                success: true,
+                tableCount: this.index.size,
+                fkCount: this.fkReferences.length,
+            };
+        } catch (error) {
+            console.warn(`[Indexer] Unable to parse pandas pipeline output: ${error}`);
+            return { success: false, tableCount: 0, fkCount: 0 };
+        }
+    }
+
+    /**
      * Build index for the given dataset path
      */
     public async buildIndex(datasetPath: string): Promise<boolean> {
@@ -629,6 +688,26 @@ export class SwatIndexer {
             // This is important in case users have renamed input files
             progress.report({ message: 'Parsing file.cio...', increment: 0 });
             this.parseFileCio();
+
+            // Try pandas-backed indexing first for structured filtering
+            const pandasResult = this.buildIndexWithPandas(datasetPath);
+            if (pandasResult.success) {
+                progress.report({ message: 'Resolving foreign key references (pandas)...' });
+                this.resolveFKReferences();
+
+                vscode.window.showInformationMessage(
+                    `Index built via pandas: ${pandasResult.tableCount} tables, ${this.fkReferences.length} FK references`
+                );
+
+                await this.context.workspaceState.update(`index:${datasetPath}`, {
+                    built: true,
+                    timestamp: new Date().toISOString(),
+                    tableCount: pandasResult.tableCount,
+                    fkCount: this.fkReferences.length
+                });
+
+                return true;
+            }
             
             // Sort tables to process file.cio first, then others
             const tables = Object.values(this.schema!.tables);

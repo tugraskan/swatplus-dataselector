@@ -11,6 +11,8 @@ import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
 import { pathStartsWith } from './pathUtils';
 
+const FILE_NAME_COLUMN_INDEX = 1;
+
 export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
     private outputChannel: vscode.OutputChannel;
     

@@ -197,8 +197,22 @@ Check that you're pointing to the database directory, not the root:
 ## Dependencies
 
 - Python 3.6+
-- Standard library only (no external dependencies)
+- Standard library only (no external dependencies) for schema extraction
+- Optional: pandas (see `scripts/requirements.txt`) for the pandas-backed indexing helper
 
 ## License
 
 This script is part of the swatplus-dataselector project. See LICENSE for details.
+
+## Pandas-backed indexing helper
+
+To generate an index using pandas dataframes (for richer filtering and FK detection), install the optional dependencies and run:
+
+```bash
+pip install -r scripts/requirements.txt
+python3 scripts/pandas_indexer.py --dataset /path/to/TxtInOut \
+  --schema resources/schema/swatplus-editor-schema.json \
+  --metadata resources/schema/txtinout-metadata.json
+```
+
+This prints a JSON payload containing table rows and foreign key references using the same shape consumed by the VS Code extension.
