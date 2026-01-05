@@ -689,65 +689,27 @@ export class SwatIndexer {
             progress.report({ message: 'Parsing file.cio...', increment: 0 });
             this.parseFileCio();
 
-            // Try pandas-backed indexing first for structured filtering
+            // Use pandas-backed indexing (required)
             const pandasResult = this.buildIndexWithPandas(datasetPath);
-            if (pandasResult.success) {
-                progress.report({ message: 'Resolving foreign key references (pandas)...' });
-                this.resolveFKReferences();
-
-                vscode.window.showInformationMessage(
-                    `Index built via pandas: ${pandasResult.tableCount} tables, ${this.fkReferences.length} FK references`
+            if (!pandasResult.success) {
+                vscode.window.showErrorMessage(
+                    'Failed to build index: pandas indexer is required but not available. ' +
+                    'Please ensure Python 3 and pandas are installed.'
                 );
-
-                await this.context.workspaceState.update(`index:${datasetPath}`, {
-                    built: true,
-                    timestamp: new Date().toISOString(),
-                    tableCount: pandasResult.tableCount,
-                    fkCount: this.fkReferences.length
-                });
-
-                return true;
-            }
-            
-            // Sort tables to process file.cio first, then others
-            const tables = Object.values(this.schema!.tables);
-            const fileCioTable = tables.find(t => t.file_name === 'file.cio');
-            const otherTables = tables.filter(t => t.file_name !== 'file.cio');
-            
-            // Process file.cio first if it exists
-            const orderedTables = fileCioTable 
-                ? [fileCioTable, ...otherTables]
-                : tables;
-            
-            let processedCount = 0;
-
-            for (const table of orderedTables) {
-                if (token.isCancellationRequested) {
-                    return false;
-                }
-
-                progress.report({
-                    message: `Indexing ${table.file_name}...`,
-                    increment: (100 / tables.length)
-                });
-
-                await this.indexTable(table);
-                processedCount++;
+                return false;
             }
 
-            // After indexing all tables, resolve FK references
             progress.report({ message: 'Resolving foreign key references...' });
             this.resolveFKReferences();
 
             vscode.window.showInformationMessage(
-                `Index built via TypeScript fallback: ${processedCount} tables, ${this.fkReferences.length} FK references`
+                `Index built successfully: ${pandasResult.tableCount} tables, ${this.fkReferences.length} FK references`
             );
 
-            // Store index status
             await this.context.workspaceState.update(`index:${datasetPath}`, {
                 built: true,
                 timestamp: new Date().toISOString(),
-                tableCount: processedCount,
+                tableCount: pandasResult.tableCount,
                 fkCount: this.fkReferences.length
             });
 
