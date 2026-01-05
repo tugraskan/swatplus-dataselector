@@ -196,6 +196,20 @@ export class SwatIndexer {
     }
 
     /**
+     * Check if a value should be treated as null/empty for FK purposes
+     * Handles case-insensitivity and trimming for robust null checking
+     */
+    private isFKNullValue(value: string): boolean {
+        if (!value) {
+            return true;
+        }
+        const trimmedValue = value.trim().toLowerCase();
+        return this.fkNullValues.some(nullVal => 
+            trimmedValue === nullVal.toLowerCase()
+        );
+    }
+
+    /**
      * Check if a file is hierarchical (multi-line records)
      */
     private isHierarchicalFile(fileName: string): boolean {
@@ -347,7 +361,7 @@ export class SwatIndexer {
             const line = lines[currentLine].trim();
             if (line) {
                 const dtlName = line.split(/\s+/)[0]; // First token is the dtl name
-                if (dtlName && !this.fkNullValues.includes(dtlName)) {
+                if (dtlName && !this.isFKNullValue(dtlName)) {
                     this.fkReferences.push({
                         sourceFile: filePath,
                         sourceTable: table.table_name,
@@ -372,7 +386,7 @@ export class SwatIndexer {
                     const opType = values[0]; // First field is operation type
                     const opData1 = values.length > 6 ? values[6] : null; // op_data1 is typically the 7th field
 
-                    if (opType && opData1 && opTypeToTable[opType] && !this.fkNullValues.includes(opData1)) {
+                    if (opType && opData1 && opTypeToTable[opType] && !this.isFKNullValue(opData1)) {
                         this.fkReferences.push({
                             sourceFile: filePath,
                             sourceTable: table.table_name,
@@ -509,7 +523,7 @@ export class SwatIndexer {
                         const fp = actionValues[7];
 
                         // Track FK if action type has a mapping and fp is not null
-                        if (actTyp && fp && actionTypeToTable[actTyp] && !this.fkNullValues.includes(fp)) {
+                        if (actTyp && fp && actionTypeToTable[actTyp] && !this.isFKNullValue(fp)) {
                             this.fkReferences.push({
                                 sourceFile: filePath,
                                 sourceTable: table.table_name,
@@ -675,6 +689,18 @@ export class SwatIndexer {
 
     /**
      * Index a single table from its TxtInOut file
+     * 
+     * SWAT+ input files are whitespace-delimited text files with the following structure:
+     * - Line 0 (optional): Metadata/title line
+     * - Line 1: Header line with column names
+     * - Line 2+: Data rows
+     * 
+     * The parser handles:
+     * - Variable whitespace (spaces, tabs, mixed) between columns
+     * - Leading/trailing whitespace on lines
+     * - Consistent trimming and normalization of all values
+     * - Empty values represented by missing columns or null sentinels
+     * - Hierarchical files with multi-line records (see hierarchical_files in metadata)
      */
     private async indexTable(table: SchemaTable): Promise<void> {
         const filePath = path.join(this.txtInOutPath!, table.file_name);
@@ -704,7 +730,8 @@ export class SwatIndexer {
             }
 
             const headerLine = lines[headerLineIndex];
-            const headers = headerLine.trim().split(/\s+/);
+            // Split on whitespace and filter out empty strings to handle inconsistent spacing
+            const headers = headerLine.trim().split(/\s+/).filter(h => h.length > 0);
 
             // Index data rows
             const dataStartLine = table.data_starts_after;
@@ -724,20 +751,33 @@ export class SwatIndexer {
                     continue;
                 }
 
-                const values = line.split(/\s+/).map(v => v.trim()); // Trim each value
+                // Split on whitespace and filter out empty strings for consistent parsing
+                // This handles multiple spaces, tabs, and mixed whitespace between columns
+                const values = line.split(/\s+/).filter(v => v.length > 0);
                 
                 // For hierarchical files, we allow lines with fewer columns than headers
                 // because main records and child lines may have different structures
                 if (!isHierarchical && values.length < headers.length) {
-                    console.warn(`Malformed line ${i + 1} in ${filePath}`);
+                    console.warn(`[Indexer] Malformed line ${i + 1} in ${filePath}: expected ${headers.length} columns, got ${values.length}`);
+                    console.warn(`[Indexer]   Headers: [${headers.join(', ')}]`);
+                    console.warn(`[Indexer]   Values: [${values.join(', ')}]`);
                     i++;
                     continue;
                 }
 
-                // Build value map
+                // Warn if there are more values than headers (potential parsing issue)
+                if (!isHierarchical && values.length > headers.length) {
+                    if (i - dataStartLine < 3) {
+                        console.warn(`[Indexer] Line ${i + 1} in ${filePath} has more values (${values.length}) than headers (${headers.length})`);
+                        console.warn(`[Indexer]   Extra values will be ignored: [${values.slice(headers.length).join(', ')}]`);
+                    }
+                }
+
+                // Build value map with consistent whitespace-normalized values
                 const valueMap: { [key: string]: string } = {};
                 for (let j = 0; j < headers.length && j < values.length; j++) {
-                    valueMap[headers[j]] = values[j];
+                    // Values are already trimmed by split on trimmed line, but normalize anyway
+                    valueMap[headers[j]] = values[j].trim();
                 }
                 
                 // Fill in missing columns with empty strings
@@ -798,7 +838,7 @@ export class SwatIndexer {
                 // In TxtInOut files, FK values typically reference 'name' column in target, not 'id'
                 for (const fk of table.foreign_keys) {
                     const fkValue = valueMap[fk.column];
-                    if (fkValue && !this.fkNullValues.includes(fkValue)) {
+                    if (fkValue && !this.isFKNullValue(fkValue)) {
                         // Use metadata to determine the actual target column in TxtInOut files
                         // Default is 'name' for TxtInOut files, not 'id' from the database schema
                         const txtinoutTargetColumn = this.metadata?.txtinout_fk_behavior?.default_target_column || 'name';

@@ -116,9 +116,7 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
                 return undefined;
             }
             
-            const targetFileName = parts[FILE_NAME_COLUMN_INDEX];
-            
-            // Check if cursor is on the file_name column
+            // Check if cursor is on a filename column (column 1+)
             let currentPos = 0;
             
             // Build an array of value positions
@@ -136,8 +134,10 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
             // Find which column the cursor is in or closest to
             const columnIndex = this.findColumnIndex(position.character, partPositions, line.text.length);
             
-            // Only provide definition if cursor is on the file_name column
-            if (columnIndex === FILE_NAME_COLUMN_INDEX) {
+            // Only provide definition if cursor is on a filename column (column 1+, not column 0 which is classification)
+            // In file.cio: column 0 = classification name, columns 1+ = filenames
+            if (columnIndex >= 1 && columnIndex < parts.length) {
+                const targetFileName = parts[columnIndex];
                 this.outputChannel.appendLine(`[FK Definition] file.cio special handling - target: ${targetFileName}`);
                 
                 const txtInOutPath = this.indexer.getTxtInOutPath();
