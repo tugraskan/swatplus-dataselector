@@ -432,12 +432,30 @@ export class SwatIndexer {
 
         let currentLine = 2; // Start after title and count lines
 
+        // Skip blank lines after count
+        while (currentLine < lines.length && !lines[currentLine].trim()) {
+            currentLine++;
+        }
+
+        // Skip the global header line (NAME  CONDS  ALTS  ACTS)
+        // This header appears once after the count and before all decision tables
+        if (currentLine < lines.length) {
+            const possibleHeaderLine = lines[currentLine].trim().toUpperCase();
+            if (possibleHeaderLine.startsWith('NAME')) {
+                currentLine++; // Skip the global header
+            }
+        }
+
         // Process each decision table
         for (let tableIdx = 0; tableIdx < numTables && currentLine < lines.length; tableIdx++) {
+            // Skip blank lines before decision table
+            while (currentLine < lines.length && !lines[currentLine].trim()) {
+                currentLine++;
+            }
+            
             const headerLine = lines[currentLine].trim();
             if (!headerLine) {
-                currentLine++;
-                continue;
+                break; // No more data
             }
 
             const headerValues = headerLine.split(/\s+/);
