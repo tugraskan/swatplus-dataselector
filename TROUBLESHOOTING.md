@@ -28,7 +28,7 @@ Navigation requires building the index first:
 1. Open Command Palette (`Ctrl+Shift+P`)
 2. Run: `SWAT+: Build Inputs Index`
 3. Select your dataset folder when prompted
-4. Wait for the "Index built successfully" message
+4. Wait for the "Index built via pandas" or "Index built via TypeScript fallback" message
 
 ### 4. Check Output Channel
 
