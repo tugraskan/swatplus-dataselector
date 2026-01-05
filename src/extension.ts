@@ -199,6 +199,8 @@ export function activate(context: vscode.ExtensionContext) {
 			// Update diagnostics and decorations
 			fkDiagnostics.updateDiagnostics();
 			fkDecorations.refresh();
+			// Automatically open table viewer after successful index build
+			SwatTableViewerPanel.createOrShow(indexer);
 		}
 	});
 
