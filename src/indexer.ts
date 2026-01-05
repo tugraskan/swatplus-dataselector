@@ -118,9 +118,11 @@ export interface FKReference {
 export class SwatIndexer {
     private schema: Schema | null = null;
     private metadata: TxtInOutMetadata | null = null;
-    private index: Map<string, Map<string, IndexedRow>> = new Map(); // table -> pk_value -> row
+    // Note: All index keys (pk_value) are stored in lowercase for case-insensitive FK resolution
+    // This handles variations in casing (e.g., "HydCha01" vs "hydcha01") in SWAT+ files
+    private index: Map<string, Map<string, IndexedRow>> = new Map(); // table -> pk_value (lowercase) -> row
     private fkReferences: FKReference[] = [];
-    private reverseIndex: Map<string, FKReference[]> = new Map(); // target_table:pk_value -> FK references
+    private reverseIndex: Map<string, FKReference[]> = new Map(); // target_table:pk_value (lowercase) -> FK references
     private datasetPath: string | null = null;
     private txtInOutPath: string | null = null;
     private tableToFileMap: Map<string, string> = new Map(); // table_name -> file_name
@@ -877,8 +879,8 @@ export class SwatIndexer {
                 fkRef.targetRow = targetRow;
                 resolvedCount++;
                 
-                // Build reverse index: target_table:pk_value -> FK references
-                const reverseKey = `${actualTargetTable}:${fkRef.fkValue}`;
+                // Build reverse index: target_table:pk_value -> FK references (case-insensitive)
+                const reverseKey = `${actualTargetTable}:${fkRef.fkValue.toLowerCase()}`;
                 if (!this.reverseIndex.has(reverseKey)) {
                     this.reverseIndex.set(reverseKey, []);
                 }
