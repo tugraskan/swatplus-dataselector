@@ -16,6 +16,7 @@ Files affected:
 - **plant.ini**: Plant communities with individual plant details
 - **management.sch**: Management schedules with operation details
 - **Decision tables (*.dtl)**: Decision tables with conditions, actions, and file pointers
+- **weather-wgn.cli**: Weather generator parameters with monthly climate data
 
 ## Solution Architecture
 
@@ -80,6 +81,30 @@ soybean      ...       ...         ...   <- CHILD 2 (skipped)
 comm_forest  1         1           ...   <- MAIN RECORD (plnt_cnt=1)
 oak          ...       ...         ...   <- CHILD 1 (skipped)
 ```
+
+#### Strategy 2b: Fixed Child Count (weather-wgn.cli)
+
+Used when the number of child lines is fixed for all records.
+
+**Logic:**
+- Use `child_line_count_fixed` from configuration (e.g., 13 for weather-wgn.cli)
+- Skip exactly N lines after processing each main record
+- No field parsing needed - count is constant for the file
+
+**Example:**
+```
+name         lat       lon        elev      rain_yrs
+Imsil        35.61     127.29     247.90    51         <- MAIN RECORD (indexed)
+ tmp_max_ave tmp_min_ave ...                           <- CHILD 1: monthly header (skipped)
+       -0.64      -10.50 ...                           <- CHILD 2: Jan data (skipped)
+        2.86       -7.54 ...                           <- CHILD 3: Feb data (skipped)
+...                                                     <- CHILDREN 4-13 (skipped)
+me170814     45.67     -69.82     323.10    51         <- MAIN RECORD (indexed)
+ tmp_max_ave tmp_min_ave ...                           <- CHILD 1: monthly header (skipped)
+       -5.82      -18.16 ...                           <- CHILD 2: Jan data (skipped)
+```
+
+**Note:** The weather-wgn.cli file has a fixed structure where each weather station record is followed by 13 child lines: 1 header line for monthly data columns, followed by 12 lines of monthly climate data (one per month).
 
 ### 3. Implementation Details
 
@@ -179,7 +204,9 @@ lum.dtl Generated from database Time: 7/22/2025 3:06:33 PM
 - Returns false if line is a child line (should be skipped)
 
 **`getChildLineCount(valueMap, config, fileName): number`**
-- Extracts explicit child count from configured field
+- Extracts explicit child count from configured field OR uses fixed count
+- Checks `child_line_count_fixed` first (for files like weather-wgn.cli)
+- Falls back to parsing field value for dynamic counts
 - Supports multi-field syntax (e.g., "numb_auto+numb_ops") to sum multiple fields
 - Validates count (negative/excessive values)
 - Returns 0 if no explicit count available

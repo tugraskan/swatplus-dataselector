@@ -40,13 +40,15 @@ suite('Hierarchical File Indexing Test Suite', () => {
         // Test that soils.sol is detected as hierarchical
         const soilsFile = 'soils.sol';
         const plantFile = 'plant.ini';
+        const wgnFile = 'weather-wgn.cli';
         const regularFile = 'hru-data.hru';
 
         // These would need access to metadata, but we can test the file name checking logic
-        const hierarchicalFiles = ['soils.sol', 'plant.ini', 'd_table.dtl', 'lum.dtl'];
+        const hierarchicalFiles = ['soils.sol', 'plant.ini', 'd_table.dtl', 'lum.dtl', 'weather-wgn.cli', 'management.sch'];
         
         assert.strictEqual(hierarchicalFiles.includes(soilsFile), true, 'soils.sol should be hierarchical');
         assert.strictEqual(hierarchicalFiles.includes(plantFile), true, 'plant.ini should be hierarchical');
+        assert.strictEqual(hierarchicalFiles.includes(wgnFile), true, 'weather-wgn.cli should be hierarchical');
         assert.strictEqual(hierarchicalFiles.includes(regularFile), false, 'hru-data.hru should not be hierarchical');
     });
 });
