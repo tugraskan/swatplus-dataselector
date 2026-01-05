@@ -550,10 +550,13 @@ export class SwatTableViewerPanel {
             }
 
             // Scroll to focused table on load
-            window.addEventListener('load', function() {
+            document.addEventListener('DOMContentLoaded', function() {
                 const focusedTable = document.getElementById('focused-table');
                 if (focusedTable) {
-                    focusedTable.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    // Use setTimeout to ensure rendering is complete
+                    setTimeout(function() {
+                        focusedTable.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
                 }
             });
         `;
