@@ -592,11 +592,11 @@ export class SwatIndexer {
     /**
      * Build the index using the pandas helper script for tabular processing
      */
-    private buildIndexWithPandas(datasetPath: string): { success: boolean; tableCount: number; fkCount: number } {
+    private buildIndexWithPandas(datasetPath: string): { success: boolean; tableCount: number; fkCount: number; error?: string } {
         const scriptPath = path.join(this.context.extensionPath, 'scripts', 'pandas_indexer.py');
         if (!fs.existsSync(scriptPath)) {
             console.log('[Indexer] pandas_indexer.py not found, skipping pandas pipeline');
-            return { success: false, tableCount: 0, fkCount: 0 };
+            return { success: false, tableCount: 0, fkCount: 0, error: 'Indexer script not found' };
         }
 
         const schemaPath = path.join(this.context.extensionPath, 'resources', 'schema', 'swatplus-editor-schema.json');
@@ -611,12 +611,13 @@ export class SwatIndexer {
 
         if (result.error) {
             console.warn(`[Indexer] pandas pipeline failed to start: ${result.error.message}`);
-            return { success: false, tableCount: 0, fkCount: 0 };
+            return { success: false, tableCount: 0, fkCount: 0, error: `Python not found or failed to start: ${result.error.message}` };
         }
 
         if (result.status !== 0) {
             console.warn(`[Indexer] pandas pipeline exited with code ${result.status}: ${result.stderr}`);
-            return { success: false, tableCount: 0, fkCount: 0 };
+            const errorMsg = result.stderr || 'Unknown error';
+            return { success: false, tableCount: 0, fkCount: 0, error: `Indexer failed: ${errorMsg}` };
         }
 
         try {
@@ -643,7 +644,7 @@ export class SwatIndexer {
             };
         } catch (error) {
             console.warn(`[Indexer] Unable to parse pandas pipeline output: ${error}`);
-            return { success: false, tableCount: 0, fkCount: 0 };
+            return { success: false, tableCount: 0, fkCount: 0, error: `Failed to parse indexer output: ${error}` };
         }
     }
 
@@ -692,9 +693,10 @@ export class SwatIndexer {
             // Use pandas-backed indexing (required)
             const pandasResult = this.buildIndexWithPandas(datasetPath);
             if (!pandasResult.success) {
+                const errorDetail = pandasResult.error || 'Unknown error';
                 vscode.window.showErrorMessage(
-                    'Failed to build index: pandas indexer is required but not available. ' +
-                    'Please ensure Python 3 and pandas are installed.'
+                    `Failed to build index: ${errorDetail}. ` +
+                    'Check the Output panel for details.'
                 );
                 return false;
             }
