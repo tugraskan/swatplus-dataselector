@@ -18,6 +18,35 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
         this.outputChannel = vscode.window.createOutputChannel('SWAT+ FK Navigation');
     }
 
+    /**
+     * Find the column index for a cursor position, considering both direct hits and whitespace after values
+     */
+    private findColumnIndex(
+        cursorPosition: number,
+        positions: Array<{ index: number; start: number; end: number }>,
+        lineLength: number
+    ): number {
+        // First, check if cursor is directly within a value
+        const directMatch = positions.find(pos => 
+            cursorPosition >= pos.start && cursorPosition <= pos.end
+        );
+        if (directMatch) {
+            return directMatch.index;
+        }
+        
+        // If not directly on a value, check if cursor is in whitespace after a value
+        for (let i = 0; i < positions.length; i++) {
+            const pos = positions[i];
+            const nextPos = i < positions.length - 1 ? positions[i + 1] : null;
+            const whitespaceEnd = nextPos ? nextPos.start : lineLength;
+            if (cursorPosition > pos.end && cursorPosition < whitespaceEnd) {
+                return pos.index;
+            }
+        }
+        
+        return -1; // Not found
+    }
+
     public async provideDefinition(
         document: vscode.TextDocument,
         position: vscode.Position,
@@ -87,35 +116,28 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
                 return undefined;
             }
             
-            // Find which column the cursor is on
-            let columnIndex = -1;
+            const targetFileName = parts[FILE_NAME_COLUMN_INDEX];
+            
+            // Check if cursor is on the file_name column
             let currentPos = 0;
             
+            // Build an array of value positions
+            const partPositions: Array<{ index: number; start: number; end: number }> = [];
             for (let i = 0; i < parts.length; i++) {
                 const valueStart = line.text.indexOf(parts[i], currentPos);
                 if (valueStart === -1) {
                     continue;
                 }
-                
                 const valueEnd = valueStart + parts[i].length;
-                if (position.character >= valueStart && position.character <= valueEnd) {
-                    columnIndex = i;
-                    break;
-                }
-                
+                partPositions.push({ index: i, start: valueStart, end: valueEnd });
                 currentPos = valueEnd;
             }
             
-            // Column 0 is classification name, skip it
-            // Only provide definition if cursor is on a filename column (1+)
-            if (columnIndex > 0 && columnIndex < parts.length) {
-                const targetFileName = parts[columnIndex];
-                
-                // Check if it looks like a filename (has extension) and not null
-                if (!targetFileName.includes('.') || targetFileName === 'null') {
-                    return undefined;
-                }
-                
+            // Find which column the cursor is in or closest to
+            const columnIndex = this.findColumnIndex(position.character, partPositions, line.text.length);
+            
+            // Only provide definition if cursor is on the file_name column
+            if (columnIndex === FILE_NAME_COLUMN_INDEX) {
                 this.outputChannel.appendLine(`[FK Definition] file.cio special handling - target: ${targetFileName}`);
                 
                 const txtInOutPath = this.indexer.getTxtInOutPath();
@@ -165,27 +187,44 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
             return undefined; // Cursor is in leading whitespace
         }
         
-        // Find which value the cursor is in
+        // Build an array of value positions for better cursor detection
+        const valuePositions: Array<{ index: number; start: number; end: number; value: string }> = [];
+        
         for (let i = 0; i < values.length; i++) {
             const valueStart = line.text.indexOf(values[i], currentPos);
             
             // Handle case where value is not found
             if (valueStart === -1) {
+                // Value not found from current position, trying to continue but log warning
+                this.outputChannel.appendLine(`[FK Definition] Warning: value "${values[i]}" not found from position ${currentPos}`);
                 continue;
             }
             
             const valueEnd = valueStart + values[i].length;
-            
-            if (position.character >= valueStart && position.character <= valueEnd) {
-                columnIndex = i;
-                break;
-            }
+            valuePositions.push({ index: i, start: valueStart, end: valueEnd, value: values[i] });
             
             currentPos = valueEnd;
         }
+        
+        // Find which value/column the cursor is in or closest to
+        columnIndex = this.findColumnIndex(
+            position.character, 
+            valuePositions.map(vp => ({ index: vp.index, start: vp.start, end: vp.end })),
+            line.text.length
+        );
+        
+        // Log details about the match
+        if (columnIndex >= 0 && columnIndex < valuePositions.length) {
+            const matchedPos = valuePositions[columnIndex];
+            if (position.character >= matchedPos.start && position.character <= matchedPos.end) {
+                this.outputChannel.appendLine(`[FK Definition] Cursor at ${position.character} is within value "${matchedPos.value}" at [${matchedPos.start}, ${matchedPos.end}]`);
+            } else {
+                this.outputChannel.appendLine(`[FK Definition] Cursor at ${position.character} is in whitespace after value "${matchedPos.value}" at [${matchedPos.start}, ${matchedPos.end}], treating as column ${columnIndex}`);
+            }
+        }
 
         if (columnIndex < 0) {
-            this.outputChannel.appendLine(`[FK Definition] Cursor not on a valid column (columnIndex: ${columnIndex}, likely in whitespace) - no definition to provide`);
+            this.outputChannel.appendLine(`[FK Definition] Cursor not on a valid column (columnIndex: ${columnIndex}, likely in leading whitespace or before first value)`);
             return undefined;
         }
         
