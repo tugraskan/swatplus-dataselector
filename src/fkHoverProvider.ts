@@ -166,6 +166,11 @@ export class SwatFKHoverProvider implements vscode.HoverProvider {
         const columnName = headers[columnIndex];
         const cellValue = values[columnIndex];
 
+        // Check if this column is a file pointer (not a true FK reference)
+        const metadata = this.indexer.getMetadata();
+        const filePointerConfig = metadata?.file_pointer_columns?.[fileName];
+        const isFilePointer = filePointerConfig && typeof filePointerConfig === 'object' && !Array.isArray(filePointerConfig) && filePointerConfig[columnName];
+
         // Build hover content
         const markdown = new vscode.MarkdownString();
         markdown.isTrusted = true;
@@ -175,7 +180,7 @@ export class SwatFKHoverProvider implements vscode.HoverProvider {
             col => col.name === columnName && col.is_foreign_key
         );
 
-        if (fkColumn && fkColumn.fk_target) {
+        if (fkColumn && fkColumn.fk_target && !isFilePointer) {
             // This is a FK column
             const targetFileName = this.indexer.getFileNameForTable(fkColumn.fk_target.table);
             const targetPurpose = targetFileName ? this.indexer.getFilePurpose(targetFileName) : undefined;
@@ -212,6 +217,26 @@ export class SwatFKHoverProvider implements vscode.HoverProvider {
                 if (targetFileName) {
                     markdown.appendMarkdown(`_Value not found in ${targetFileName}_`);
                 }
+            }
+        } else if (isFilePointer) {
+            // File pointer column - show that it points to a file
+            markdown.appendMarkdown(`**File Pointer: \`${columnName}\`**\n\n`);
+            markdown.appendMarkdown(`Value: \`${cellValue}\`\n\n`);
+            
+            // Check if the file exists
+            const txtInOutPath = this.indexer.getTxtInOutPath();
+            if (txtInOutPath && cellValue && cellValue !== 'null') {
+                const targetFilePath = path.join(txtInOutPath, cellValue);
+                if (fs.existsSync(targetFilePath)) {
+                    const commandUri = vscode.Uri.parse(`command:vscode.open?${encodeURIComponent(JSON.stringify([vscode.Uri.file(targetFilePath)]))}`);
+                    markdown.appendMarkdown(`✓ File found: [${cellValue}](${commandUri})\n\n`);
+                    markdown.appendMarkdown(`_Click to open file_`);
+                } else {
+                    markdown.appendMarkdown(`⚠ File not found: \`${cellValue}\`\n\n`);
+                    markdown.appendMarkdown(`_Expected file path: ${targetFilePath}_`);
+                }
+            } else if (cellValue === 'null') {
+                markdown.appendMarkdown(`_No file referenced (null)_`);
             }
         } else {
             // Regular column - just show basic info
