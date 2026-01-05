@@ -161,6 +161,29 @@ Run indexer and verify:
 3. **New formats**: Must be manually added to metadata configuration
 4. **Layer navigation**: Cannot currently navigate to specific soil layers (only main record)
 
+## Important Implementation Details
+
+### Column Mismatch Handling
+
+Hierarchical files like `soils.sol` have a unique structure where:
+- The header line combines columns from BOTH main records AND child records
+- Main record lines have fewer columns than the header (only main record fields)
+- Child lines have different columns than the header (only layer fields)
+
+**Example from soils.sol:**
+```
+name       nly  hyd_grp  dp_tot  anion_excl  perc_crk  texture  dp     bd    awc   ...
+PadHOEGOG  5    C        1000.0  0.5         0.5       LS                              <- Main record (7 fields)
+                                                                170.0  1.29  0.135 ... <- Child line (layer fields)
+```
+
+The indexer handles this by:
+1. **Skipping column count validation for hierarchical files**: Allows lines with fewer columns than headers
+2. **Using heuristic detection**: Determines main vs child based on content, not column count
+3. **Mapping available values**: Only maps as many values as are present in the line
+
+This fix was critical - the original code was rejecting main record lines as "malformed" due to having fewer columns than the header, preventing proper indexing of soil types.
+
 ## Code Quality
 
 - TypeScript type safety with proper null handling

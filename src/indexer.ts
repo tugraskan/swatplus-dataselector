@@ -473,7 +473,10 @@ export class SwatIndexer {
                 }
 
                 const values = line.split(/\s+/).map(v => v.trim()); // Trim each value
-                if (values.length < headers.length) {
+                
+                // For hierarchical files, we allow lines with fewer columns than headers
+                // because main records and child lines may have different structures
+                if (!isHierarchical && values.length < headers.length) {
                     console.warn(`Malformed line ${i + 1} in ${filePath}`);
                     i++;
                     continue;
