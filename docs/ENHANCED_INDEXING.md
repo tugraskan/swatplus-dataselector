@@ -278,6 +278,128 @@ Future: Will be integrated into "Find All References" command.
 - [ ] Reference counting (show how many rows reference each parameter)
 - [ ] Cross-file refactoring (rename and update all references)
 
+## Hierarchical File Support
+
+### Overview
+
+The indexer now supports hierarchical (multi-line) file formats where a single logical record spans multiple physical lines. This is critical for files like:
+
+- **soils.sol**: Soil properties with layer data
+- **plant.ini**: Plant communities with plant details
+- **Decision tables (*.dtl)**: Condition-action pairs
+
+### How It Works
+
+1. **Detection**: The indexer checks `txtinout-metadata.json` to identify hierarchical files
+2. **Main Record Identification**: Uses file-specific heuristics to detect main vs child lines
+3. **Indexing Strategy**: Only main records are indexed; child lines are skipped
+
+### File-Specific Strategies
+
+#### soils.sol
+
+**Structure**:
+```
+Soil Properties
+name         hyd_grp   dp_tot    anion_excl perc_crk  texture   description
+clay_loam    C         1500.0    0.5        0.5       CL        Clay loam soil
+150.0        1.35      0.18      10.5       35.0      45.0      20.0    <- layer 1
+300.0        1.40      0.16      8.5        40.0      40.0      20.0    <- layer 2
+sandy_loam   B         1200.0    0.3        0.3       SL        Sandy loam soil
+200.0        1.50      0.12      15.0       15.0      25.0      60.0    <- layer 1
+```
+
+**Detection Logic**:
+- Main records have a non-numeric `name` field (e.g., "clay_loam")
+- Child records (layers) have numeric values in the `name` position (e.g., "150.0")
+- Heuristic: Check if `name` matches `/^\d+(\.\d+)?$/` (purely numeric)
+
+#### plant.ini
+
+**Structure**:
+```
+Plant Community Initialization
+name         plnt_cnt  rot_yr_ini description
+comm_crop    2         1          Crop community
+corn         ...       ...        ...    <- plant 1
+soybean      ...       ...        ...    <- plant 2
+comm_forest  1         1          Forest community
+oak          ...       ...        ...    <- plant 1
+```
+
+**Detection Logic**:
+- Main records have `plnt_cnt` field present
+- Child records (plant details) follow main record
+- Count field `plnt_cnt` specifies number of child lines
+
+#### Decision Tables (*.dtl)
+
+**Structure**:
+- Multi-line condition-action pairs
+- Complex structure varies by decision table type
+
+**Detection Logic**:
+- Currently treats all lines as main records (conservative)
+- Future enhancement: Parse specific decision table formats
+
+### Configuration
+
+Hierarchical files are configured in `resources/schema/txtinout-metadata.json`:
+
+```json
+{
+  "hierarchical_files": {
+    "soils.sol": {
+      "description": "Soil properties with layer data",
+      "structure": {
+        "main_record_format": "Main line contains soil name and properties",
+        "child_line_format": "Following lines contain layer-specific data",
+        "main_record_identifier": "First data field is the soil name",
+        "indexing_strategy": "Index only the main record line; skip child layer lines"
+      }
+    },
+    "plant.ini": {
+      "description": "Plant community initialization",
+      "structure": {
+        "main_record_format": "Main line with community name and plant count",
+        "child_line_format": "Individual plant details",
+        "child_line_count_field": "plnt_cnt",
+        "indexing_strategy": "Index only the main record line; skip plant detail lines"
+      }
+    }
+  }
+}
+```
+
+### API Methods
+
+```typescript
+// Check if a file is hierarchical
+private isHierarchicalFile(fileName: string): boolean
+
+// Get configuration for a hierarchical file
+private getHierarchicalFileConfig(fileName: string): HierarchicalFileConfig | null
+
+// Determine if a line is a main record (vs child line)
+private isMainRecordLine(valueMap: {[key: string]: string}, fileName: string, headers: string[]): boolean
+
+// Get the number of child lines for a record (if explicitly counted)
+private getChildLineCount(valueMap: {[key: string]: string}, config: HierarchicalFileConfig, fileName: string): number
+```
+
+### Benefits
+
+1. **Correct Indexing**: Only main records (soils, plant communities) are indexed as FK targets
+2. **Performance**: Skipping child lines reduces index size and improves lookup speed
+3. **Navigation**: Ctrl+Click on a soil name navigates to the main soil record, not layer data
+4. **Diagnostics**: FK validation checks against actual main records, not layer data
+
+### Limitations
+
+- **soils.sol**: Layer count not explicitly stored; detection uses heuristics
+- **Decision tables**: Current implementation is conservative (doesn't skip lines)
+- **Unknown formats**: New hierarchical files must be added to metadata configuration
+
 ## Documentation Sources
 
 The metadata and file purposes are extracted from:
