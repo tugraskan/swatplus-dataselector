@@ -200,6 +200,16 @@
         "indexing_strategy": "Index only the main record line; skip plant detail lines"
       }
     },
+    "management.sch": {
+      "description": "Management schedules with main record line followed by operation detail lines",
+      "structure": {
+        "main_record_format": "Main line contains schedule name, numb_ops, and numb_auto (count of auto operations)",
+        "child_line_format": "Following lines contain operation names (one per line, indented)",
+        "main_record_identifier": "First data field is the schedule name (primary key)",
+        "child_line_count_field": "numb_auto",
+        "indexing_strategy": "Index only the main record line; skip operation detail lines"
+      }
+    },
     "d_table.dtl": {
       "description": "Decision table with condition-action pairs across multiple lines",
       "structure": {

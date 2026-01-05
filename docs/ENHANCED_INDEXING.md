@@ -332,6 +332,26 @@ oak          ...       ...        ...    <- plant 1
 - Child records (plant details) follow main record
 - Count field `plnt_cnt` specifies number of child lines
 
+#### management.sch
+
+**Structure**:
+```
+Management Schedule
+name         numb_ops  numb_auto  ...
+agrl_rot     0         2          ...   <- main record
+    pl_hv_agro                          <- operation 1 (indented)
+    fert_stress                         <- operation 2 (indented)
+rice140_rot  0         7          ...   <- main record
+    plow                                <- operation 1
+    weir60r                             <- operation 2
+    ...
+```
+
+**Detection Logic**:
+- Main records have `numb_auto` field specifying count of auto operations
+- Child records (operation names) follow main record on indented lines
+- Count field `numb_auto` specifies number of child lines to skip
+
 #### Decision Tables (*.dtl)
 
 **Structure**:

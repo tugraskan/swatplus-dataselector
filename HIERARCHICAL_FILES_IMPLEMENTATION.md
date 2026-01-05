@@ -14,6 +14,7 @@ The original indexer treated each non-empty line as a separate record. This appr
 Files affected:
 - **soils.sol**: Soil properties with layer data
 - **plant.ini**: Plant communities with individual plant details
+- **management.sch**: Management schedules with operation details
 - **Decision tables (*.dtl)**: Condition-action pairs
 
 ## Solution Architecture
@@ -81,6 +82,29 @@ oak          ...       ...         ...   <- CHILD 1 (skipped)
 ```
 
 ### 3. Implementation Details
+
+#### Strategy 3: Explicit Counting for management.sch
+
+Used when operations are listed on child lines following the main record.
+
+**Logic:**
+- Parse the `numb_auto` field from main record
+- Skip exactly N lines after processing the main record
+- Validate count (must be positive, capped at 1000)
+
+**Example:**
+```
+name         numb_ops  numb_auto  ...
+agrl_rot     0         2          ...   <- MAIN RECORD (numb_auto=2)
+    pl_hv_agro                          <- CHILD 1 (skipped)
+    fert_stress                         <- CHILD 2 (skipped)
+rice140_rot  0         7          ...   <- MAIN RECORD (numb_auto=7)
+    plow                                <- CHILD 1 (skipped)
+    weir60r                             <- CHILD 2 (skipped)
+    ...                                 <- Children 3-7 (skipped)
+```
+
+### 4. Implementation Details
 
 #### Key Methods
 
