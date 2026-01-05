@@ -391,6 +391,122 @@ export class SwatIndexer {
     }
 
     /**
+     * Process decision table files (*.dtl) and extract FK references from fp fields
+     * DTL structure:
+     * - Line 1: Title
+     * - Line 2: Number of decision tables
+     * - For each decision table:
+     *   - Header line: DTBL_NAME, CONDS, ALTS, ACTS
+     *   - Conditions section (CONDS lines)
+     *   - Actions section (ACTS lines) - contains fp field
+     */
+    private processDtlFile(
+        filePath: string,
+        table: SchemaTable,
+        lines: string[]
+    ): Map<string, IndexedRow> {
+        const tableIndex = new Map<string, IndexedRow>();
+        
+        // Action type to target table mapping for fp field
+        const actionTypeToTable: { [actType: string]: string } = {
+            'harvest': 'harv_ops',
+            'harvest_kill': 'harv_ops',
+            'pest_apply': 'chem_app_ops',
+            'fertilize': 'chem_app_ops'
+        };
+
+        if (lines.length < 2) {
+            console.warn(`[Indexer] DTL file ${filePath} has insufficient lines`);
+            return tableIndex;
+        }
+
+        // Skip title line (line 0)
+        // Line 1 contains the number of decision tables
+        const numTablesLine = lines[1].trim();
+        const numTables = parseInt(numTablesLine, 10);
+        
+        if (isNaN(numTables) || numTables < 0) {
+            console.warn(`[Indexer] DTL file ${filePath} has invalid table count: ${numTablesLine}`);
+            return tableIndex;
+        }
+
+        let currentLine = 2; // Start after title and count lines
+
+        // Process each decision table
+        for (let tableIdx = 0; tableIdx < numTables && currentLine < lines.length; tableIdx++) {
+            const headerLine = lines[currentLine].trim();
+            if (!headerLine) {
+                currentLine++;
+                continue;
+            }
+
+            const headerValues = headerLine.split(/\s+/);
+            if (headerValues.length < 4) {
+                console.warn(`[Indexer] DTL header line ${currentLine + 1} has insufficient values`);
+                currentLine++;
+                continue;
+            }
+
+            const dtblName = headerValues[0];
+            const conds = parseInt(headerValues[1], 10) || 0;
+            const alts = parseInt(headerValues[2], 10) || 0;
+            const acts = parseInt(headerValues[3], 10) || 0;
+
+            // Index the decision table main record
+            const row: IndexedRow = {
+                file: filePath,
+                tableName: table.table_name,
+                lineNumber: currentLine + 1,
+                pkValue: dtblName,
+                values: {
+                    'name': dtblName,
+                    'conds': conds.toString(),
+                    'alts': alts.toString(),
+                    'acts': acts.toString()
+                }
+            };
+            tableIndex.set(dtblName, row);
+
+            currentLine++; // Move past header
+
+            // Skip conditions section (conds lines)
+            currentLine += conds;
+
+            // Process actions section (acts lines)
+            for (let actIdx = 0; actIdx < acts && currentLine < lines.length; actIdx++) {
+                const actionLine = lines[currentLine].trim();
+                if (actionLine) {
+                    const actionValues = actionLine.split(/\s+/);
+                    
+                    // Action line structure: act_typ, obj, obj_num, name, option, const, const2, fp, outcome...
+                    // fp is at index 7 (8th field)
+                    if (actionValues.length > 7) {
+                        const actTyp = actionValues[0];
+                        const fp = actionValues[7];
+
+                        // Track FK if action type has a mapping and fp is not null
+                        if (actTyp && fp && actionTypeToTable[actTyp] && !this.fkNullValues.includes(fp)) {
+                            this.fkReferences.push({
+                                sourceFile: filePath,
+                                sourceTable: table.table_name,
+                                sourceLine: currentLine + 1,
+                                sourceColumn: `fp(${actTyp})`,
+                                fkValue: fp,
+                                targetTable: actionTypeToTable[actTyp],
+                                targetColumn: 'name',
+                                resolved: false
+                            });
+                        }
+                    }
+                }
+                currentLine++;
+            }
+        }
+
+        return tableIndex;
+    }
+
+    /**
      * Parse file.cio to extract file references
      * This allows us to handle cases where users rename input files
      */
@@ -554,6 +670,14 @@ export class SwatIndexer {
         try {
             const content = fs.readFileSync(filePath, 'utf-8');
             const lines = content.split('\n');
+
+            // Special handling for decision table files (*.dtl)
+            if (table.file_name.endsWith('.dtl')) {
+                console.log(`[Indexer] Processing DTL file ${table.file_name} with custom parser`);
+                const tableIndex = this.processDtlFile(filePath, table, lines);
+                this.index.set(table.table_name, tableIndex);
+                return;
+            }
 
             // Parse header line to map column positions
             const headerLineIndex = table.has_metadata_line ? 1 : 0;

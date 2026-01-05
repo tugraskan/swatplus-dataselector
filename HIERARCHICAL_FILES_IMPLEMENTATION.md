@@ -15,7 +15,7 @@ Files affected:
 - **soils.sol**: Soil properties with layer data
 - **plant.ini**: Plant communities with individual plant details
 - **management.sch**: Management schedules with operation details
-- **Decision tables (*.dtl)**: Condition-action pairs
+- **Decision tables (*.dtl)**: Decision tables with conditions, actions, and file pointers
 
 ## Solution Architecture
 
@@ -117,6 +117,53 @@ hay_cmz_60__dry_101531    3         1          ...   <- MAIN RECORD (skip 3+1=4 
 **Note:** The first `numb_auto` child lines are FK references to decision tables in `lum.dtl` file. The explicit operation lines contain FK references based on their operation type (op_typ) to various operation files.
 
 ### 4. Implementation Details
+
+#### Strategy 4: Complex Multi-Section Parsing (*.dtl files)
+
+Used for decision table files with multiple sections per entry.
+
+**Structure:**
+```
+Title line
+Number of decision tables
+For each decision table:
+  Header: DTBL_NAME, CONDS, ALTS, ACTS
+  Conditions section (CONDS lines)
+  Actions section (ACTS lines) <- contains fp field
+```
+
+**Logic:**
+- Parse the decision table count from line 2
+- For each decision table:
+  - Read header to get DTBL_NAME and counts (CONDS, ALTS, ACTS)
+  - Index the decision table by DTBL_NAME
+  - Skip CONDS lines (condition section)
+  - Parse ACTS lines (action section) to extract fp field
+  - Create FK references based on action type
+
+**FK Tracking for Actions:**
+- Action lines have structure: `act_typ, obj, obj_num, name, option, const, const2, fp, outcome...`
+- The `fp` field (index 7) is a file pointer
+- Maps action type to target file:
+  - `harvest` → `harv.ops`
+  - `harvest_kill` → `harv.ops`
+  - `pest_apply` → `chem_app.ops`
+  - `fertilize` → `chem_app.ops`
+
+**Example:**
+```
+lum.dtl Generated from database Time: 7/22/2025 3:06:33 PM
+39                                                <- Number of decision tables
+              DTBL_NAME      CONDS       ALTS       ACTS
+                hay_fesc          2          1          1    <- Header (indexed as main record)
+  COND_VAR   OBJ   OBJ_NUMB LIM_VAR LIM_OP LIM_CONST  ALT1   <- Condition line 1 (skipped)
+   biomass   hru          0    null      -      2000     >   
+ phu_plant   hru          0    null      -       0.5    >=   <- Condition line 2 (skipped)
+ ACT_TYP   OBJ OBJ_NUM ACT_NAME ACT_OPTION CONST CONST2 FILE_POINTER  OUT1
+ harvest   hru       0 hay_harv       fesc     0      3  hay_cut_low     y  <- Action line (FK tracked: hay_cut_low → harv.ops)
+```
+
+### 5. Implementation Details
 
 #### Key Methods
 

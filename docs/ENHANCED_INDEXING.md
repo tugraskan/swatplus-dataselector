@@ -368,12 +368,35 @@ hay_cmz_60__dry_101531    3         1          ...   <- main record (1 auto + 3 
 #### Decision Tables (*.dtl)
 
 **Structure**:
-- Multi-line condition-action pairs
-- Complex structure varies by decision table type
+```
+Decision Table File
+Title line
+39                              <- Number of decision tables
+DTBL_NAME     CONDS  ALTS  ACTS
+hay_fesc      2      1     1    <- Header (indexed as hay_fesc)
+COND_VAR ...                    <- Condition line 1
+biomass hru 0 null - 2000 >
+phu_plant hru 0 null - 0.5 >=   <- Condition line 2
+ACT_TYP OBJ OBJ_NUM ACT_NAME ACT_OPTION CONST CONST2 FILE_POINTER OUT1
+harvest hru 0 hay_harv fesc 0 3 hay_cut_low y  <- Action line (fp field tracked)
+```
 
 **Detection Logic**:
-- Currently treats all lines as main records (conservative)
-- Future enhancement: Parse specific decision table formats
+- Custom parser for complex multi-section structure
+- Parses decision table count from line 2
+- For each decision table:
+  - Reads header (DTBL_NAME, CONDS, ALTS, ACTS)
+  - Indexes by DTBL_NAME
+  - Skips CONDS condition lines
+  - Parses ACTS action lines to extract fp (file pointer) field
+
+**FK Tracking for File Pointers**:
+- Action lines have fp field at index 7
+- Maps action type to target file:
+  - `harvest` → `harv.ops` (name column)
+  - `harvest_kill` → `harv.ops` (name column)
+  - `pest_apply` → `chem_app.ops` (name column)
+  - `fertilize` → `chem_app.ops` (name column)
 
 ### Configuration
 
