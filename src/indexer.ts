@@ -729,14 +729,6 @@ export class SwatIndexer {
 
                 const values = line.split(/\s+/).map(v => v.trim()); // Trim each value
                 
-                // For hierarchical files, we allow lines with fewer columns than headers
-                // because main records and child lines may have different structures
-                if (!isHierarchical && values.length < headers.length) {
-                    console.warn(`Malformed line ${i + 1} in ${filePath}`);
-                    i++;
-                    continue;
-                }
-
                 // Build value map
                 const valueMap: { [key: string]: string } = {};
                 for (let j = 0; j < headers.length && j < values.length; j++) {
@@ -744,6 +736,8 @@ export class SwatIndexer {
                 }
                 
                 // Fill in missing columns with empty strings
+                // This handles cases where data rows have fewer values than headers
+                // (e.g., optional trailing columns like 'description')
                 for (let j = values.length; j < headers.length; j++) {
                     valueMap[headers[j]] = '';
                 }
