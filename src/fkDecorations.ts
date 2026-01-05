@@ -211,72 +211,78 @@ export class SwatFKDecorationProvider {
         const resolvedDecorations: vscode.DecorationOptions[] = [];
         const unresolvedDecorations: vscode.DecorationOptions[] = [];
 
-        // file.cio format (based on schema):
+        // file.cio actual format:
         // Line 0: Title/description (metadata line)
-        // Line 1: Header (id classification order_in_class file_name customization)
-        // Line 2+: Data rows
-        // Column 3 (index 3) contains the file_name
-        const FILE_NAME_COLUMN_INDEX = 3;
+        // Line 1+: classification_name  file1  file2  file3  ...
+        // Column 0 is classification name, columns 1+ are filenames
         
-        for (let lineNum = 2; lineNum < editor.document.lineCount; lineNum++) {
+        for (let lineNum = 1; lineNum < editor.document.lineCount; lineNum++) {
             const line = editor.document.lineAt(lineNum);
             const lineText = line.text.trim();
             
-            if (!lineText) {
+            if (!lineText || lineText.startsWith('#')) {
                 continue;
             }
 
-            // Extract filename from column 3 (file_name column)
+            // Split the line into columns
             const parts = lineText.split(/\s+/);
             
-            if (parts.length <= FILE_NAME_COLUMN_INDEX) {
+            // Skip if only classification name (no files)
+            if (parts.length < 2) {
                 continue;
             }
             
-            const targetFileName = parts[FILE_NAME_COLUMN_INDEX];
-            
-            // Find position in original line
+            // Process each filename (starting from column 1)
             let currentPos = 0;
-            let filenameStart = -1;
-            for (let i = 0; i <= FILE_NAME_COLUMN_INDEX && i < parts.length; i++) {
-                const valueStart = line.text.indexOf(parts[i], currentPos);
+            for (let i = 0; i < parts.length; i++) {
+                const part = parts[i];
+                
+                // Find the position of this part in the original line
+                const valueStart = line.text.indexOf(part, currentPos);
                 if (valueStart === -1) {
                     break;
                 }
-                if (i === FILE_NAME_COLUMN_INDEX) {
-                    filenameStart = valueStart;
-                    break;
+                
+                // Column 0 is the classification name, skip it
+                if (i === 0) {
+                    currentPos = valueStart + part.length;
+                    continue;
                 }
-                currentPos = valueStart + parts[i].length;
-            }
+                
+                // Check if this looks like a filename (has extension) and not a null value
+                if (!part.includes('.') || part === 'null') {
+                    currentPos = valueStart + part.length;
+                    continue;
+                }
+                
+                const targetFileName = part;
+                
+                // Check if file exists
+                const targetFilePath = path.join(txtInOutPath, targetFileName);
+                const fileExists = fs.existsSync(targetFilePath);
 
-            if (filenameStart === -1) {
-                continue;
-            }
+                const range = new vscode.Range(
+                    lineNum,
+                    valueStart,
+                    lineNum,
+                    valueStart + targetFileName.length
+                );
 
-            // Check if file exists
-            const targetFilePath = path.join(txtInOutPath, targetFileName);
-            const fileExists = fs.existsSync(targetFilePath);
+                const filePurpose = this.indexer.getFilePurpose(targetFileName);
+                const decoration: vscode.DecorationOptions = {
+                    range,
+                    hoverMessage: fileExists
+                        ? `File reference → ${targetFileName}${filePurpose ? '\n' + filePurpose : ''}`
+                        : `⚠️ File not found: ${targetFileName}`
+                };
 
-            const range = new vscode.Range(
-                lineNum,
-                filenameStart,
-                lineNum,
-                filenameStart + targetFileName.length
-            );
-
-            const filePurpose = this.indexer.getFilePurpose(targetFileName);
-            const decoration: vscode.DecorationOptions = {
-                range,
-                hoverMessage: fileExists
-                    ? `File reference → ${targetFileName}${filePurpose ? '\n' + filePurpose : ''}`
-                    : `⚠️ File not found: ${targetFileName}`
-            };
-
-            if (fileExists) {
-                resolvedDecorations.push(decoration);
-            } else {
-                unresolvedDecorations.push(decoration);
+                if (fileExists) {
+                    resolvedDecorations.push(decoration);
+                } else {
+                    unresolvedDecorations.push(decoration);
+                }
+                
+                currentPos = valueStart + part.length;
             }
         }
 
