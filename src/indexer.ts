@@ -312,6 +312,85 @@ export class SwatIndexer {
     }
 
     /**
+     * Process child lines for management.sch and extract FK references
+     */
+    private processManagementSchChildLines(
+        filePath: string,
+        table: SchemaTable,
+        lines: string[],
+        startLine: number,
+        numb_auto: number,
+        numb_ops: number,
+        scheduleName: string
+    ): void {
+        // Operation type to target table mapping
+        const opTypeToTable: { [opType: string]: string } = {
+            'plnt': 'plant_ini',
+            'harv': 'harv_ops',
+            'hvkl': 'plant_ini',
+            'kill': 'plant_ini',
+            'till': 'tillage_til',
+            'irrm': 'irr_ops',
+            'irra': 'irr_ops',
+            'fert': 'fertilizer_frt',
+            'frta': 'fertilizer_frt',
+            'frtc': 'fertilizer_frt',
+            'pest': 'pesticide_pes',
+            'pstc': 'pesticide_pes',
+            'graz': 'graze_ops'
+        };
+
+        let currentLine = startLine;
+
+        // Process first numb_auto lines (decision table references)
+        for (let j = 0; j < numb_auto && currentLine < lines.length; j++) {
+            const line = lines[currentLine].trim();
+            if (line) {
+                const dtlName = line.split(/\s+/)[0]; // First token is the dtl name
+                if (dtlName && !this.fkNullValues.includes(dtlName)) {
+                    this.fkReferences.push({
+                        sourceFile: filePath,
+                        sourceTable: table.table_name,
+                        sourceLine: currentLine + 1,
+                        sourceColumn: 'auto_op_dtl',
+                        fkValue: dtlName,
+                        targetTable: 'lum_dtl',
+                        targetColumn: 'name',
+                        resolved: false
+                    });
+                }
+            }
+            currentLine++;
+        }
+
+        // Process next numb_ops lines (explicit operations)
+        for (let j = 0; j < numb_ops && currentLine < lines.length; j++) {
+            const line = lines[currentLine].trim();
+            if (line) {
+                const values = line.split(/\s+/);
+                if (values.length > 0) {
+                    const opType = values[0]; // First field is operation type
+                    const opData1 = values.length > 6 ? values[6] : null; // op_data1 is typically the 7th field
+
+                    if (opType && opData1 && opTypeToTable[opType] && !this.fkNullValues.includes(opData1)) {
+                        this.fkReferences.push({
+                            sourceFile: filePath,
+                            sourceTable: table.table_name,
+                            sourceLine: currentLine + 1,
+                            sourceColumn: `op_data1(${opType})`,
+                            fkValue: opData1,
+                            targetTable: opTypeToTable[opType],
+                            targetColumn: 'name',
+                            resolved: false
+                        });
+                    }
+                }
+            }
+            currentLine++;
+        }
+    }
+
+    /**
      * Parse file.cio to extract file references
      * This allows us to handle cases where users rename input files
      */
@@ -591,9 +670,17 @@ export class SwatIndexer {
                     }
                 }
 
-                // Skip child lines if we have an explicit count (e.g., plant.ini)
+                // Skip child lines if we have an explicit count (e.g., plant.ini, management.sch)
                 if (skipCount > 0) {
-                    console.log(`[Indexer]   Skipping ${skipCount} child lines for record "${pkValue}"`);
+                    // Special handling for management.sch to track FK references in child lines
+                    if (table.file_name === 'management.sch') {
+                        const numb_auto = parseInt(valueMap['numb_auto'] || '0', 10);
+                        const numb_ops = parseInt(valueMap['numb_ops'] || '0', 10);
+                        console.log(`[Indexer]   Processing ${skipCount} child lines for management schedule "${pkValue}" (${numb_auto} auto ops, ${numb_ops} explicit ops)`);
+                        this.processManagementSchChildLines(filePath, table, lines, i + 1, numb_auto, numb_ops, pkValue);
+                    } else {
+                        console.log(`[Indexer]   Skipping ${skipCount} child lines for record "${pkValue}"`);
+                    }
                     i += skipCount;
                 }
 

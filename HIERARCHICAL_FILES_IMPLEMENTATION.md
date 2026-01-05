@@ -83,7 +83,7 @@ oak          ...       ...         ...   <- CHILD 1 (skipped)
 
 ### 3. Implementation Details
 
-#### Strategy 3: Explicit Counting for management.sch
+#### Strategy 3: Explicit Counting for management.sch with FK Tracking
 
 Used when operations are listed on child lines following the main record.
 
@@ -92,23 +92,29 @@ Used when operations are listed on child lines following the main record.
 - Total child lines = `numb_auto + numb_ops`
 - First `numb_auto` lines are decision table references (FK to lum.dtl)
 - Next `numb_ops` lines are explicit operations with parameters
-- Skip total lines after processing the main record
+- **Process child lines to extract FK references** instead of just skipping
 - Validate count (must be positive, capped at 1000)
+
+**FK Tracking for Child Lines:**
+- **Auto operations (first `numb_auto` lines)**: Extract decision table name → FK to `lum.dtl`
+- **Explicit operations (next `numb_ops` lines)**: Parse operation type and `op_data1` field
+  - Maps operation type to target file: `fert`→`fertilizer.frt`, `till`→`tillage.til`, etc.
+  - Extracts FK value from `op_data1` field (7th column)
 
 **Example:**
 ```
 name                      numb_ops  numb_auto  ...
 agrl_rot                  0         2          ...   <- MAIN RECORD (skip 0+2=2 lines)
-    pl_hv_agro                                      <- CHILD 1: dtl ref (skipped)
-    fert_stress                                     <- CHILD 2: dtl ref (skipped)
+    pl_hv_agro                                      <- CHILD 1: dtl ref → lum.dtl (FK tracked)
+    fert_stress                                     <- CHILD 2: dtl ref → lum.dtl (FK tracked)
 hay_cmz_60__dry_101531    3         1          ...   <- MAIN RECORD (skip 3+1=4 lines)
-    hay_fesc                                        <- CHILD 1: dtl ref (skipped)
-    fert          0  0  0.2  mhp  broadcast  31.87  <- CHILD 2: explicit op (skipped)
-    fert          0  0  0.2  mhn  broadcast  74.88  <- CHILD 3: explicit op (skipped)
-    skip          0  0  0    null null       0      <- CHILD 4: explicit op (skipped)
+    hay_fesc                                        <- CHILD 1: dtl ref → lum.dtl (FK tracked)
+    fert  0  0  0.2  mhp  broadcast  31.87          <- CHILD 2: fert op → fertilizer.frt:mhp (FK tracked)
+    fert  0  0  0.2  mhn  broadcast  74.88          <- CHILD 3: fert op → fertilizer.frt:mhn (FK tracked)
+    skip  0  0  0    null null       0              <- CHILD 4: skip op (no FK)
 ```
 
-**Note:** The first `numb_auto` child lines are FK references to decision tables in `lum.dtl` file.
+**Note:** The first `numb_auto` child lines are FK references to decision tables in `lum.dtl` file. The explicit operation lines contain FK references based on their operation type (op_typ) to various operation files.
 
 ### 4. Implementation Details
 
@@ -140,6 +146,25 @@ let totalCount = 0;
 for (const field of fields) {
     totalCount += parseInt(valueMap[field], 10) || 0;
 }
+```
+
+**Operation Type to File Mappings (management.sch):**
+```typescript
+const opTypeToTable = {
+    'plnt': 'plant_ini',    // Plant community reference
+    'harv': 'harv_ops',     // Harvest operation
+    'hvkl': 'plant_ini',    // Harvest and kill
+    'kill': 'plant_ini',    // Kill plant
+    'till': 'tillage_til',  // Tillage operation
+    'irrm': 'irr_ops',      // Irrigation (moisture-based)
+    'irra': 'irr_ops',      // Irrigation (auto)
+    'fert': 'fertilizer_frt', // Fertilizer application
+    'frta': 'fertilizer_frt', // Fertilizer (auto)
+    'frtc': 'fertilizer_frt', // Fertilizer (continuous)
+    'pest': 'pesticide_pes',  // Pesticide application
+    'pstc': 'pesticide_pes',  // Pesticide (continuous)
+    'graz': 'graze_ops'       // Grazing operation
+};
 ```
 
 **Modified `indexTable()` Loop**

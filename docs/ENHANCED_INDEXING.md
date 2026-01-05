@@ -354,6 +354,17 @@ hay_cmz_60__dry_101531    3         1          ...   <- main record (1 auto + 3 
 - Total skip count = `numb_auto + numb_ops`
 - Decision table references (auto ops) are FK references to `lum.dtl`
 
+**FK Tracking for Operations**:
+- Auto operations (first `numb_auto` lines): Each line contains a decision table name → FK to `lum.dtl`
+- Explicit operations (next `numb_ops` lines): Operation type determines target file
+  - `fert`, `frta`, `frtc` → `fertilizer.frt` (op_data1 field)
+  - `till` → `tillage.til` (op_data1 field)
+  - `pest`, `pstc` → `pesticide.pes` (op_data1 field)
+  - `irrm`, `irra` → `irr.ops` (op_data1 field)
+  - `plnt`, `hvkl`, `kill` → `plant.ini` (op_data1 field)
+  - `harv` → `harv.ops` (op_data1 field)
+  - `graz` → `graze.ops` (op_data1 field)
+
 #### Decision Tables (*.dtl)
 
 **Structure**:
