@@ -137,8 +137,10 @@ For each decision table:
 - For each decision table:
   - Read header to get DTBL_NAME and counts (CONDS, ALTS, ACTS)
   - Index the decision table by DTBL_NAME
-  - Skip CONDS lines (condition section)
-  - Parse ACTS lines (action section) to extract fp field
+  - Skip CONDS section header line
+  - Skip CONDS data lines (condition section)
+  - Skip ACTS section header line
+  - Parse ACTS data lines (action section) to extract fp field
   - Create FK references based on action type
 
 **FK Tracking for Actions:**
@@ -154,12 +156,12 @@ For each decision table:
 ```
 lum.dtl Generated from database Time: 7/22/2025 3:06:33 PM
 39                                                <- Number of decision tables
-              DTBL_NAME      CONDS       ALTS       ACTS
-                hay_fesc          2          1          1    <- Header (indexed as main record)
-  COND_VAR   OBJ   OBJ_NUMB LIM_VAR LIM_OP LIM_CONST  ALT1   <- Condition line 1 (skipped)
-   biomass   hru          0    null      -      2000     >   
+ NAME   	 CONDS	ALTS	ACTS
+ hay_fesc          2          1          1    <- Decision table header (indexed as main record)
+ VAR		OBJ	OB_NUM	LIM_VAR		LIM_OP	   LIM_CONST	 ALT1   <- Conditions section header (skipped)
+ biomass   hru          0    null      -      2000     >   <- Condition line 1 (skipped)
  phu_plant   hru          0    null      -       0.5    >=   <- Condition line 2 (skipped)
- ACT_TYP   OBJ OBJ_NUM ACT_NAME ACT_OPTION CONST CONST2 FILE_POINTER  OUT1
+ ACT_TYP    OBJ OBJ_NUM   NAME       OPTION       CONST         CONST2      FP     OUTCOMES  <- Actions section header (skipped)
  harvest   hru       0 hay_harv       fesc     0      3  hay_cut_low     y  <- Action line (FK tracked: hay_cut_low → harv.ops)
 ```
 

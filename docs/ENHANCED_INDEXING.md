@@ -372,23 +372,25 @@ hay_cmz_60__dry_101531    3         1          ...   <- main record (1 auto + 3 
 Decision Table File
 Title line
 39                              <- Number of decision tables
-DTBL_NAME     CONDS  ALTS  ACTS
-hay_fesc      2      1     1    <- Header (indexed as hay_fesc)
-COND_VAR ...                    <- Condition line 1
-biomass hru 0 null - 2000 >
-phu_plant hru 0 null - 0.5 >=   <- Condition line 2
-ACT_TYP OBJ OBJ_NUM ACT_NAME ACT_OPTION CONST CONST2 FILE_POINTER OUT1
-harvest hru 0 hay_harv fesc 0 3 hay_cut_low y  <- Action line (fp field tracked)
+ NAME   	 CONDS	ALTS	ACTS
+ hay_fesc      2      1     1    <- Decision table header (indexed as hay_fesc)
+ VAR		OBJ	OB_NUM	LIM_VAR	LIM_OP	LIM_CONST  ALT1   <- Conditions section header (skipped)
+ biomass hru 0 null - 2000 >      <- Condition line 1 (skipped)
+ phu_plant hru 0 null - 0.5 >=    <- Condition line 2 (skipped)
+ ACT_TYP OBJ OBJ_NUM NAME OPTION CONST CONST2 FP OUTCOMES  <- Actions section header (skipped)
+ harvest hru 0 hay_harv fesc 0 3 hay_cut_low y  <- Action line (fp field tracked)
 ```
 
 **Detection Logic**:
 - Custom parser for complex multi-section structure
 - Parses decision table count from line 2
 - For each decision table:
-  - Reads header (DTBL_NAME, CONDS, ALTS, ACTS)
-  - Indexes by DTBL_NAME
-  - Skips CONDS condition lines
-  - Parses ACTS action lines to extract fp (file pointer) field
+  - Reads header (NAME, CONDS, ALTS, ACTS)
+  - Indexes by NAME
+  - Skips conditions section header line
+  - Skips CONDS condition data lines
+  - Skips actions section header line
+  - Parses ACTS action data lines to extract fp (file pointer) field
 
 **FK Tracking for File Pointers**:
 - Action lines have fp field at index 7

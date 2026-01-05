@@ -467,12 +467,18 @@ export class SwatIndexer {
             };
             tableIndex.set(dtblName, row);
 
-            currentLine++; // Move past header
+            currentLine++; // Move past decision table header
 
-            // Skip conditions section (conds lines)
+            // Skip conditions section header line (VAR, OBJ, OB_NUM, etc.)
+            currentLine++;
+            
+            // Skip conditions section data lines (conds lines)
             currentLine += conds;
 
-            // Process actions section (acts lines)
+            // Skip actions section header line (ACT_TYP, OBJ, OBJ_NUM, etc.)
+            currentLine++;
+
+            // Process actions section data lines (acts lines)
             for (let actIdx = 0; actIdx < acts && currentLine < lines.length; actIdx++) {
                 const actionLine = lines[currentLine].trim();
                 if (actionLine) {
