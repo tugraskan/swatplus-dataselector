@@ -719,14 +719,20 @@ export class SwatIndexer {
             }
 
             // Parse header line to map column positions
-            const headerLineIndex = table.has_metadata_line ? 1 : 0;
-            if (lines.length <= headerLineIndex) {
-                console.warn(`File too short: ${filePath}`);
-                return;
+            let headers: string[];
+            if (table.has_header_line) {
+                // Read headers from file
+                const headerLineIndex = table.has_metadata_line ? 1 : 0;
+                if (lines.length <= headerLineIndex) {
+                    console.warn(`File too short: ${filePath}`);
+                    return;
+                }
+                const headerLine = lines[headerLineIndex];
+                headers = headerLine.trim().split(/\s+/);
+            } else {
+                // No header line in file - use column names from schema
+                headers = table.columns.map(col => col.name);
             }
-
-            const headerLine = lines[headerLineIndex];
-            const headers = headerLine.trim().split(/\s+/);
 
             // Index data rows
             const dataStartLine = table.data_starts_after;
