@@ -616,7 +616,7 @@ export class SwatIndexer {
 
         if (result.status !== 0) {
             console.warn(`[Indexer] pandas pipeline exited with code ${result.status}: ${result.stderr}`);
-            const errorMsg = result.stderr || 'Unknown error';
+            const errorMsg = result.stderr || `Exit code ${result.status}, no stderr output`;
             return { success: false, tableCount: 0, fkCount: 0, error: `Indexer failed: ${errorMsg}` };
         }
 
@@ -643,8 +643,9 @@ export class SwatIndexer {
                 fkCount: this.fkReferences.length,
             };
         } catch (error) {
-            console.warn(`[Indexer] Unable to parse pandas pipeline output: ${error}`);
-            return { success: false, tableCount: 0, fkCount: 0, error: `Failed to parse indexer output: ${error}` };
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.warn(`[Indexer] Unable to parse pandas pipeline output: ${errorMsg}`);
+            return { success: false, tableCount: 0, fkCount: 0, error: `Failed to parse indexer output: ${errorMsg}` };
         }
     }
 
