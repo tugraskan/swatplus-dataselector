@@ -31,6 +31,21 @@ interface TxtInOutMetadata {
     file_purposes: { [fileName: string]: string };
     file_categories: { [category: string]: string[] };
     common_pointer_patterns: any;
+    hierarchical_files?: {
+        description: string;
+        [fileName: string]: any;
+    };
+}
+
+interface HierarchicalFileConfig {
+    description: string;
+    structure: {
+        main_record_format: string;
+        child_line_format: string;
+        main_record_identifier: string;
+        child_line_count_field?: string;
+        indexing_strategy: string;
+    };
 }
 
 export interface SchemaColumn {
@@ -174,6 +189,77 @@ export class SwatIndexer {
         } catch (error) {
             console.log(`Failed to load TxtInOut metadata: ${error}`);
         }
+    }
+
+    /**
+     * Check if a file is hierarchical (multi-line records)
+     */
+    private isHierarchicalFile(fileName: string): boolean {
+        if (!this.metadata?.hierarchical_files) {
+            return false;
+        }
+        
+        // Check if the file is in the hierarchical files list
+        // Skip the 'description' key which is metadata
+        return fileName in this.metadata.hierarchical_files && fileName !== 'description';
+    }
+
+    /**
+     * Get hierarchical file configuration
+     */
+    private getHierarchicalFileConfig(fileName: string): HierarchicalFileConfig | null {
+        if (!this.metadata?.hierarchical_files || !this.isHierarchicalFile(fileName)) {
+            return null;
+        }
+        
+        return this.metadata.hierarchical_files[fileName] as HierarchicalFileConfig;
+    }
+
+    /**
+     * Determine the number of child lines for a hierarchical record
+     */
+    private getChildLineCount(valueMap: { [key: string]: string }, config: HierarchicalFileConfig, fileName: string): number {
+        // Check if there's a field that specifies the child line count
+        const countField = config.structure.child_line_count_field;
+        
+        if (countField && valueMap[countField]) {
+            // Parse the count from the field value
+            const count = parseInt(valueMap[countField], 10);
+            return isNaN(count) ? 0 : count;
+        }
+        
+        // For files without explicit count field, return 0
+        // We'll use a different strategy - detect child lines on-the-fly
+        return 0;
+    }
+
+    /**
+     * Check if a line is a main record (vs child line) in a hierarchical file
+     * For now, this uses heuristics based on the file format
+     */
+    private isMainRecordLine(valueMap: { [key: string]: string }, fileName: string, headers: string[]): boolean {
+        // For soils.sol: Main record lines have a 'name' field that looks like a valid identifier
+        // Child lines (layer data) typically have numeric or null values in the name position
+        if (fileName === 'soils.sol') {
+            const nameValue = valueMap['name'] || '';
+            // Main record has a non-empty name that's not purely numeric
+            // This is a heuristic - child lines might have numeric values or be empty in name position
+            return nameValue.length > 0 && !/^\d+(\.\d+)?$/.test(nameValue);
+        }
+        
+        // For plant.ini: Main record has plnt_cnt field
+        if (fileName === 'plant.ini') {
+            // If the record has plnt_cnt, it's a main record
+            return 'plnt_cnt' in valueMap;
+        }
+        
+        // For decision tables: More complex, for now treat all as main records
+        if (fileName.endsWith('.dtl')) {
+            return true; // Conservative - don't skip any lines for now
+        }
+        
+        // Default: treat as main record
+        return true;
     }
 
     /**
@@ -355,15 +441,24 @@ export class SwatIndexer {
             const dataStartLine = table.data_starts_after;
             const tableIndex = new Map<string, IndexedRow>();
             
-            console.log(`[Indexer] Indexing ${table.table_name} (${path.basename(filePath)}), data starts at line ${dataStartLine}, headers: ${headers.join(', ')}`);
+            // Check if this is a hierarchical file
+            const isHierarchical = this.isHierarchicalFile(table.file_name);
+            const hierarchicalConfig = isHierarchical ? this.getHierarchicalFileConfig(table.file_name) : null;
+            
+            console.log(`[Indexer] Indexing ${table.table_name} (${path.basename(filePath)}), data starts at line ${dataStartLine}, headers: ${headers.join(', ')}${isHierarchical ? ' (HIERARCHICAL)' : ''}`);
 
-            for (let i = dataStartLine; i < lines.length; i++) {
+            let i = dataStartLine;
+            while (i < lines.length) {
                 const line = lines[i].trim();
-                if (!line) {continue;}
+                if (!line) {
+                    i++;
+                    continue;
+                }
 
                 const values = line.split(/\s+/).map(v => v.trim()); // Trim each value
                 if (values.length < headers.length) {
                     console.warn(`Malformed line ${i + 1} in ${filePath}`);
+                    i++;
                     continue;
                 }
 
@@ -371,6 +466,19 @@ export class SwatIndexer {
                 const valueMap: { [key: string]: string } = {};
                 for (let j = 0; j < headers.length && j < values.length; j++) {
                     valueMap[headers[j]] = values[j];
+                }
+
+                // For hierarchical files, check if this is a main record or child line
+                if (isHierarchical && hierarchicalConfig) {
+                    const isMainRecord = this.isMainRecordLine(valueMap, table.file_name, headers);
+                    if (!isMainRecord) {
+                        // This is a child line - skip it
+                        if (i - dataStartLine < 10) {
+                            console.log(`[Indexer]   Skipping child line ${i + 1}`);
+                        }
+                        i++;
+                        continue;
+                    }
                 }
 
                 // Get primary key value
@@ -419,6 +527,17 @@ export class SwatIndexer {
                         });
                     }
                 }
+
+                // Handle hierarchical files with explicit child count
+                if (isHierarchical && hierarchicalConfig) {
+                    const childLineCount = this.getChildLineCount(valueMap, hierarchicalConfig, table.file_name);
+                    if (childLineCount > 0) {
+                        console.log(`[Indexer]   Skipping ${childLineCount} child lines for record "${pkValue}"`);
+                        i += childLineCount; // Skip the child lines
+                    }
+                }
+
+                i++;
             }
 
             this.index.set(table.table_name, tableIndex);
