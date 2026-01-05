@@ -146,6 +146,10 @@ export class SwatFKDecorationProvider {
             return;
         }
 
+        // Get metadata to check for file pointer columns
+        const metadata = this.indexer.getMetadata();
+        const filePointerConfig = metadata?.file_pointer_columns?.[fileName];
+
         // Collect decorations
         const resolvedDecorations: vscode.DecorationOptions[] = [];
         const unresolvedDecorations: vscode.DecorationOptions[] = [];
@@ -165,6 +169,11 @@ export class SwatFKDecorationProvider {
             );
 
             for (const fkRef of fkRefs) {
+                // Skip decorations for file pointer columns (not true FK references)
+                if (filePointerConfig && typeof filePointerConfig === 'object' && !Array.isArray(filePointerConfig) && filePointerConfig[fkRef.sourceColumn]) {
+                    continue; // Skip file pointer columns
+                }
+
                 // Find the column index
                 const columnIndex = headers.indexOf(fkRef.sourceColumn);
                 if (columnIndex < 0 || columnIndex >= values.length) {
