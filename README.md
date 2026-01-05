@@ -17,6 +17,7 @@ A VS Code extension for SWAT+ development that allows you to browse and select d
 ## Documentation
 
 - **[Enhanced Indexing Guide](docs/ENHANCED_INDEXING.md)** - Complete guide to the indexing system
+- **[Data Parsing Implementation](docs/DATA_PARSING.md)** - How SWAT+ input files are parsed and indexed
 - **[Extension File Schema](docs/EXTENSION_FILE_SCHEMA.md)** - Detailed schema for all SWAT+ files
 - **[Dependency Analysis](docs/DEPENDENCY_ANALYSIS.md)** - Comprehensive FK and file relationships
 - **[Quick Reference](docs/QUICK_REFERENCE.md)** - Quick lookup for common patterns
