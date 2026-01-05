@@ -740,7 +740,7 @@ export class SwatIndexer {
             this.resolveFKReferences();
 
             vscode.window.showInformationMessage(
-                `Index built successfully: ${processedCount} tables, ${this.fkReferences.length} FK references`
+                `Index built via TypeScript fallback: ${processedCount} tables, ${this.fkReferences.length} FK references`
             );
 
             // Store index status
