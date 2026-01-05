@@ -647,6 +647,14 @@ export class SwatIndexer {
     }
 
     /**
+     * Get the full indexed data for all tables
+     * Returns a map of table name to table data
+     */
+    public getIndexData(): Map<string, Map<string, IndexedRow>> {
+        return new Map(this.index);
+    }
+
+    /**
      * Get all FK references from a specific file
      */
     public getFKReferencesFromFile(filePath: string): FKReference[] {
