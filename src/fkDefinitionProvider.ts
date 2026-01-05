@@ -94,19 +94,37 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
             let columnIndex = -1;
             let currentPos = 0;
             
+            // Build an array of value positions
+            const partPositions: Array<{ index: number; start: number; end: number }> = [];
             for (let i = 0; i < parts.length; i++) {
                 const valueStart = line.text.indexOf(parts[i], currentPos);
                 if (valueStart === -1) {
                     continue;
                 }
-                
                 const valueEnd = valueStart + parts[i].length;
-                if (position.character >= valueStart && position.character <= valueEnd) {
-                    columnIndex = i;
+                partPositions.push({ index: i, start: valueStart, end: valueEnd });
+                currentPos = valueEnd;
+            }
+            
+            // Find which column the cursor is in or closest to
+            for (const pos of partPositions) {
+                if (position.character >= pos.start && position.character <= pos.end) {
+                    columnIndex = pos.index;
                     break;
                 }
-                
-                currentPos = valueEnd;
+            }
+            
+            // If not directly on a value, check if cursor is in whitespace after a value
+            if (columnIndex < 0) {
+                for (let i = 0; i < partPositions.length; i++) {
+                    const pos = partPositions[i];
+                    const nextPos = i < partPositions.length - 1 ? partPositions[i + 1] : null;
+                    const whitespaceEnd = nextPos ? nextPos.start : line.text.length;
+                    if (position.character > pos.end && position.character < whitespaceEnd) {
+                        columnIndex = pos.index;
+                        break;
+                    }
+                }
             }
             
             // Only provide definition if cursor is on the file_name column
@@ -160,27 +178,54 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
             return undefined; // Cursor is in leading whitespace
         }
         
-        // Find which value the cursor is in
+        // Build an array of value positions for better cursor detection
+        const valuePositions: Array<{ index: number; start: number; end: number; value: string }> = [];
+        
         for (let i = 0; i < values.length; i++) {
             const valueStart = line.text.indexOf(values[i], currentPos);
             
             // Handle case where value is not found
             if (valueStart === -1) {
+                // Value not found from current position, try to continue but log warning
+                this.outputChannel.appendLine(`[FK Definition] Warning: value "${values[i]}" not found from position ${currentPos}`);
                 continue;
             }
             
             const valueEnd = valueStart + values[i].length;
-            
-            if (position.character >= valueStart && position.character <= valueEnd) {
-                columnIndex = i;
-                break;
-            }
+            valuePositions.push({ index: i, start: valueStart, end: valueEnd, value: values[i] });
             
             currentPos = valueEnd;
         }
+        
+        // Find which value/column the cursor is in or closest to
+        // First, check if cursor is directly within a value
+        for (const pos of valuePositions) {
+            if (position.character >= pos.start && position.character <= pos.end) {
+                columnIndex = pos.index;
+                this.outputChannel.appendLine(`[FK Definition] Cursor at ${position.character} is within value "${pos.value}" at [${pos.start}, ${pos.end}]`);
+                break;
+            }
+        }
+        
+        // If not directly on a value, check if cursor is in whitespace between values
+        // Associate with the value that comes before the whitespace
+        if (columnIndex < 0) {
+            for (let i = 0; i < valuePositions.length; i++) {
+                const pos = valuePositions[i];
+                const nextPos = i < valuePositions.length - 1 ? valuePositions[i + 1] : null;
+                
+                // Check if cursor is in the whitespace after this value and before the next
+                const whitespaceEnd = nextPos ? nextPos.start : line.text.length;
+                if (position.character > pos.end && position.character < whitespaceEnd) {
+                    columnIndex = pos.index;
+                    this.outputChannel.appendLine(`[FK Definition] Cursor at ${position.character} is in whitespace after value "${pos.value}" at [${pos.start}, ${pos.end}], treating as column ${columnIndex}`);
+                    break;
+                }
+            }
+        }
 
         if (columnIndex < 0) {
-            this.outputChannel.appendLine(`[FK Definition] Cursor not on a valid column (columnIndex: ${columnIndex}, likely in whitespace) - no definition to provide`);
+            this.outputChannel.appendLine(`[FK Definition] Cursor not on a valid column (columnIndex: ${columnIndex}, likely in leading whitespace or before first value)`);
             return undefined;
         }
         
