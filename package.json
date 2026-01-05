@@ -72,6 +72,12 @@
         "title": "SWAT+: Show FK References",
         "icon": "$(references)"
       }
+      ,
+      {
+        "command": "swat-dataset-selector.exportIndex",
+        "title": "SWAT+: Export Index to JSON",
+        "icon": "$(cloud-download)"
+      }
     ]
   },
   "scripts": {

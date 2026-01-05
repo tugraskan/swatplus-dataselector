@@ -263,19 +263,64 @@ export class SwatIndexer {
         const metadataPath = path.join(this.context.extensionPath, 'resources', 'schema', 'txtinout-metadata.json');
         const txtInOutPath = this.txtInOutPath ?? datasetPath;
 
-        const pythonExecutable = process.env.SWATPLUS_PYTHON || 'python3';
+        // Try a list of candidate Python executables so the extension works on Windows/macOS/Linux
+        const candidates: string[] = [];
+        if (process.env.SWATPLUS_PYTHON) {
+            candidates.push(process.env.SWATPLUS_PYTHON);
+        }
+        // Common names on various platforms
+        candidates.push('python', 'python3', 'py');
+
         const args = [scriptPath, '--dataset', txtInOutPath, '--schema', schemaPath, '--metadata', metadataPath];
 
-        console.log(`[Indexer] Attempting pandas-backed indexing via ${pythonExecutable}`);
-        const result = spawnSync(pythonExecutable, args, { encoding: 'utf-8' });
+        console.log(`[Indexer] Attempting pandas-backed indexing via candidates: ${candidates.join(', ')}`);
+
+        let lastError: string | undefined;
+        let result: import('child_process').SpawnSyncReturns<string> | null = null;
+
+        for (const pythonExecutable of candidates) {
+            try {
+                console.log(`[Indexer] Trying python executable: ${pythonExecutable}`);
+                // Increase maxBuffer to handle large JSON payloads emitted by the pandas indexer
+                result = spawnSync(pythonExecutable, args, { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 });
+            } catch (err: any) {
+                lastError = err.message || String(err);
+                console.warn(`[Indexer] Failed to start ${pythonExecutable}: ${lastError}`);
+                result = null;
+            }
+
+            if (!result) {
+                continue;
+            }
+
+            if (result.error) {
+                // If executable not found, try next candidate
+                lastError = result.error.message;
+                console.warn(`[Indexer] ${pythonExecutable} start error: ${lastError}`);
+                continue;
+            }
+
+            if (result.status === 0) {
+                // Success
+                console.log(`[Indexer] pandas pipeline succeeded with ${pythonExecutable}`);
+                break;
+            } else {
+                // Non-zero exit - capture stderr and try next candidate (in case of unexpected executable)
+                lastError = result.stderr || `Exit code ${result.status}`;
+                console.warn(`[Indexer] ${pythonExecutable} exited with code ${result.status}: ${lastError}`);
+                // continue trying other candidates
+            }
+        }
+
+        if (!result) {
+            return { success: false, tableCount: 0, fkCount: 0, error: `Python not found: tried ${candidates.join(', ')}. Please install Python or set the SWATPLUS_PYTHON environment variable to the Python executable.` };
+        }
 
         if (result.error) {
-            console.warn(`[Indexer] pandas pipeline failed to start: ${result.error.message}`);
-            return { success: false, tableCount: 0, fkCount: 0, error: `Python not found or failed to start: ${result.error.message}` };
+            return { success: false, tableCount: 0, fkCount: 0, error: `Python failed to start: ${result.error.message}` };
         }
 
         if (result.status !== 0) {
-            console.warn(`[Indexer] pandas pipeline exited with code ${result.status}: ${result.stderr}`);
             const errorMsg = result.stderr || `Exit code ${result.status}, no stderr output`;
             return { success: false, tableCount: 0, fkCount: 0, error: `Indexer failed: ${errorMsg}` };
         }
@@ -632,6 +677,39 @@ export class SwatIndexer {
             resolvedFkCount: resolvedCount,
             unresolvedFkCount: this.fkReferences.length - resolvedCount
         };
+    }
+
+    /**
+     * Export the current index to a JSON file for inspection.
+     * Returns the path to the written file or undefined on error.
+     */
+    public async exportIndexToFile(outPath?: string): Promise<string | undefined> {
+        try {
+            const exportObj: any = {
+                tables: {},
+                fkReferences: this.fkReferences,
+                stats: this.getIndexStats()
+            };
+
+            for (const [tableName, tableIndex] of this.index.entries()) {
+                exportObj.tables[tableName] = [];
+                for (const row of tableIndex.values()) {
+                    exportObj.tables[tableName].push(row);
+                }
+            }
+
+            const targetPath = outPath || path.join(this.context.extensionPath, 'out', 'index_dump.json');
+            const targetDir = path.dirname(targetPath);
+            if (!fs.existsSync(targetDir)) {
+                fs.mkdirSync(targetDir, { recursive: true });
+            }
+
+            fs.writeFileSync(targetPath, JSON.stringify(exportObj, null, 2), { encoding: 'utf-8' });
+            return targetPath;
+        } catch (err) {
+            console.error('Failed to export index to file', err);
+            return undefined;
+        }
     }
 
     /**
