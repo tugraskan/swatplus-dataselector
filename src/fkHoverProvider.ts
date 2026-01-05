@@ -39,31 +39,28 @@ export class SwatFKHoverProvider implements vscode.HoverProvider {
         const fileName = path.basename(document.fileName);
         
         // Special handling for file.cio - it has a unique format
-        // Based on schema:
+        // Actual format:
         // Line 0: Metadata line
-        // Line 1: Header (id classification order_in_class file_name customization)
-        // Line 2+: Data rows
-        // Column 3 (index 3) contains the file_name
+        // Line 1+: classification_name  file1  file2  file3  ...
+        // Column 0 is classification name, columns 1+ are filenames
         if (fileName === 'file.cio') {
             const line = document.lineAt(position.line);
             const lineText = line.text.trim();
             
-            // Skip metadata line (line 0), header line (line 1), and empty lines
-            if (position.line < 2 || !lineText) {
+            // Skip metadata line (line 0) and empty lines
+            if (position.line < 1 || !lineText || lineText.startsWith('#')) {
                 return undefined;
             }
             
-            // Extract the filename from column 3 (file_name column)
+            // Split the line into columns
             const parts = lineText.split(/\s+/);
-            const FILE_NAME_COLUMN_INDEX = 3;
             
-            if (parts.length <= FILE_NAME_COLUMN_INDEX) {
+            // Need at least classification name + one file
+            if (parts.length < 2) {
                 return undefined;
             }
             
-            const targetFileName = parts[FILE_NAME_COLUMN_INDEX];
-            
-            // Check if cursor is on the file_name column
+            // Find which column the cursor is on
             let columnIndex = -1;
             let currentPos = 0;
             
@@ -82,8 +79,16 @@ export class SwatFKHoverProvider implements vscode.HoverProvider {
                 currentPos = valueEnd;
             }
             
-            // Only provide hover if cursor is on the file_name column
-            if (columnIndex === FILE_NAME_COLUMN_INDEX) {
+            // Column 0 is classification name, skip it
+            // Only provide hover if cursor is on a filename column (1+)
+            if (columnIndex > 0 && columnIndex < parts.length) {
+                const targetFileName = parts[columnIndex];
+                
+                // Check if it looks like a filename (has extension) and not null
+                if (!targetFileName.includes('.') || targetFileName === 'null') {
+                    return undefined;
+                }
+                
                 const markdown = new vscode.MarkdownString();
                 markdown.isTrusted = true;
                 

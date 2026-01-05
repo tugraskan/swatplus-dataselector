@@ -95,25 +95,24 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
         this.outputChannel.appendLine(`[FK Definition] File: ${fileName}`);
         
         // Special handling for file.cio - it has a unique format
-        // Based on schema:
+        // Actual format:
         // Line 0: Metadata line
-        // Line 1: Header (id classification order_in_class file_name customization)
-        // Line 2+: Data rows
-        // Column 3 (index 3) contains the file_name
+        // Line 1+: classification_name  file1  file2  file3  ...
+        // Column 0 is classification name, columns 1+ are filenames
         if (fileName === 'file.cio') {
             const line = document.lineAt(position.line);
             const lineText = line.text.trim();
             
-            // Skip metadata line (line 0), header line (line 1), and empty lines
-            if (position.line < 2 || !lineText) {
+            // Skip metadata line (line 0) and empty lines
+            if (position.line < 1 || !lineText || lineText.startsWith('#')) {
                 return undefined;
             }
             
-            // Extract the filename from column 3 (file_name column)
+            // Split the line into columns
             const parts = lineText.split(/\s+/);
-            const FILE_NAME_COLUMN_INDEX = 3;
             
-            if (parts.length <= FILE_NAME_COLUMN_INDEX) {
+            // Need at least classification name + one file
+            if (parts.length < 2) {
                 return undefined;
             }
             
