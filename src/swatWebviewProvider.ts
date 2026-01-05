@@ -100,6 +100,12 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                 }
                             }
                             break;
+                        case 'openInputInEditor':
+                            if (data.path && typeof data.path === 'string') {
+                                // Open the actual input file in an editor
+                                vscode.commands.executeCommand('swat-dataset-selector.openFile', data.path);
+                            }
+                            break;
                         case 'navigateToDirectory':
                             if (data.path && typeof data.path === 'string') {
                                 const section = data.section || 'inputs'; // Default to inputs for backward compatibility
@@ -1205,6 +1211,31 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             overflow-x: auto;
             white-space: nowrap;
         }
+
+        /* Context menu styles */
+        .context-menu {
+            position: fixed;
+            background-color: var(--vscode-menu-background);
+            border: 1px solid var(--vscode-menu-border);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            z-index: 10000;
+            min-width: 180px;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .context-menu-item {
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 12px;
+            color: var(--vscode-menu-foreground);
+            transition: background-color 0.1s ease;
+        }
+
+        .context-menu-item:hover {
+            background-color: var(--vscode-menu-selectionBackground);
+            color: var(--vscode-menu-selectionForeground);
+        }
     </style>
 </head>
 <body>
@@ -1268,6 +1299,50 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                             try { console.log('SWAT webview: received message from host', ev && ev.data); } catch (e) { }
                         });
                     } catch (e) { }
+
+            // Context menu helper
+            function showContextMenu(event, items, x, y) {
+                // Remove any existing context menu
+                const existing = document.getElementById('custom-context-menu');
+                if (existing) {
+                    existing.remove();
+                }
+                
+                const menu = document.createElement('div');
+                menu.id = 'custom-context-menu';
+                menu.className = 'context-menu';
+                menu.style.left = x + 'px';
+                menu.style.top = y + 'px';
+                
+                items.forEach(item => {
+                    const menuItem = document.createElement('div');
+                    menuItem.className = 'context-menu-item';
+                    menuItem.textContent = item.label;
+                    menuItem.addEventListener('click', () => {
+                        item.action();
+                        menu.remove();
+                    });
+                    menu.appendChild(menuItem);
+                });
+                
+                document.body.appendChild(menu);
+                
+                // Close menu on click outside
+                const closeMenu = (e) => {
+                    if (!menu.contains(e.target)) {
+                        menu.remove();
+                        document.removeEventListener('click', closeMenu);
+                    }
+                };
+                setTimeout(() => {
+                    document.addEventListener('click', closeMenu);
+                }, 0);
+                
+                // Close menu on scroll
+                document.addEventListener('scroll', () => {
+                    menu.remove();
+                }, { once: true });
+            }
 
             // Safe lookup to avoid null errors in webview script
             const $ = id => document.getElementById(id);
@@ -1337,6 +1412,36 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                             try { console.log('SWAT webview: txt-item clicked', p, 'section:', section); } catch (e) {}
                             swatHost.postMessage({ type: 'openFile', path: p, section: section });
                         }
+                    }
+                });
+                
+                // Add context menu handler for input items
+                item.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    
+                    const p = item.dataset.path;
+                    const isDir = item.dataset.isdir === 'true';
+                    const section = item.dataset.section || 'inputs';
+                    
+                    // Only show context menu for input files (not directories or outputs)
+                    if (p && !isDir && section === 'inputs') {
+                        // Create and show context menu
+                        showContextMenu(e, [
+                            {
+                                label: 'Open File in Editor',
+                                action: () => {
+                                    try { console.log('SWAT webview: open input in editor via context menu', p); } catch (e) {}
+                                    swatHost.postMessage({ type: 'openInputInEditor', path: p });
+                                }
+                            },
+                            {
+                                label: 'View as Table (default)',
+                                action: () => {
+                                    try { console.log('SWAT webview: view as table via context menu', p); } catch (e) {}
+                                    swatHost.postMessage({ type: 'openFile', path: p, section: section });
+                                }
+                            }
+                        ], e.clientX, e.clientY);
                     }
                 });
             });

@@ -41,6 +41,21 @@ export class SwatTableViewerPanel {
                             this.navigateToLocation(message.file, message.line);
                         }
                         break;
+                    case 'peekFKRow':
+                        if (message.file && message.line) {
+                            this.peekLocation(message.file, message.line);
+                        }
+                        break;
+                    case 'openTableInNewTab':
+                        if (message.tableName) {
+                            this.openTableInNewTab(message.tableName);
+                        }
+                        break;
+                    case 'openInputFile':
+                        if (message.file) {
+                            this.openFileInEditor(message.file);
+                        }
+                        break;
                 }
             },
             null,
@@ -98,6 +113,38 @@ export class SwatTableViewerPanel {
             editor.revealRange(new vscode.Range(position, position));
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to navigate to ${file}:${line}`);
+        }
+    }
+
+    private async peekLocation(file: string, line: number) {
+        try {
+            const document = await vscode.workspace.openTextDocument(file);
+            const position = new vscode.Position(line - 1, 0);
+            const uri = vscode.Uri.file(file);
+            
+            // Use the peek definition command to show a peek view
+            await vscode.commands.executeCommand('editor.action.peekLocations', 
+                uri, 
+                position, 
+                [new vscode.Location(uri, position)],
+                'peek'
+            );
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to peek at ${file}:${line}`);
+        }
+    }
+
+    private openTableInNewTab(tableName: string) {
+        // Create a new table viewer panel for this specific table
+        SwatTableViewerPanel.createOrShow(this.indexer, tableName);
+    }
+
+    private async openFileInEditor(file: string) {
+        try {
+            const document = await vscode.workspace.openTextDocument(file);
+            await vscode.window.showTextDocument(document, { preview: false });
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to open file ${file}`);
         }
     }
 
@@ -240,7 +287,7 @@ export class SwatTableViewerPanel {
                     if (fkInfo) {
                         const targetRow = this.indexer.resolveFKTarget(fkInfo.references.table, value);
                         if (targetRow) {
-                            tableHtml += `<td class="fk-cell"><a href="#" onclick="navigateToTarget('${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber})" class="fk-link" title="Navigate to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</a></td>`;
+                            tableHtml += `<td class="fk-cell" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-table="${this._escapeHtml(fkInfo.references.table)}"><a href="#" onclick="peekFKRow('${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber}); return false;" oncontextmenu="showFKContextMenu(event, '${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber}, '${this._escapeJs(fkInfo.references.table)}'); return false;" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
                         } else {
                             tableHtml += `<td class="fk-cell unresolved" title="Unresolved FK to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</td>`;
                         }
@@ -513,6 +560,28 @@ export class SwatTableViewerPanel {
                 text-decoration: underline;
                 color: var(--vscode-textLink-activeForeground);
             }
+            /* FK Context Menu Styles */
+            .fk-context-menu {
+                position: fixed;
+                background-color: var(--vscode-menu-background);
+                border: 1px solid var(--vscode-menu-border);
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+                z-index: 10000;
+                min-width: 200px;
+                border-radius: 4px;
+                overflow: hidden;
+            }
+            .fk-context-menu-item {
+                padding: 8px 16px;
+                cursor: pointer;
+                font-size: 12px;
+                color: var(--vscode-menu-foreground);
+                transition: background-color 0.1s ease;
+            }
+            .fk-context-menu-item:hover {
+                background-color: var(--vscode-menu-selectionBackground);
+                color: var(--vscode-menu-selectionForeground);
+            }
         `;
     }
 
@@ -547,6 +616,82 @@ export class SwatTableViewerPanel {
                     file: file,
                     line: line
                 });
+            }
+
+            function peekFKRow(file, line) {
+                vscode.postMessage({
+                    command: 'peekFKRow',
+                    file: file,
+                    line: line
+                });
+            }
+
+            function showFKContextMenu(event, file, line, tableName) {
+                event.preventDefault();
+                event.stopPropagation();
+                
+                // Remove any existing context menu
+                const existing = document.getElementById('fk-context-menu');
+                if (existing) {
+                    existing.remove();
+                }
+                
+                const menu = document.createElement('div');
+                menu.id = 'fk-context-menu';
+                menu.className = 'fk-context-menu';
+                menu.style.left = event.clientX + 'px';
+                menu.style.top = event.clientY + 'px';
+                
+                const menuItems = [
+                    {
+                        label: 'Peek Row (default)',
+                        action: () => {
+                            peekFKRow(file, line);
+                            menu.remove();
+                        }
+                    },
+                    {
+                        label: 'Open Table in New Tab',
+                        action: () => {
+                            vscode.postMessage({
+                                command: 'openTableInNewTab',
+                                tableName: tableName
+                            });
+                            menu.remove();
+                        }
+                    },
+                    {
+                        label: 'Open Input File',
+                        action: () => {
+                            vscode.postMessage({
+                                command: 'openInputFile',
+                                file: file
+                            });
+                            menu.remove();
+                        }
+                    }
+                ];
+                
+                menuItems.forEach(item => {
+                    const menuItem = document.createElement('div');
+                    menuItem.className = 'fk-context-menu-item';
+                    menuItem.textContent = item.label;
+                    menuItem.addEventListener('click', item.action);
+                    menu.appendChild(menuItem);
+                });
+                
+                document.body.appendChild(menu);
+                
+                // Close menu on click outside
+                const closeMenu = (e) => {
+                    if (!menu.contains(e.target)) {
+                        menu.remove();
+                        document.removeEventListener('click', closeMenu);
+                    }
+                };
+                setTimeout(() => {
+                    document.addEventListener('click', closeMenu);
+                }, 0);
             }
 
             // Scroll to focused table on load
