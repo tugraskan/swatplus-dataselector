@@ -177,5 +177,58 @@
         {"file": "initial.aqu", "field": "salt", "target": "salt_water.ini"}
       ]
     }
+  },
+  "hierarchical_files": {
+    "description": "Files with multi-line record structures where a single logical record spans multiple physical lines",
+    "soils.sol": {
+      "description": "Soil properties with main record line followed by layer data lines",
+      "structure": {
+        "main_record_format": "Main line contains soil name and properties, plus layer count",
+        "child_line_format": "Following lines contain layer-specific data (one line per layer)",
+        "main_record_identifier": "First data field is the soil name (primary key)",
+        "child_line_count_field": null,
+        "indexing_strategy": "Index only the main record line; skip child layer lines"
+      }
+    },
+    "plant.ini": {
+      "description": "Plant community initialization with main record line followed by plant detail lines",
+      "structure": {
+        "main_record_format": "Main line contains community name, rotation year, and plant count",
+        "child_line_format": "Following lines contain individual plant details (one line per plant in community)",
+        "main_record_identifier": "First data field is the community name (primary key)",
+        "child_line_count_field": "plnt_cnt",
+        "indexing_strategy": "Index only the main record line; skip plant detail lines"
+      }
+    },
+    "management.sch": {
+      "description": "Management schedules with main record line followed by operation detail lines",
+      "structure": {
+        "main_record_format": "Main line contains schedule name, numb_ops (explicit operations), and numb_auto (decision table references)",
+        "child_line_format": "Following lines: first numb_auto lines are decision table references (from lum.dtl), then numb_ops lines are explicit operations",
+        "main_record_identifier": "First data field is the schedule name (primary key)",
+        "child_line_count_field": "numb_auto+numb_ops",
+        "indexing_strategy": "Index only the main record line; skip numb_auto decision table reference lines + numb_ops explicit operation lines"
+      }
+    },
+    "d_table.dtl": {
+      "description": "Decision table with condition-action pairs across multiple lines",
+      "structure": {
+        "main_record_format": "Multi-line format with conditions and actions",
+        "child_line_format": "Action lines follow condition lines",
+        "main_record_identifier": "Each decision rule set is a logical record",
+        "child_line_count_field": null,
+        "indexing_strategy": "Index main decision lines; specific format varies by decision table type"
+      }
+    },
+    "lum.dtl": {
+      "description": "Land use decision table with multi-line condition-action structure",
+      "structure": {
+        "main_record_format": "Condition lines followed by action lines",
+        "child_line_format": "Action specifications on separate lines",
+        "main_record_identifier": null,
+        "child_line_count_field": null,
+        "indexing_strategy": "Index main decision lines; skip action detail lines"
+      }
+    }
   }
 }

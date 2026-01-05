@@ -283,6 +283,186 @@ Future: Will be integrated into "Find All References" command.
 - [ ] Reference counting (show how many rows reference each parameter)
 - [ ] Cross-file refactoring (rename and update all references)
 
+## Hierarchical File Support
+
+### Overview
+
+The indexer now supports hierarchical (multi-line) file formats where a single logical record spans multiple physical lines. This is critical for files like:
+
+- **soils.sol**: Soil properties with layer data
+- **plant.ini**: Plant communities with plant details
+- **Decision tables (*.dtl)**: Condition-action pairs
+
+### How It Works
+
+1. **Detection**: The indexer checks `txtinout-metadata.json` to identify hierarchical files
+2. **Main Record Identification**: Uses file-specific heuristics to detect main vs child lines
+3. **Indexing Strategy**: Only main records are indexed; child lines are skipped
+
+### File-Specific Strategies
+
+#### soils.sol
+
+**Structure**:
+```
+Soil Properties
+name         hyd_grp   dp_tot    anion_excl perc_crk  texture   description
+clay_loam    C         1500.0    0.5        0.5       CL        Clay loam soil
+150.0        1.35      0.18      10.5       35.0      45.0      20.0    <- layer 1
+300.0        1.40      0.16      8.5        40.0      40.0      20.0    <- layer 2
+sandy_loam   B         1200.0    0.3        0.3       SL        Sandy loam soil
+200.0        1.50      0.12      15.0       15.0      25.0      60.0    <- layer 1
+```
+
+**Detection Logic**:
+- Main records have a non-numeric `name` field (e.g., "clay_loam")
+- Child records (layers) have numeric values in the `name` position (e.g., "150.0")
+- Heuristic: Check if `name` matches `/^\d+(\.\d+)?$/` (purely numeric)
+
+#### plant.ini
+
+**Structure**:
+```
+Plant Community Initialization
+name         plnt_cnt  rot_yr_ini description
+comm_crop    2         1          Crop community
+corn         ...       ...        ...    <- plant 1
+soybean      ...       ...        ...    <- plant 2
+comm_forest  1         1          Forest community
+oak          ...       ...        ...    <- plant 1
+```
+
+**Detection Logic**:
+- Main records have `plnt_cnt` field present
+- Child records (plant details) follow main record
+- Count field `plnt_cnt` specifies number of child lines
+
+#### management.sch
+
+**Structure**:
+```
+Management Schedule
+name                      numb_ops  numb_auto  ...
+agrl_rot                  0         2          ...   <- main record (2 auto ops)
+    pl_hv_agro                                      <- auto op 1 (dtl reference)
+    fert_stress                                     <- auto op 2 (dtl reference)
+hay_cmz_60__dry_101531    3         1          ...   <- main record (1 auto + 3 explicit)
+    hay_fesc                                        <- auto op 1 (dtl reference)
+    fert          0  0  0.2  mhp  broadcast  31.87  <- explicit op 1
+    fert          0  0  0.2  mhn  broadcast  74.88  <- explicit op 2
+    skip          0  0  0    null null       0      <- explicit op 3
+```
+
+**Detection Logic**:
+- Main records have `numb_ops` and `numb_auto` fields
+- Child records follow in order: first `numb_auto` lines (decision table references to lum.dtl), then `numb_ops` lines (explicit operations)
+- Total skip count = `numb_auto + numb_ops`
+- Decision table references (auto ops) are FK references to `lum.dtl`
+
+**FK Tracking for Operations**:
+- Auto operations (first `numb_auto` lines): Each line contains a decision table name → FK to `lum.dtl`
+- Explicit operations (next `numb_ops` lines): Operation type determines target file
+  - `fert`, `frta`, `frtc` → `fertilizer.frt` (op_data1 field)
+  - `till` → `tillage.til` (op_data1 field)
+  - `pest`, `pstc` → `pesticide.pes` (op_data1 field)
+  - `irrm`, `irra` → `irr.ops` (op_data1 field)
+  - `plnt`, `hvkl`, `kill` → `plant.ini` (op_data1 field)
+  - `harv` → `harv.ops` (op_data1 field)
+  - `graz` → `graze.ops` (op_data1 field)
+
+#### Decision Tables (*.dtl)
+
+**Structure**:
+```
+Decision Table File
+Title line
+39                              <- Number of decision tables
+ NAME   	 CONDS	ALTS	ACTS
+ hay_fesc      2      1     1    <- Decision table header (indexed as hay_fesc)
+ VAR		OBJ	OB_NUM	LIM_VAR	LIM_OP	LIM_CONST  ALT1   <- Conditions section header (skipped)
+ biomass hru 0 null - 2000 >      <- Condition line 1 (skipped)
+ phu_plant hru 0 null - 0.5 >=    <- Condition line 2 (skipped)
+ ACT_TYP OBJ OBJ_NUM NAME OPTION CONST CONST2 FP OUTCOMES  <- Actions section header (skipped)
+ harvest hru 0 hay_harv fesc 0 3 hay_cut_low y  <- Action line (fp field tracked)
+```
+
+**Detection Logic**:
+- Custom parser for complex multi-section structure
+- Parses decision table count from line 2
+- For each decision table:
+  - Reads header (NAME, CONDS, ALTS, ACTS)
+  - Indexes by NAME
+  - Skips conditions section header line
+  - Skips CONDS condition data lines
+  - Skips actions section header line
+  - Parses ACTS action data lines to extract fp (file pointer) field
+
+**FK Tracking for File Pointers**:
+- Action lines have fp field at index 7
+- Maps action type to target file:
+  - `harvest` → `harv.ops` (name column)
+  - `harvest_kill` → `harv.ops` (name column)
+  - `pest_apply` → `chem_app.ops` (name column)
+  - `fertilize` → `chem_app.ops` (name column)
+
+### Configuration
+
+Hierarchical files are configured in `resources/schema/txtinout-metadata.json`:
+
+```json
+{
+  "hierarchical_files": {
+    "soils.sol": {
+      "description": "Soil properties with layer data",
+      "structure": {
+        "main_record_format": "Main line contains soil name and properties",
+        "child_line_format": "Following lines contain layer-specific data",
+        "main_record_identifier": "First data field is the soil name",
+        "indexing_strategy": "Index only the main record line; skip child layer lines"
+      }
+    },
+    "plant.ini": {
+      "description": "Plant community initialization",
+      "structure": {
+        "main_record_format": "Main line with community name and plant count",
+        "child_line_format": "Individual plant details",
+        "child_line_count_field": "plnt_cnt",
+        "indexing_strategy": "Index only the main record line; skip plant detail lines"
+      }
+    }
+  }
+}
+```
+
+### API Methods
+
+```typescript
+// Check if a file is hierarchical
+private isHierarchicalFile(fileName: string): boolean
+
+// Get configuration for a hierarchical file
+private getHierarchicalFileConfig(fileName: string): HierarchicalFileConfig | null
+
+// Determine if a line is a main record (vs child line)
+private isMainRecordLine(valueMap: {[key: string]: string}, fileName: string, headers: string[]): boolean
+
+// Get the number of child lines for a record (if explicitly counted)
+private getChildLineCount(valueMap: {[key: string]: string}, config: HierarchicalFileConfig, fileName: string): number
+```
+
+### Benefits
+
+1. **Correct Indexing**: Only main records (soils, plant communities) are indexed as FK targets
+2. **Performance**: Skipping child lines reduces index size and improves lookup speed
+3. **Navigation**: Ctrl+Click on a soil name navigates to the main soil record, not layer data
+4. **Diagnostics**: FK validation checks against actual main records, not layer data
+
+### Limitations
+
+- **soils.sol**: Layer count not explicitly stored; detection uses heuristics
+- **Decision tables**: Current implementation is conservative (doesn't skip lines)
+- **Unknown formats**: New hierarchical files must be added to metadata configuration
+
 ## Documentation Sources
 
 The metadata and file purposes are extracted from:

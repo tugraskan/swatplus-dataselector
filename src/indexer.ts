@@ -10,6 +10,10 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// Constants for hierarchical file handling
+const NUMERIC_VALUE_PATTERN = /^\d+(\.\d+)?$/;
+const DEBUG_OUTPUT_LINE_LIMIT = 10;
+
 // TxtInOut metadata interface
 interface TxtInOutMetadata {
     metadata_version: string;
@@ -31,6 +35,21 @@ interface TxtInOutMetadata {
     file_purposes: { [fileName: string]: string };
     file_categories: { [category: string]: string[] };
     common_pointer_patterns: any;
+    hierarchical_files?: {
+        description: string;
+        [fileName: string]: HierarchicalFileConfig | string; // Config objects or description string
+    };
+}
+
+interface HierarchicalFileConfig {
+    description: string;
+    structure: {
+        main_record_format: string;
+        child_line_format: string;
+        main_record_identifier: string | null;
+        child_line_count_field?: string | null;
+        indexing_strategy: string;
+    };
 }
 
 export interface SchemaColumn {
@@ -174,6 +193,341 @@ export class SwatIndexer {
         } catch (error) {
             console.log(`Failed to load TxtInOut metadata: ${error}`);
         }
+    }
+
+    /**
+     * Check if a file is hierarchical (multi-line records)
+     */
+    private isHierarchicalFile(fileName: string): boolean {
+        if (!this.metadata?.hierarchical_files) {
+            return false;
+        }
+        
+        // Check if the file is in the hierarchical files list
+        // Skip the 'description' key which is metadata
+        return fileName in this.metadata.hierarchical_files && fileName !== 'description';
+    }
+
+    /**
+     * Get hierarchical file configuration
+     */
+    private getHierarchicalFileConfig(fileName: string): HierarchicalFileConfig | null {
+        if (!this.metadata?.hierarchical_files || !this.isHierarchicalFile(fileName)) {
+            return null;
+        }
+        
+        return this.metadata.hierarchical_files[fileName] as HierarchicalFileConfig;
+    }
+
+    /**
+     * Determine the number of child lines for a hierarchical record
+     */
+    private getChildLineCount(valueMap: { [key: string]: string }, config: HierarchicalFileConfig, fileName: string): number {
+        // Check if there's a field that specifies the child line count
+        const countField = config.structure.child_line_count_field;
+        
+        if (countField) {
+            // Handle special case for multiple fields (e.g., "numb_auto+numb_ops")
+            if (countField.includes('+')) {
+                const fields = countField.split('+').map(f => f.trim());
+                let totalCount = 0;
+                
+                for (const field of fields) {
+                    if (valueMap[field]) {
+                        const count = parseInt(valueMap[field], 10);
+                        if (!isNaN(count) && count > 0) {
+                            totalCount += count;
+                        }
+                    }
+                }
+                
+                // Validate the total count
+                if (totalCount < 0) {
+                    console.warn(`[Indexer] Invalid total child line count in ${fileName}: ${totalCount}`);
+                    return 0;
+                }
+                
+                // Sanity check: prevent excessive line skipping
+                if (totalCount > 1000) {
+                    console.warn(`[Indexer] Suspiciously large child line count in ${fileName}: ${totalCount}. Capping at 1000.`);
+                    return 1000;
+                }
+                
+                return totalCount;
+            }
+            
+            // Handle single field case
+            if (valueMap[countField]) {
+                // Parse the count from the field value
+                const count = parseInt(valueMap[countField], 10);
+                
+                // Validate the count
+                if (isNaN(count) || count < 0) {
+                    console.warn(`[Indexer] Invalid child line count in ${fileName}: ${valueMap[countField]}`);
+                    return 0;
+                }
+                
+                // Sanity check: prevent excessive line skipping
+                if (count > 1000) {
+                    console.warn(`[Indexer] Suspiciously large child line count in ${fileName}: ${count}. Capping at 1000.`);
+                    return 1000;
+                }
+                
+                return count;
+            }
+        }
+        
+        // For files without explicit count field, return 0
+        // We'll use heuristic detection instead
+        return 0;
+    }
+
+    /**
+     * Check if a line is a main record (vs child line) in a hierarchical file
+     * For now, this uses heuristics based on the file format
+     */
+    private isMainRecordLine(valueMap: { [key: string]: string }, fileName: string, headers: string[]): boolean {
+        // For soils.sol: Main record lines have a 'name' field that looks like a valid identifier
+        // Child lines (layer data) typically have numeric or null values in the name position
+        if (fileName === 'soils.sol') {
+            const nameValue = valueMap['name'] || '';
+            // Main record has a non-empty name that's not purely numeric
+            // This is a heuristic - child lines might have numeric values or be empty in name position
+            return nameValue.length > 0 && !NUMERIC_VALUE_PATTERN.test(nameValue);
+        }
+        
+        // For plant.ini: Main record has plnt_cnt field
+        if (fileName === 'plant.ini') {
+            // If the record has plnt_cnt, it's a main record
+            return 'plnt_cnt' in valueMap;
+        }
+        
+        // For decision tables: More complex, for now treat all as main records
+        if (fileName.endsWith('.dtl')) {
+            return true; // Conservative - don't skip any lines for now
+        }
+        
+        // Default: treat as main record
+        return true;
+    }
+
+    /**
+     * Process child lines for management.sch and extract FK references
+     */
+    private processManagementSchChildLines(
+        filePath: string,
+        table: SchemaTable,
+        lines: string[],
+        startLine: number,
+        numb_auto: number,
+        numb_ops: number,
+        scheduleName: string
+    ): void {
+        // Operation type to target table mapping
+        const opTypeToTable: { [opType: string]: string } = {
+            'plnt': 'plant_ini',
+            'harv': 'harv_ops',
+            'hvkl': 'plant_ini',
+            'kill': 'plant_ini',
+            'till': 'tillage_til',
+            'irrm': 'irr_ops',
+            'irra': 'irr_ops',
+            'fert': 'fertilizer_frt',
+            'frta': 'fertilizer_frt',
+            'frtc': 'fertilizer_frt',
+            'pest': 'pesticide_pes',
+            'pstc': 'pesticide_pes',
+            'graz': 'graze_ops'
+        };
+
+        let currentLine = startLine;
+
+        // Process first numb_auto lines (decision table references)
+        for (let j = 0; j < numb_auto && currentLine < lines.length; j++) {
+            const line = lines[currentLine].trim();
+            if (line) {
+                const dtlName = line.split(/\s+/)[0]; // First token is the dtl name
+                if (dtlName && !this.fkNullValues.includes(dtlName)) {
+                    this.fkReferences.push({
+                        sourceFile: filePath,
+                        sourceTable: table.table_name,
+                        sourceLine: currentLine + 1,
+                        sourceColumn: 'auto_op_dtl',
+                        fkValue: dtlName,
+                        targetTable: 'lum_dtl',
+                        targetColumn: 'name',
+                        resolved: false
+                    });
+                }
+            }
+            currentLine++;
+        }
+
+        // Process next numb_ops lines (explicit operations)
+        for (let j = 0; j < numb_ops && currentLine < lines.length; j++) {
+            const line = lines[currentLine].trim();
+            if (line) {
+                const values = line.split(/\s+/);
+                if (values.length > 0) {
+                    const opType = values[0]; // First field is operation type
+                    const opData1 = values.length > 6 ? values[6] : null; // op_data1 is typically the 7th field
+
+                    if (opType && opData1 && opTypeToTable[opType] && !this.fkNullValues.includes(opData1)) {
+                        this.fkReferences.push({
+                            sourceFile: filePath,
+                            sourceTable: table.table_name,
+                            sourceLine: currentLine + 1,
+                            sourceColumn: `op_data1(${opType})`,
+                            fkValue: opData1,
+                            targetTable: opTypeToTable[opType],
+                            targetColumn: 'name',
+                            resolved: false
+                        });
+                    }
+                }
+            }
+            currentLine++;
+        }
+    }
+
+    /**
+     * Process decision table files (*.dtl) and extract FK references from fp fields
+     * DTL structure:
+     * - Line 1: Title
+     * - Line 2: Number of decision tables
+     * - For each decision table:
+     *   - Header line: DTBL_NAME, CONDS, ALTS, ACTS
+     *   - Conditions section (CONDS lines)
+     *   - Actions section (ACTS lines) - contains fp field
+     */
+    private processDtlFile(
+        filePath: string,
+        table: SchemaTable,
+        lines: string[]
+    ): Map<string, IndexedRow> {
+        const tableIndex = new Map<string, IndexedRow>();
+        
+        // Action type to target table mapping for fp field
+        const actionTypeToTable: { [actType: string]: string } = {
+            'harvest': 'harv_ops',
+            'harvest_kill': 'harv_ops',
+            'pest_apply': 'chem_app_ops',
+            'fertilize': 'chem_app_ops'
+        };
+
+        if (lines.length < 2) {
+            console.warn(`[Indexer] DTL file ${filePath} has insufficient lines`);
+            return tableIndex;
+        }
+
+        // Skip title line (line 0)
+        // Line 1 contains the number of decision tables
+        const numTablesLine = lines[1].trim();
+        const numTables = parseInt(numTablesLine, 10);
+        
+        if (isNaN(numTables) || numTables < 0) {
+            console.warn(`[Indexer] DTL file ${filePath} has invalid table count: ${numTablesLine}`);
+            return tableIndex;
+        }
+
+        let currentLine = 2; // Start after title and count lines
+
+        // Skip blank lines after count
+        while (currentLine < lines.length && !lines[currentLine].trim()) {
+            currentLine++;
+        }
+
+        // Skip the global header line (NAME  CONDS  ALTS  ACTS)
+        // This header appears once after the count and before all decision tables
+        if (currentLine < lines.length) {
+            const possibleHeaderLine = lines[currentLine].trim().toUpperCase();
+            if (possibleHeaderLine.startsWith('NAME')) {
+                currentLine++; // Skip the global header
+            }
+        }
+
+        // Process each decision table
+        for (let tableIdx = 0; tableIdx < numTables && currentLine < lines.length; tableIdx++) {
+            // Skip blank lines before decision table
+            while (currentLine < lines.length && !lines[currentLine].trim()) {
+                currentLine++;
+            }
+            
+            const headerLine = lines[currentLine].trim();
+            if (!headerLine) {
+                break; // No more data
+            }
+
+            const headerValues = headerLine.split(/\s+/);
+            if (headerValues.length < 4) {
+                console.warn(`[Indexer] DTL header line ${currentLine + 1} has insufficient values`);
+                currentLine++;
+                continue;
+            }
+
+            const dtblName = headerValues[0];
+            const conds = parseInt(headerValues[1], 10) || 0;
+            const alts = parseInt(headerValues[2], 10) || 0;
+            const acts = parseInt(headerValues[3], 10) || 0;
+
+            // Index the decision table main record
+            const row: IndexedRow = {
+                file: filePath,
+                tableName: table.table_name,
+                lineNumber: currentLine + 1,
+                pkValue: dtblName,
+                values: {
+                    'name': dtblName,
+                    'conds': conds.toString(),
+                    'alts': alts.toString(),
+                    'acts': acts.toString()
+                }
+            };
+            tableIndex.set(dtblName, row);
+
+            currentLine++; // Move past decision table header
+
+            // Skip conditions section header line (VAR, OBJ, OB_NUM, etc.)
+            currentLine++;
+            
+            // Skip conditions section data lines (conds lines)
+            currentLine += conds;
+
+            // Skip actions section header line (ACT_TYP, OBJ, OBJ_NUM, etc.)
+            currentLine++;
+
+            // Process actions section data lines (acts lines)
+            for (let actIdx = 0; actIdx < acts && currentLine < lines.length; actIdx++) {
+                const actionLine = lines[currentLine].trim();
+                if (actionLine) {
+                    const actionValues = actionLine.split(/\s+/);
+                    
+                    // Action line structure: act_typ, obj, obj_num, name, option, const, const2, fp, outcome...
+                    // fp is at index 7 (8th field)
+                    if (actionValues.length > 7) {
+                        const actTyp = actionValues[0];
+                        const fp = actionValues[7];
+
+                        // Track FK if action type has a mapping and fp is not null
+                        if (actTyp && fp && actionTypeToTable[actTyp] && !this.fkNullValues.includes(fp)) {
+                            this.fkReferences.push({
+                                sourceFile: filePath,
+                                sourceTable: table.table_name,
+                                sourceLine: currentLine + 1,
+                                sourceColumn: `fp(${actTyp})`,
+                                fkValue: fp,
+                                targetTable: actionTypeToTable[actTyp],
+                                targetColumn: 'name',
+                                resolved: false
+                            });
+                        }
+                    }
+                }
+                currentLine++;
+            }
+        }
+
+        return tableIndex;
     }
 
     /**
@@ -334,6 +688,14 @@ export class SwatIndexer {
             const content = fs.readFileSync(filePath, 'utf-8');
             const lines = content.split('\n');
 
+            // Special handling for decision table files (*.dtl)
+            if (table.file_name.endsWith('.dtl')) {
+                console.log(`[Indexer] Processing DTL file ${table.file_name} with custom parser`);
+                const tableIndex = this.processDtlFile(filePath, table, lines);
+                this.index.set(table.table_name, tableIndex);
+                return;
+            }
+
             // Parse header line to map column positions
             const headerLineIndex = table.has_metadata_line ? 1 : 0;
             if (lines.length <= headerLineIndex) {
@@ -348,18 +710,27 @@ export class SwatIndexer {
             const dataStartLine = table.data_starts_after;
             const tableIndex = new Map<string, IndexedRow>();
             
-            console.log(`[Indexer] Indexing ${table.table_name} (${path.basename(filePath)}), data starts at line ${dataStartLine}, headers: ${headers.join(', ')}`);
+            // Check if this is a hierarchical file
+            const isHierarchical = this.isHierarchicalFile(table.file_name);
+            const hierarchicalConfig = isHierarchical ? this.getHierarchicalFileConfig(table.file_name) : null;
+            
+            console.log(`[Indexer] Indexing ${table.table_name} (${path.basename(filePath)}), data starts at line ${dataStartLine}, headers: ${headers.join(', ')}${isHierarchical ? ' (HIERARCHICAL)' : ''}`);
 
-            for (let i = dataStartLine; i < lines.length; i++) {
+            let i = dataStartLine;
+            while (i < lines.length) {
                 const line = lines[i].trim();
-                if (!line) {continue;}
+                if (!line) {
+                    i++;
+                    continue;
+                }
 
                 const values = line.split(/\s+/).map(v => v.trim()); // Trim each value
                 
-                // Allow rows with fewer values than headers (for optional trailing columns)
-                // Only warn if the row seems severely malformed (less than half the expected columns)
-                if (values.length < headers.length / 2) {
-                    console.warn(`Malformed line ${i + 1} in ${filePath}: expected ${headers.length} columns, got ${values.length}`);
+                // For hierarchical files, we allow lines with fewer columns than headers
+                // because main records and child lines may have different structures
+                if (!isHierarchical && values.length < headers.length) {
+                    console.warn(`Malformed line ${i + 1} in ${filePath}`);
+                    i++;
                     continue;
                 }
 
@@ -372,6 +743,30 @@ export class SwatIndexer {
                 // Fill in missing columns with empty strings
                 for (let j = values.length; j < headers.length; j++) {
                     valueMap[headers[j]] = '';
+                }
+
+                // For hierarchical files, determine if this is a main record or child line
+                let skipCount = 0;
+                if (isHierarchical && hierarchicalConfig) {
+                    // First, try explicit child count (e.g., plant.ini with plnt_cnt field)
+                    const explicitCount = this.getChildLineCount(valueMap, hierarchicalConfig, table.file_name);
+                    
+                    if (explicitCount > 0) {
+                        // This file has explicit child counts - use them
+                        // The current line is a main record, and we'll skip children after processing
+                        skipCount = explicitCount;
+                    } else {
+                        // No explicit count - use heuristic detection (e.g., soils.sol)
+                        const isMainRecord = this.isMainRecordLine(valueMap, table.file_name, headers);
+                        if (!isMainRecord) {
+                            // This is a child line - skip it
+                            if (i - dataStartLine < DEBUG_OUTPUT_LINE_LIMIT) {
+                                console.log(`[Indexer]   Skipping child line ${i + 1}`);
+                            }
+                            i++;
+                            continue;
+                        }
+                    }
                 }
 
                 // Get primary key value
@@ -420,6 +815,22 @@ export class SwatIndexer {
                         });
                     }
                 }
+
+                // Skip child lines if we have an explicit count (e.g., plant.ini, management.sch)
+                if (skipCount > 0) {
+                    // Special handling for management.sch to track FK references in child lines
+                    if (table.file_name === 'management.sch') {
+                        const numb_auto = parseInt(valueMap['numb_auto'] || '0', 10);
+                        const numb_ops = parseInt(valueMap['numb_ops'] || '0', 10);
+                        console.log(`[Indexer]   Processing ${skipCount} child lines for management schedule "${pkValue}" (${numb_auto} auto ops, ${numb_ops} explicit ops)`);
+                        this.processManagementSchChildLines(filePath, table, lines, i + 1, numb_auto, numb_ops, pkValue);
+                    } else {
+                        console.log(`[Indexer]   Skipping ${skipCount} child lines for record "${pkValue}"`);
+                    }
+                    i += skipCount;
+                }
+
+                i++;
             }
 
             this.index.set(table.table_name, tableIndex);
@@ -440,23 +851,46 @@ export class SwatIndexer {
         let unresolvedCount = 0;
         
         for (const fkRef of this.fkReferences) {
-            const targetTableIndex = this.index.get(fkRef.targetTable);
-            if (targetTableIndex) {
-                const targetRow = targetTableIndex.get(fkRef.fkValue);
+            let targetRow: IndexedRow | undefined;
+            let actualTargetTable = fkRef.targetTable;
+            
+            // Special handling for decision table references
+            // Decision tables can be in any *.dtl file, so we search across all DTL tables
+            if (fkRef.sourceColumn === 'auto_op_dtl' || fkRef.targetTable.includes('dtl')) {
+                targetRow = this.resolveDecisionTable(fkRef.fkValue);
                 if (targetRow) {
-                    fkRef.resolved = true;
-                    fkRef.targetRow = targetRow;
-                    resolvedCount++;
-                    
-                    // Build reverse index: target_table:pk_value -> FK references
-                    const reverseKey = `${fkRef.targetTable}:${fkRef.fkValue}`;
-                    if (!this.reverseIndex.has(reverseKey)) {
-                        this.reverseIndex.set(reverseKey, []);
+                    // Update the actual target table to the one where we found it
+                    actualTargetTable = targetRow.tableName;
+                }
+            } else {
+                // Standard FK resolution
+                const targetTableIndex = this.index.get(fkRef.targetTable);
+                if (targetTableIndex) {
+                    targetRow = targetTableIndex.get(fkRef.fkValue);
+                }
+            }
+            
+            if (targetRow) {
+                fkRef.resolved = true;
+                fkRef.targetRow = targetRow;
+                resolvedCount++;
+                
+                // Build reverse index: target_table:pk_value -> FK references
+                const reverseKey = `${actualTargetTable}:${fkRef.fkValue}`;
+                if (!this.reverseIndex.has(reverseKey)) {
+                    this.reverseIndex.set(reverseKey, []);
+                }
+                this.reverseIndex.get(reverseKey)!.push(fkRef);
+            } else {
+                unresolvedCount++;
+                const targetTableIndex = this.index.get(fkRef.targetTable);
+                if (!targetTableIndex && !(fkRef.sourceColumn === 'auto_op_dtl')) {
+                    // Log missing target table (but not for decision tables since they might be in any DTL file)
+                    if (unresolvedCount <= 5) {
+                        console.log(`[Indexer]   Unresolved FK (table not indexed): ${fkRef.sourceColumn}="${fkRef.fkValue}" -> ${fkRef.targetTable}`);
                     }
-                    this.reverseIndex.get(reverseKey)!.push(fkRef);
-                } else {
-                    unresolvedCount++;
-                    // Log first few unresolved for debugging
+                } else if (targetTableIndex) {
+                    // Log unresolved FK with debugging info
                     if (unresolvedCount <= 10) {
                         const indexedKeys = Array.from(targetTableIndex.keys()).slice(0, 10);
                         console.log(`[Indexer]   Unresolved FK: ${fkRef.sourceColumn}="${fkRef.fkValue}" (length=${fkRef.fkValue.length}) -> ${fkRef.targetTable}`);
@@ -466,12 +900,11 @@ export class SwatIndexer {
                             console.log(`[Indexer]     First key bytes: [${Array.from(indexedKeys[0]).map(c => c.charCodeAt(0)).join(', ')}]`);
                         }
                     }
-                }
-            } else {
-                unresolvedCount++;
-                // Log missing target table
-                if (unresolvedCount <= 5) {
-                    console.log(`[Indexer]   Unresolved FK (table not indexed): ${fkRef.sourceColumn}="${fkRef.fkValue}" -> ${fkRef.targetTable}`);
+                } else if (fkRef.sourceColumn === 'auto_op_dtl') {
+                    // Decision table not found in any DTL file
+                    if (unresolvedCount <= 10) {
+                        console.log(`[Indexer]   Unresolved FK: ${fkRef.sourceColumn}="${fkRef.fkValue}" (decision table not found in any DTL file)`);
+                    }
                 }
             }
         }
@@ -528,6 +961,24 @@ export class SwatIndexer {
     public resolveFKTarget(tableName: string, pkValue: string): IndexedRow | undefined {
         const tableIndex = this.index.get(tableName);
         return tableIndex?.get(pkValue);
+    }
+
+    /**
+     * Look up a decision table across all indexed DTL files
+     * Decision tables can be in any *.dtl file, so we search all DTL tables
+     */
+    public resolveDecisionTable(dtlName: string): IndexedRow | undefined {
+        // Search through all indexed tables
+        for (const [tableName, tableIndex] of this.index.entries()) {
+            // Check if this is a DTL table (table name typically contains 'dtl')
+            if (tableName.includes('dtl')) {
+                const row = tableIndex.get(dtlName);
+                if (row) {
+                    return row;
+                }
+            }
+        }
+        return undefined;
     }
 
     /**
