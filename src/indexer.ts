@@ -48,6 +48,7 @@ interface HierarchicalFileConfig {
         child_line_format: string;
         main_record_identifier: string | null;
         child_line_count_field?: string | null;
+        child_line_count_fixed?: number;
         indexing_strategy: string;
     };
 }
@@ -225,6 +226,24 @@ export class SwatIndexer {
      * Determine the number of child lines for a hierarchical record
      */
     private getChildLineCount(valueMap: { [key: string]: string }, config: HierarchicalFileConfig, fileName: string): number {
+        // Check if there's a fixed child line count first
+        const fixedCount = config.structure.child_line_count_fixed;
+        if (fixedCount !== undefined && fixedCount !== null) {
+            // Validate the fixed count
+            if (fixedCount < 0) {
+                console.warn(`[Indexer] Invalid fixed child line count in ${fileName}: ${fixedCount}`);
+                return 0;
+            }
+            
+            // Sanity check: prevent excessive line skipping
+            if (fixedCount > 1000) {
+                console.warn(`[Indexer] Suspiciously large fixed child line count in ${fileName}: ${fixedCount}. Capping at 1000.`);
+                return 1000;
+            }
+            
+            return fixedCount;
+        }
+        
         // Check if there's a field that specifies the child line count
         const countField = config.structure.child_line_count_field;
         
