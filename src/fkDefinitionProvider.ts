@@ -194,6 +194,119 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
         
         this.outputChannel.appendLine(`[FK Definition] columnIndex: ${columnIndex}, columnName: ${columnName}, fkValue: ${fkValue}`);
 
+        // Special handling for management.sch child lines (auto operations and explicit operations)
+        if (fileName === 'management.sch' && position.line > table.data_starts_after) {
+            // Check if this is a child line by looking for parent schedule in previous lines
+            // Child lines are indented and appear after a main schedule record
+            // We can detect them by checking if they start with whitespace
+            if (line.text.match(/^\s+\S/)) {
+                this.outputChannel.appendLine(`[FK Definition] Detected management.sch child line (indented)`);
+                
+                // Find the parent schedule by scanning backwards
+                let parentScheduleLine = -1;
+                for (let i = position.line - 1; i >= table.data_starts_after; i--) {
+                    const prevLine = document.lineAt(i).text.trim();
+                    if (prevLine && !document.lineAt(i).text.match(/^\s+\S/)) {
+                        // Found a non-indented line - this is the parent schedule
+                        parentScheduleLine = i;
+                        break;
+                    }
+                }
+                
+                if (parentScheduleLine >= 0) {
+                    const parentLineText = document.lineAt(parentScheduleLine).text.trim();
+                    const parentValues = parentLineText.split(/\s+/);
+                    const numb_ops = parseInt(parentValues[1] || '0', 10);
+                    const numb_auto = parseInt(parentValues[2] || '0', 10);
+                    
+                    this.outputChannel.appendLine(`[FK Definition] Parent schedule at line ${parentScheduleLine + 1}, numb_ops=${numb_ops}, numb_auto=${numb_auto}`);
+                    
+                    // Count how many child lines down we are
+                    let childLineOffset = 0;
+                    for (let i = parentScheduleLine + 1; i < position.line; i++) {
+                        const childLine = document.lineAt(i).text.trim();
+                        if (childLine) {
+                            childLineOffset++;
+                        }
+                    }
+                    
+                    // Add current line
+                    childLineOffset++;
+                    
+                    this.outputChannel.appendLine(`[FK Definition] Child line offset: ${childLineOffset}`);
+                    
+                    // Determine if this is an auto operation (decision table ref) or explicit operation
+                    if (childLineOffset <= numb_auto) {
+                        // This is an auto operation - decision table reference
+                        this.outputChannel.appendLine(`[FK Definition] Auto operation (decision table reference) -> lum_dtl`);
+                        const dtlName = fkValue;
+                        
+                        // Look up the decision table
+                        const targetRow = this.indexer.resolveFKTarget('lum_dtl', dtlName);
+                        
+                        if (!targetRow) {
+                            this.outputChannel.appendLine(`[FK Definition] Decision table not found: ${dtlName}`);
+                            this.outputChannel.show(true);
+                            return undefined;
+                        }
+                        
+                        this.outputChannel.appendLine(`[FK Definition] Decision table found: ${targetRow.file}:${targetRow.lineNumber}`);
+                        this.outputChannel.appendLine('[FK Definition] Success - navigating to decision table\n');
+                        
+                        const targetUri = vscode.Uri.file(targetRow.file);
+                        const targetPosition = new vscode.Position(targetRow.lineNumber - 1, 0);
+                        return new vscode.Location(targetUri, targetPosition);
+                    } else if (childLineOffset <= numb_auto + numb_ops) {
+                        // This is an explicit operation
+                        this.outputChannel.appendLine(`[FK Definition] Explicit operation line`);
+                        
+                        // Operation type is in first column (columnIndex 0)
+                        // op_data1 is in 7th column (columnIndex 6) for most operations
+                        const opType = values[0];
+                        const opData1 = values.length > 6 ? values[6] : null;
+                        
+                        // Map operation type to target table
+                        const opTypeToTable: { [opType: string]: string } = {
+                            'plnt': 'plant_ini',
+                            'harv': 'harv_ops',
+                            'hvkl': 'plant_ini',
+                            'kill': 'plant_ini',
+                            'till': 'tillage_til',
+                            'irrm': 'irr_ops',
+                            'irra': 'irr_ops',
+                            'fert': 'fertilizer_frt',
+                            'frta': 'fertilizer_frt',
+                            'frtc': 'fertilizer_frt',
+                            'pest': 'pesticide_pes',
+                            'pstc': 'pesticide_pes',
+                            'graz': 'graze_ops'
+                        };
+                        
+                        if (opType && opTypeToTable[opType] && opData1 && columnIndex === 6) {
+                            // Cursor is on op_data1 column
+                            const targetTable = opTypeToTable[opType];
+                            this.outputChannel.appendLine(`[FK Definition] Operation ${opType} references ${targetTable}, value: ${opData1}`);
+                            
+                            const targetRow = this.indexer.resolveFKTarget(targetTable, opData1);
+                            
+                            if (!targetRow) {
+                                this.outputChannel.appendLine(`[FK Definition] Operation target not found: table=${targetTable}, value=${opData1}`);
+                                this.outputChannel.show(true);
+                                return undefined;
+                            }
+                            
+                            this.outputChannel.appendLine(`[FK Definition] Operation target found: ${targetRow.file}:${targetRow.lineNumber}`);
+                            this.outputChannel.appendLine('[FK Definition] Success - navigating to operation target\n');
+                            
+                            const targetUri = vscode.Uri.file(targetRow.file);
+                            const targetPosition = new vscode.Position(targetRow.lineNumber - 1, 0);
+                            return new vscode.Location(targetUri, targetPosition);
+                        }
+                    }
+                }
+            }
+        }
+
         // Check if this column is a FK
         const fkColumn = table.columns.find(
             col => col.name === columnName && col.is_foreign_key
