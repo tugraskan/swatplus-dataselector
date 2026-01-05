@@ -11,6 +11,7 @@ import { SwatIndexer } from './indexer';
 
 export class SwatSingleTableViewerPanel {
     private static panels: Map<string, SwatSingleTableViewerPanel> = new Map();
+    private static readonly MAX_ROWS_TO_DISPLAY = 1000; // Limit rows for performance
     private readonly _panel: vscode.WebviewPanel;
     private _disposables: vscode.Disposable[] = [];
 
@@ -130,9 +131,9 @@ export class SwatSingleTableViewerPanel {
             return this._getNoDataHtml();
         }
 
-        const schemaTable = schema.tables[this.indexer.getFileNameForTable(this.tableName) || ''];
-        const rowCount = tableData.size;
         const fileName = this.indexer.getFileNameForTable(this.tableName) || this.tableName;
+        const schemaTable = fileName && schema.tables[fileName] ? schema.tables[fileName] : undefined;
+        const rowCount = tableData.size;
 
         return `<!DOCTYPE html>
         <html lang="en">
@@ -201,7 +202,7 @@ export class SwatSingleTableViewerPanel {
                     <tbody>
         `;
 
-        for (const row of rows.slice(0, 1000)) { // Limit to 1000 rows for performance
+        for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
             tableHtml += `<tr>`;
             tableHtml += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(row.file)}', ${row.lineNumber})">${row.lineNumber}</a></td>`;
             
@@ -230,11 +231,11 @@ export class SwatSingleTableViewerPanel {
             tableHtml += `</tr>`;
         }
 
-        if (rows.length > 1000) {
+        if (rows.length > SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY) {
             tableHtml += `
                 <tr>
                     <td colspan="${columns.length + 1}" class="truncated-message">
-                        Showing first 1000 of ${rows.length} rows
+                        Showing first ${SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY} of ${rows.length} rows
                     </td>
                 </tr>
             `;
@@ -377,9 +378,6 @@ export class SwatSingleTableViewerPanel {
                 text-align: left;
                 font-weight: 600;
                 border-bottom: 2px solid var(--vscode-panel-border);
-                position: sticky;
-                top: 0;
-                z-index: 10;
             }
             .data-table th.fk-col {
                 background-color: var(--vscode-inputOption-activeBackground);
