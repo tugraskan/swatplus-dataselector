@@ -11,6 +11,8 @@ import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
 import { pathStartsWith } from './pathUtils';
 
+// file.cio format: classification_name  file1  file2  file3  ...
+// Column 0 is classification name, columns 1+ are filenames
 const FILE_NAME_COLUMN_INDEX = 1;
 
 export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
