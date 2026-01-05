@@ -24,7 +24,11 @@ from typing import Dict, List, Optional, Tuple
 import pandas as pd
 
 
+# Constants
 NUMERIC_VALUE_PATTERN = re.compile(r'^\d+(\.\d+)?$')
+MAX_CHILD_LINES = 1000  # Sanity check limit to prevent excessive line skipping
+MANAGEMENT_SCH_OP_DATA1_INDEX = 6  # Position of op_data1 field in management schedule operation lines
+DTL_ACTION_FP_INDEX = 7  # Position of fp field in decision table action lines
 
 
 def load_json(path: Path) -> dict:
@@ -70,8 +74,8 @@ def get_child_line_count(value_map: Dict[str, str], config: dict, file_name: str
         # Sanity check: prevent excessive line skipping
         if total_count < 0:
             return 0
-        if total_count > 1000:
-            return 1000
+        if total_count > MAX_CHILD_LINES:
+            return MAX_CHILD_LINES
         
         return total_count
     
@@ -82,8 +86,8 @@ def get_child_line_count(value_map: Dict[str, str], config: dict, file_name: str
             
             if count < 0:
                 return 0
-            if count > 1000:
-                return 1000
+            if count > MAX_CHILD_LINES:
+                return MAX_CHILD_LINES
             
             return count
         except ValueError:
@@ -226,7 +230,7 @@ def build_fk_references(
                     "sourceColumn": column,
                     "fkValue": str(row[column]),
                     "targetTable": fk["references"]["table"],
-                    "targetColumn": txtinout_target_column,  # Use 'name' for TxtInOut files
+                    "targetColumn": txtinout_target_column,  # Typically 'name' for TxtInOut files (configurable via metadata)
                     "resolved": False,
                 }
             )
@@ -295,7 +299,8 @@ def process_management_sch_child_lines(
             values = line.split()
             if values:
                 op_type = values[0]
-                op_data1 = values[6] if len(values) > 6 else None
+                # op_data1 is typically at index 6 in management schedule operation lines
+                op_data1 = values[MANAGEMENT_SCH_OP_DATA1_INDEX] if len(values) > MANAGEMENT_SCH_OP_DATA1_INDEX else None
                 
                 if op_type and op_data1 and op_type in op_type_to_table and op_data1 not in null_set:
                     references.append({
@@ -429,10 +434,10 @@ def process_dtl_file(
                 action_values = action_line.split()
                 
                 # Action line structure: act_typ, obj, obj_num, name, option, const, const2, fp, outcome...
-                # fp is at index 7 (8th field)
-                if len(action_values) > 7:
+                # fp field is at index DTL_ACTION_FP_INDEX (8th field, 0-based index 7)
+                if len(action_values) > DTL_ACTION_FP_INDEX:
                     act_typ = action_values[0]
-                    fp = action_values[7]
+                    fp = action_values[DTL_ACTION_FP_INDEX]
                     
                     # Track FK if action type has a mapping and fp is not null
                     if act_typ in action_type_to_table and fp not in null_set:
