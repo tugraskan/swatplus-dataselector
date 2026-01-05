@@ -2,7 +2,19 @@
 
 ## Overview
 
-The SWAT+ Dataset Selector extension includes an enhanced indexing system that leverages detailed documentation about SWAT+ input files to provide better navigation, validation, and understanding of the file relationships.
+The SWAT+ Dataset Selector extension includes an enhanced indexing system that leverages pandas DataFrames and detailed documentation about SWAT+ input files to provide better navigation, validation, and understanding of the file relationships.
+
+## Pandas-First Architecture
+
+The indexing system uses a **pandas-backed indexer** as the primary indexing method with several advantages:
+
+- **Vectorized Operations**: Fast filtering and FK detection using pandas vectorized operations
+- **Hierarchical File Support**: Handles multi-line records in soils.sol, plant.ini, and management.sch
+- **Decision Table Parsing**: Special handling for *.dtl files with complex condition-action structures
+- **Memory Efficient**: DataFrame-based processing scales better with large datasets
+- **Maintainable**: Python code is easier to debug and extend than TypeScript parsing logic
+
+The extension automatically attempts to use the pandas indexer first. If pandas is not available (e.g., Python or pandas not installed), it falls back to a TypeScript-based indexer.
 
 ## Key Improvements
 
@@ -97,7 +109,31 @@ const refs = indexer.getReferencesToRow('soils_sol', 'clay_loam');
 // Returns array of FKReferences pointing to this soil
 ```
 
-### 5. Enhanced Hover Information
+### 5. Hierarchical File Support
+
+The pandas indexer automatically handles files with multi-line record structures:
+
+**soils.sol**: Each soil has a main record line followed by layer data lines. The indexer:
+- Detects main records by checking if the `name` field is non-numeric
+- Indexes only the main record (soil name and properties)
+- Skips child layer lines to avoid duplicate indexing
+
+**plant.ini**: Each plant community has a main record with `plnt_cnt` field followed by plant detail lines. The indexer:
+- Reads the `plnt_cnt` field to determine child line count
+- Indexes only the main record (community name and metadata)
+- Skips the next `plnt_cnt` lines
+
+**management.sch**: Each schedule has a main record with `numb_auto` and `numb_ops` fields. The indexer:
+- Reads both fields to determine total child line count
+- Processes child lines to extract FK references (decision tables and operations)
+- Tracks FK references from op_data1 field in operation lines
+
+**Decision Tables (*.dtl)**: Complex multi-line structures with conditions and actions. The indexer:
+- Parses the file structure to identify decision table headers
+- Extracts condition and action counts
+- Processes action lines to find FK references in the `fp` field
+
+### 6. Enhanced Hover Information
 
 Hovering over a foreign key value now shows:
 - Column name and type
@@ -119,7 +155,7 @@ Topography parameters for HRUs
 Click to navigate to topography.hyd
 ```
 
-### 6. Better Diagnostic Messages
+### 7. Better Diagnostic Messages
 
 Diagnostic warnings for unresolved FK references now include file purposes for better context:
 
@@ -127,7 +163,7 @@ Diagnostic warnings for unresolved FK references now include file purposes for b
 
 **After**: `Unresolved foreign key: topo = "missing_topo" (expected in topography.hyd - Topography parameters for HRUs)`
 
-### 7. Index Statistics and Query Methods
+### 8. Index Statistics and Query Methods
 
 New methods provide insights into the index:
 

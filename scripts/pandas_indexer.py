@@ -6,16 +6,29 @@ and emits a JSON payload that mirrors the extension's in-memory index
 representation. It favors lightweight parsing (whitespace-delimited rows) to
 stay resilient to the loosely formatted TxtInOut files while leveraging
 vectorized filtering for FK detection.
+
+Enhanced to handle:
+- Hierarchical files (soils.sol, plant.ini, management.sch)
+- Decision table files (*.dtl)
+- file.cio parsing
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
+
+
+# Constants
+NUMERIC_VALUE_PATTERN = re.compile(r'^\d+(\.\d+)?$')
+MAX_CHILD_LINES = 1000  # Sanity check limit to prevent excessive line skipping
+MANAGEMENT_SCH_OP_DATA1_INDEX = 6  # Position of op_data1 field in management schedule operation lines
+DTL_ACTION_FP_INDEX = 7  # Position of fp field in decision table action lines
 
 
 def load_json(path: Path) -> dict:
@@ -23,44 +36,181 @@ def load_json(path: Path) -> dict:
         return json.load(handle)
 
 
-def parse_lines_to_dataframe(file_path: Path, table: dict) -> pd.DataFrame:
-    """Parse TxtInOut rows into a DataFrame starting at data_starts_after."""
+def is_hierarchical_file(file_name: str, metadata: dict) -> bool:
+    """Check if a file is hierarchical (multi-line records)."""
+    hierarchical_files = metadata.get("hierarchical_files", {})
+    # Skip the 'description' key which is metadata
+    return file_name in hierarchical_files and file_name != "description"
+
+
+def get_hierarchical_config(file_name: str, metadata: dict) -> Optional[dict]:
+    """Get hierarchical file configuration."""
+    if not is_hierarchical_file(file_name, metadata):
+        return None
+    return metadata["hierarchical_files"][file_name]
+
+
+def get_child_line_count(value_map: Dict[str, str], config: dict, file_name: str) -> int:
+    """Determine the number of child lines for a hierarchical record."""
+    count_field = config.get("structure", {}).get("child_line_count_field")
+    
+    if not count_field:
+        return 0
+    
+    # Handle special case for multiple fields (e.g., "numb_auto+numb_ops")
+    if '+' in count_field:
+        fields = [f.strip() for f in count_field.split('+')]
+        total_count = 0
+        
+        for field in fields:
+            if field in value_map:
+                try:
+                    count = int(value_map[field])
+                    if count > 0:
+                        total_count += count
+                except ValueError:
+                    pass
+        
+        # Sanity check: prevent excessive line skipping
+        if total_count < 0:
+            return 0
+        if total_count > MAX_CHILD_LINES:
+            return MAX_CHILD_LINES
+        
+        return total_count
+    
+    # Handle single field case
+    if count_field in value_map:
+        try:
+            count = int(value_map[count_field])
+            
+            if count < 0:
+                return 0
+            if count > MAX_CHILD_LINES:
+                return MAX_CHILD_LINES
+            
+            return count
+        except ValueError:
+            return 0
+    
+    return 0
+
+
+def is_main_record_line(value_map: Dict[str, str], file_name: str) -> bool:
+    """Check if a line is a main record (vs child line) in a hierarchical file."""
+    # For soils.sol: Main record lines have a 'name' field that looks like a valid identifier
+    if file_name == 'soils.sol':
+        name_value = value_map.get('name', '')
+        # Main record has a non-empty name that's not purely numeric
+        return len(name_value) > 0 and not NUMERIC_VALUE_PATTERN.match(name_value)
+    
+    # For plant.ini: Main record has plnt_cnt field
+    if file_name == 'plant.ini':
+        return 'plnt_cnt' in value_map
+    
+    # For decision tables: More complex, for now treat all as main records
+    if file_name.endswith('.dtl'):
+        return True
+    
+    # Default: treat as main record
+    return True
+
+
+def parse_lines_to_dataframe(
+    file_path: Path, 
+    table: dict, 
+    metadata: dict
+) -> Tuple[pd.DataFrame, List[Tuple[int, int]]]:
+    """
+    Parse TxtInOut rows into a DataFrame starting at data_starts_after.
+    
+    Returns:
+        (DataFrame with main records, List of (start_line, child_count) tuples for child processing)
+    """
+    file_name = file_path.name
     start_line = table.get("data_starts_after", 0)
     columns = [col["name"] for col in table.get("columns", [])]
     records: List[Dict[str, str]] = []
-
+    child_line_info: List[Tuple[int, int]] = []  # (line_number, num_children)
+    
+    # Check if this is a hierarchical file
+    is_hierarchical = is_hierarchical_file(file_name, metadata)
+    hierarchical_config = get_hierarchical_config(file_name, metadata) if is_hierarchical else None
+    
     with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
-        for idx, raw_line in enumerate(handle):
-            if idx < start_line:
-                continue
-            line = raw_line.strip()
-            if not line:
-                continue
-
-            values = line.split()
-            value_map: Dict[str, str] = {}
-            for col_idx, col_name in enumerate(columns):
-                value_map[col_name] = values[col_idx] if col_idx < len(values) else ""
-
-            records.append({"lineNumber": idx + 1, **value_map})
-
+        lines = handle.readlines()
+    
+    i = start_line
+    while i < len(lines):
+        line = lines[i].strip()
+        if not line:
+            i += 1
+            continue
+        
+        values = line.split()
+        value_map: Dict[str, str] = {}
+        for col_idx, col_name in enumerate(columns):
+            value_map[col_name] = values[col_idx] if col_idx < len(values) else ""
+        
+        # For hierarchical files, determine if this is a main record or child line
+        skip_count = 0
+        if is_hierarchical and hierarchical_config:
+            # First, try explicit child count
+            explicit_count = get_child_line_count(value_map, hierarchical_config, file_name)
+            
+            if explicit_count > 0:
+                # This file has explicit child counts - use them
+                skip_count = explicit_count
+                # Store info about child lines for later processing
+                child_line_info.append((i + 1, skip_count))
+            else:
+                # No explicit count - use heuristic detection
+                is_main_record = is_main_record_line(value_map, file_name)
+                if not is_main_record:
+                    # This is a child line - skip it
+                    i += 1
+                    continue
+        
+        # Add the main record
+        records.append({"lineNumber": i + 1, **value_map})
+        
+        # Skip child lines if we have an explicit count
+        if skip_count > 0:
+            i += skip_count
+        
+        i += 1
+    
     df = pd.DataFrame.from_records(records)
     if df.empty:
-        return df
-
+        return df, child_line_info
+    
+    # Determine primary key
     pk_candidates = table.get("primary_keys") or []
     pk_column = pk_candidates[0] if pk_candidates else None
+    
+    # Try schema PK first, but fall back to 'name' if PK not in file headers
     if pk_column and pk_column in df.columns:
         df["pkValue"] = df[pk_column].astype(str)
+    elif "name" in df.columns:
+        df["pkValue"] = df["name"].astype(str)
     else:
         df["pkValue"] = df.index.astype(str)
+    
+    return df, child_line_info
 
-    return df
 
-
-def build_fk_references(df: pd.DataFrame, table: dict, file_path: Path, fk_null_values: List[str]) -> List[dict]:
+def build_fk_references(
+    df: pd.DataFrame, 
+    table: dict, 
+    file_path: Path, 
+    fk_null_values: List[str],
+    metadata: dict
+) -> List[dict]:
     references: List[dict] = []
     null_set = {val.lower() for val in fk_null_values}
+    
+    # Get the default target column for TxtInOut FK references
+    txtinout_target_column = metadata.get("txtinout_fk_behavior", {}).get("default_target_column", "name")
 
     for fk in table.get("foreign_keys", []):
         column = fk.get("column")
@@ -80,12 +230,230 @@ def build_fk_references(df: pd.DataFrame, table: dict, file_path: Path, fk_null_
                     "sourceColumn": column,
                     "fkValue": str(row[column]),
                     "targetTable": fk["references"]["table"],
-                    "targetColumn": fk["references"]["column"],
+                    "targetColumn": txtinout_target_column,  # Typically 'name' for TxtInOut files (configurable via metadata)
                     "resolved": False,
                 }
             )
 
     return references
+
+
+def process_management_sch_child_lines(
+    file_path: Path,
+    table: dict,
+    lines: List[str],
+    start_line: int,
+    numb_auto: int,
+    numb_ops: int,
+    fk_null_values: List[str]
+) -> List[dict]:
+    """Process child lines for management.sch and extract FK references."""
+    references: List[dict] = []
+    null_set = set(fk_null_values)
+    
+    # Operation type to target table mapping
+    op_type_to_table = {
+        'plnt': 'plant_ini',
+        'harv': 'harv_ops',
+        'hvkl': 'plant_ini',
+        'kill': 'plant_ini',
+        'till': 'tillage_til',
+        'irrm': 'irr_ops',
+        'irra': 'irr_ops',
+        'fert': 'fertilizer_frt',
+        'frta': 'fertilizer_frt',
+        'frtc': 'fertilizer_frt',
+        'pest': 'pesticide_pes',
+        'pstc': 'pesticide_pes',
+        'graz': 'graze_ops'
+    }
+    
+    current_line = start_line
+    
+    # Process first numb_auto lines (decision table references)
+    for j in range(numb_auto):
+        if current_line >= len(lines):
+            break
+        line = lines[current_line].strip()
+        if line:
+            dtl_name = line.split()[0] if line.split() else None
+            if dtl_name and dtl_name not in null_set:
+                references.append({
+                    "sourceFile": str(file_path),
+                    "sourceTable": table["table_name"],
+                    "sourceLine": current_line + 1,
+                    "sourceColumn": "auto_op_dtl",
+                    "fkValue": dtl_name,
+                    "targetTable": "lum_dtl",
+                    "targetColumn": "name",
+                    "resolved": False
+                })
+        current_line += 1
+    
+    # Process next numb_ops lines (explicit operations)
+    for j in range(numb_ops):
+        if current_line >= len(lines):
+            break
+        line = lines[current_line].strip()
+        if line:
+            values = line.split()
+            if values:
+                op_type = values[0]
+                # op_data1 is typically at index 6 in management schedule operation lines
+                op_data1 = values[MANAGEMENT_SCH_OP_DATA1_INDEX] if len(values) > MANAGEMENT_SCH_OP_DATA1_INDEX else None
+                
+                if op_type and op_data1 and op_type in op_type_to_table and op_data1 not in null_set:
+                    references.append({
+                        "sourceFile": str(file_path),
+                        "sourceTable": table["table_name"],
+                        "sourceLine": current_line + 1,
+                        "sourceColumn": f"op_data1({op_type})",
+                        "fkValue": op_data1,
+                        "targetTable": op_type_to_table[op_type],
+                        "targetColumn": "name",
+                        "resolved": False
+                    })
+        current_line += 1
+    
+    return references
+
+
+def process_dtl_file(
+    file_path: Path,
+    table: dict,
+    fk_null_values: List[str]
+) -> Tuple[List[dict], List[dict]]:
+    """
+    Process decision table files (*.dtl) and extract FK references from fp fields.
+    
+    Returns:
+        (list of row payloads, list of FK references)
+    """
+    null_set = set(fk_null_values)
+    row_payload: List[dict] = []
+    fk_references: List[dict] = []
+    
+    # Action type to target table mapping for fp field
+    action_type_to_table = {
+        'harvest': 'harv_ops',
+        'harvest_kill': 'harv_ops',
+        'pest_apply': 'chem_app_ops',
+        'fertilize': 'chem_app_ops'
+    }
+    
+    with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
+        lines = handle.readlines()
+    
+    if len(lines) < 2:
+        return row_payload, fk_references
+    
+    # Skip title line (line 0)
+    # Line 1 contains the number of decision tables
+    num_tables_line = lines[1].strip()
+    try:
+        num_tables = int(num_tables_line)
+    except ValueError:
+        return row_payload, fk_references
+    
+    if num_tables < 0:
+        return row_payload, fk_references
+    
+    current_line = 2  # Start after title and count lines
+    
+    # Skip blank lines after count
+    while current_line < len(lines) and not lines[current_line].strip():
+        current_line += 1
+    
+    # Skip the global header line (NAME  CONDS  ALTS  ACTS)
+    if current_line < len(lines):
+        possible_header_line = lines[current_line].strip().upper()
+        if possible_header_line.startswith('NAME'):
+            current_line += 1
+    
+    # Process each decision table
+    for table_idx in range(num_tables):
+        if current_line >= len(lines):
+            break
+        
+        # Skip blank lines before decision table
+        while current_line < len(lines) and not lines[current_line].strip():
+            current_line += 1
+        
+        if current_line >= len(lines):
+            break
+        
+        header_line = lines[current_line].strip()
+        if not header_line:
+            break
+        
+        header_values = header_line.split()
+        if len(header_values) < 4:
+            current_line += 1
+            continue
+        
+        dtbl_name = header_values[0]
+        try:
+            conds = int(header_values[1])
+            alts = int(header_values[2])
+            acts = int(header_values[3])
+        except ValueError:
+            current_line += 1
+            continue
+        
+        # Index the decision table main record
+        row_payload.append({
+            "file": str(file_path),
+            "tableName": table["table_name"],
+            "lineNumber": current_line + 1,
+            "pkValue": dtbl_name,
+            "values": {
+                "name": dtbl_name,
+                "conds": str(conds),
+                "alts": str(alts),
+                "acts": str(acts)
+            }
+        })
+        
+        current_line += 1  # Move past decision table header
+        
+        # Skip conditions section header line
+        current_line += 1
+        
+        # Skip conditions section data lines
+        current_line += conds
+        
+        # Skip actions section header line
+        current_line += 1
+        
+        # Process actions section data lines
+        for act_idx in range(acts):
+            if current_line >= len(lines):
+                break
+            action_line = lines[current_line].strip()
+            if action_line:
+                action_values = action_line.split()
+                
+                # Action line structure: act_typ, obj, obj_num, name, option, const, const2, fp, outcome...
+                # fp field is at index DTL_ACTION_FP_INDEX (8th field, 0-based index 7)
+                if len(action_values) > DTL_ACTION_FP_INDEX:
+                    act_typ = action_values[0]
+                    fp = action_values[DTL_ACTION_FP_INDEX]
+                    
+                    # Track FK if action type has a mapping and fp is not null
+                    if act_typ in action_type_to_table and fp not in null_set:
+                        fk_references.append({
+                            "sourceFile": str(file_path),
+                            "sourceTable": table["table_name"],
+                            "sourceLine": current_line + 1,
+                            "sourceColumn": f"fp({act_typ})",
+                            "fkValue": fp,
+                            "targetTable": action_type_to_table[act_typ],
+                            "targetColumn": "name",
+                            "resolved": False
+                        })
+            current_line += 1
+    
+    return row_payload, fk_references
 
 
 def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> dict:
@@ -101,11 +469,21 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
         file_path = dataset_path / file_name
         if not file_path.exists():
             continue
+        
+        # Special handling for decision table files (*.dtl)
+        if file_name.endswith('.dtl'):
+            row_payload, dtl_fk_refs = process_dtl_file(file_path, table, fk_null_values)
+            if row_payload:
+                tables_payload[table["table_name"]] = row_payload
+                fk_references.extend(dtl_fk_refs)
+            continue
 
-        df = parse_lines_to_dataframe(file_path, table)
+        # Parse the file with hierarchical support
+        df, child_line_info = parse_lines_to_dataframe(file_path, table, metadata)
         if df.empty:
             continue
 
+        # Build row payload
         row_payload = []
         for _, row in df.iterrows():
             values = {col["name"]: str(row.get(col["name"], "")) for col in table.get("columns", [])}
@@ -120,7 +498,31 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
             )
 
         tables_payload[table["table_name"]] = row_payload
-        fk_references.extend(build_fk_references(df, table, file_path, fk_null_values))
+        
+        # Build FK references for main records
+        fk_references.extend(build_fk_references(df, table, file_path, fk_null_values, metadata))
+        
+        # Special handling for management.sch child lines
+        if file_name == 'management.sch' and child_line_info:
+            with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
+                lines = handle.readlines()
+            
+            # Process child lines for each main record
+            for idx, (line_num, _) in enumerate(child_line_info):
+                # Get the main record to extract numb_auto and numb_ops
+                main_record = df.iloc[idx]
+                try:
+                    numb_auto = int(main_record.get('numb_auto', 0))
+                    numb_ops = int(main_record.get('numb_ops', 0))
+                except (ValueError, KeyError):
+                    numb_auto = 0
+                    numb_ops = 0
+                
+                # Process child lines starting from the line after the main record
+                child_refs = process_management_sch_child_lines(
+                    file_path, table, lines, line_num, numb_auto, numb_ops, fk_null_values
+                )
+                fk_references.extend(child_refs)
 
     return {
         "tables": tables_payload,
