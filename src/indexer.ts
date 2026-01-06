@@ -844,7 +844,8 @@ export class SwatIndexer {
      */
     public isFileReferencedInCio(filename: string): boolean {
         for (const data of this.fileCioData.values()) {
-            if (data.files.some(f => f === filename && !data.isDefault[data.files.indexOf(f)])) {
+            const idx = data.files.indexOf(filename);
+            if (idx !== -1 && !data.isDefault[idx]) {
                 return true;
             }
         }

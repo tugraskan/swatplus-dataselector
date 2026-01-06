@@ -222,7 +222,13 @@ export class SwatFKReferencesPanel {
                     return `<code ${tooltip}>${file}</code>`;
                 }).join(' ');
                 
-                const customizedCount = data.files.filter((_, idx) => !data.isDefault[idx]).length;
+                // Count customized files efficiently
+                let customizedCount = 0;
+                for (let i = 0; i < data.isDefault.length; i++) {
+                    if (!data.isDefault[i]) {
+                        customizedCount++;
+                    }
+                }
                 const totalCount = data.files.length;
                 const statusText = customizedCount === totalCount 
                     ? `${customizedCount} files` 
