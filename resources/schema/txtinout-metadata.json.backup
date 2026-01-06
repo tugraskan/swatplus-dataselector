@@ -1,0 +1,278 @@
+{
+  "metadata_version": "1.0.0",
+  "description": "Additional metadata for SWAT+ TxtInOut files based on documentation analysis",
+  "source": "Extracted from docs/EXTENSION_FILE_SCHEMA.md, DEPENDENCY_ANALYSIS.md, and related documentation",
+  "null_sentinel_values": {
+    "global": ["null", "0", ""],
+    "description": "Values that should be treated as 'no reference' or null in FK relationships"
+  },
+  "table_name_to_file_name": {
+    "topography_hyd": "topography.hyd",
+    "hydrology_hyd": "hydrology.hyd",
+    "soils_sol": "soils.sol",
+    "landuse_lum": "landuse.lum",
+    "soil_plant_ini": "soil_plant.ini",
+    "snow_sno": "snow.sno",
+    "field_fld": "field.fld",
+    "wetland_wet": "wetland.wet",
+    "initial_aqu": "initial.aqu",
+    "om_water_ini": "om_water.ini",
+    "pest_water_ini": "pest_water.ini",
+    "salt_water_ini": "salt_water.ini",
+    "path_water_ini": "path_water.ini",
+    "hmet_water_ini": "hmet_water.ini",
+    "hru_data_hru": "hru-data.hru",
+    "aquifer_aqu": "aquifer.aqu",
+    "channel_cha": "channel.cha",
+    "reservoir_res": "reservoir.res",
+    "initial_res": "initial.res",
+    "hydrology_res": "hydrology.res",
+    "sediment_res": "sediment.res",
+    "nutrients_res": "nutrients.res",
+    "initial_cha": "initial.cha",
+    "hydrology_cha": "hydrology.cha",
+    "sediment_cha": "sediment.cha",
+    "nutrients_cha": "nutrients.cha",
+    "plant_ini": "plant.ini",
+    "management_sch": "management.sch",
+    "cntable_lum": "cntable.lum",
+    "cons_practice_lum": "cons_practice.lum",
+    "ovn_table_lum": "ovn_table.lum",
+    "tiledrain_str": "tiledrain.str",
+    "septic_str": "septic.str",
+    "filterstrip_str": "filterstrip.str",
+    "grassedww_str": "grassedww.str",
+    "bmpuser_str": "bmpuser.str",
+    "rout_unit_rtu": "rout_unit.rtu",
+    "rout_unit_def": "rout_unit.def",
+    "rout_unit_ele": "rout_unit.ele",
+    "weather_sta_cli": "weather-sta.cli",
+    "weather_wgn_cli": "weather-wgn.cli",
+    "pcp_cli": "pcp.cli",
+    "tmp_cli": "tmp.cli",
+    "slr_cli": "slr.cli",
+    "hmd_cli": "hmd.cli",
+    "wnd_cli": "wnd.cli",
+    "atmo_cli": "atmo.cli",
+    "plants_plt": "plants.plt",
+    "fertilizer_frt": "fertilizer.frt",
+    "pesticide_pes": "pesticide.pes",
+    "tillage_til": "tillage.til",
+    "urban_urb": "urban.urb",
+    "septic_sep": "septic.sep"
+  },
+  "txtinout_fk_behavior": {
+    "description": "In TxtInOut text files, FK references typically point to the 'name' column in target files, not 'id'",
+    "default_target_column": "name",
+    "exceptions": {
+      "description": "Some files may use 'id' or other columns as FK targets",
+      "files": []
+    }
+  },
+  "file_purposes": {
+    "hru-data.hru": "Defines HRUs and links to property files",
+    "topography.hyd": "Topography parameters for HRUs",
+    "hydrology.hyd": "Hydrology parameters for HRUs",
+    "soils.sol": "Soil properties and layering",
+    "landuse.lum": "Land use and management definitions",
+    "soil_plant.ini": "Soil and plant initialization data",
+    "snow.sno": "Snow parameters",
+    "field.fld": "Field characteristics",
+    "aquifer.aqu": "Aquifer definitions",
+    "initial.aqu": "Aquifer initialization data",
+    "om_water.ini": "Organic-mineral initialization for water bodies",
+    "pest_water.ini": "Pesticide initialization for water bodies",
+    "salt_water.ini": "Salt initialization for water bodies",
+    "path_water.ini": "Pathway initialization for water bodies",
+    "hmet_water.ini": "Heavy metal initialization for water bodies",
+    "channel.cha": "Channel definitions",
+    "initial.cha": "Channel initialization",
+    "hydrology.cha": "Channel hydrology parameters",
+    "sediment.cha": "Channel sediment parameters",
+    "nutrients.cha": "Channel nutrient parameters",
+    "reservoir.res": "Reservoir definitions",
+    "initial.res": "Reservoir initialization",
+    "hydrology.res": "Reservoir hydrology parameters",
+    "sediment.res": "Reservoir sediment parameters",
+    "nutrients.res": "Reservoir nutrient parameters",
+    "wetland.wet": "Wetland definitions",
+    "plant.ini": "Plant community initialization",
+    "management.sch": "Management schedules and operations",
+    "weather-sta.cli": "Weather station configuration and data file links",
+    "weather-wgn.cli": "Weather generator parameters",
+    "pcp.cli": "Precipitation data file list",
+    "tmp.cli": "Temperature data file list",
+    "slr.cli": "Solar radiation data file list",
+    "hmd.cli": "Humidity data file list",
+    "wnd.cli": "Wind speed data file list",
+    "atmo.cli": "Atmospheric deposition data",
+    "rout_unit.rtu": "Routing unit definitions",
+    "rout_unit.def": "Routing unit detailed definitions",
+    "rout_unit.ele": "Routing unit elements",
+    "plants.plt": "Plant species database",
+    "fertilizer.frt": "Fertilizer characteristics database",
+    "pesticide.pes": "Pesticide properties database",
+    "tillage.til": "Tillage operation effects database",
+    "urban.urb": "Urban area characteristics database",
+    "septic.sep": "Septic system effluent database",
+    "file.cio": "Master configuration file that references all other input files",
+    "codes.bsn": "Basin-level simulation option codes",
+    "parameters.bsn": "Basin-level parameter values",
+    "object.cnt": "Object counts for each type in the simulation",
+    "time.sim": "Simulation period and timestep definition",
+    "print.prt": "Output printing control options",
+    "object.prt": "Object-specific printing configuration"
+  },
+  "file_categories": {
+    "master_config": ["file.cio", "codes.bsn", "parameters.bsn", "object.cnt", "time.sim", "print.prt", "object.prt"],
+    "climate": ["weather-sta.cli", "weather-wgn.cli", "pcp.cli", "tmp.cli", "slr.cli", "hmd.cli", "wnd.cli", "atmo.cli"],
+    "hru": ["hru-data.hru", "topography.hyd", "hydrology.hyd", "field.fld"],
+    "soils": ["soils.sol"],
+    "landuse": ["landuse.lum", "plant.ini", "management.sch", "cntable.lum", "cons_practice.lum", "ovn_table.lum"],
+    "structural_practices": ["tiledrain.str", "septic.str", "filterstrip.str", "grassedww.str", "bmpuser.str"],
+    "initialization": ["soil_plant.ini", "initial.aqu", "initial.cha", "initial.res", "om_water.ini", "pest_water.ini", "salt_water.ini", "path_water.ini", "hmet_water.ini", "snow.sno"],
+    "aquifers": ["aquifer.aqu", "initial.aqu"],
+    "channels": ["channel.cha", "initial.cha", "hydrology.cha", "sediment.cha", "nutrients.cha"],
+    "reservoirs": ["reservoir.res", "initial.res", "hydrology.res", "sediment.res", "nutrients.res"],
+    "wetlands": ["wetland.wet"],
+    "routing": ["rout_unit.rtu", "rout_unit.def", "rout_unit.ele"],
+    "databases": ["plants.plt", "fertilizer.frt", "pesticide.pes", "tillage.til", "urban.urb", "septic.sep"]
+  },
+  "common_pointer_patterns": {
+    "init_pattern": {
+      "description": "Files with 'init' field pointing to initialization files",
+      "examples": [
+        {"file": "aquifer.aqu", "field": "aqu_init", "target": "initial.aqu"},
+        {"file": "reservoir.res", "field": "init", "target": "initial.res"},
+        {"file": "channel.cha", "field": "init", "target": "initial.cha"}
+      ]
+    },
+    "hyd_pattern": {
+      "description": "Files with 'hyd' field pointing to hydrology parameter files",
+      "examples": [
+        {"file": "hru-data.hru", "field": "hydro", "target": "hydrology.hyd"},
+        {"file": "reservoir.res", "field": "hyd", "target": "hydrology.res"},
+        {"file": "channel.cha", "field": "hyd", "target": "hydrology.cha"}
+      ]
+    },
+    "sed_pattern": {
+      "description": "Files with 'sed' field pointing to sediment parameter files",
+      "examples": [
+        {"file": "reservoir.res", "field": "sed", "target": "sediment.res"},
+        {"file": "channel.cha", "field": "sed", "target": "sediment.cha"}
+      ]
+    },
+    "nut_pattern": {
+      "description": "Files with 'nut' field pointing to nutrient parameter files",
+      "examples": [
+        {"file": "reservoir.res", "field": "nut", "target": "nutrients.res"},
+        {"file": "channel.cha", "field": "nut", "target": "nutrients.cha"}
+      ]
+    },
+    "constituent_init_pattern": {
+      "description": "Initialization files with constituent pointers",
+      "examples": [
+        {"file": "initial.aqu", "field": "org_min", "target": "om_water.ini"},
+        {"file": "initial.aqu", "field": "pest", "target": "pest_water.ini"},
+        {"file": "initial.aqu", "field": "salt", "target": "salt_water.ini"}
+      ]
+    }
+  },
+  "hierarchical_files": {
+    "description": "Files with multi-line record structures where a single logical record spans multiple physical lines",
+    "soils.sol": {
+      "description": "Soil properties with main record line followed by layer data lines",
+      "structure": {
+        "main_record_format": "Main line contains soil name and properties, plus layer count",
+        "child_line_format": "Following lines contain layer-specific data (one line per layer)",
+        "main_record_identifier": "First data field is the soil name (primary key)",
+        "child_line_count_field": null,
+        "indexing_strategy": "Index only the main record line; skip child layer lines"
+      }
+    },
+    "plant.ini": {
+      "description": "Plant community initialization with main record line followed by plant detail lines",
+      "structure": {
+        "main_record_format": "Main line contains community name, rotation year, and plant count",
+        "child_line_format": "Following lines contain individual plant details (one line per plant in community)",
+        "main_record_identifier": "First data field is the community name (primary key)",
+        "child_line_count_field": "plnt_cnt",
+        "indexing_strategy": "Index only the main record line; skip plant detail lines"
+      }
+    },
+    "management.sch": {
+      "description": "Management schedules with main record line followed by operation detail lines",
+      "structure": {
+        "main_record_format": "Main line contains schedule name, numb_ops (explicit operations), and numb_auto (decision table references)",
+        "child_line_format": "Following lines: first numb_auto lines are decision table references (from lum.dtl), then numb_ops lines are explicit operations",
+        "main_record_identifier": "First data field is the schedule name (primary key)",
+        "child_line_count_field": "numb_auto+numb_ops",
+        "indexing_strategy": "Index only the main record line; skip numb_auto decision table reference lines + numb_ops explicit operation lines"
+      }
+    },
+    "d_table.dtl": {
+      "description": "Decision table with condition-action pairs across multiple lines",
+      "structure": {
+        "main_record_format": "Multi-line format with conditions and actions",
+        "child_line_format": "Action lines follow condition lines",
+        "main_record_identifier": "Each decision rule set is a logical record",
+        "child_line_count_field": null,
+        "indexing_strategy": "Index main decision lines; specific format varies by decision table type"
+      }
+    },
+    "lum.dtl": {
+      "description": "Land use decision table with multi-line condition-action structure",
+      "structure": {
+        "main_record_format": "Condition lines followed by action lines",
+        "child_line_format": "Action specifications on separate lines",
+        "main_record_identifier": null,
+        "child_line_count_field": null,
+        "indexing_strategy": "Index main decision lines; skip action detail lines"
+      }
+    },
+    "weather-wgn.cli": {
+      "description": "Weather generator parameters with main station record followed by 12 monthly data lines",
+      "structure": {
+        "main_record_format": "Main line contains station name, lat, lon, elev, and rain_yrs",
+        "child_line_format": "Following 13 lines total (1 header line + 12 monthly data lines, one per month)",
+        "main_record_identifier": "First data field is the station name (primary key)",
+        "child_line_count_field": null,
+        "child_line_count_fixed": 13,
+        "indexing_strategy": "Index only the main record line; skip 1 header line + 12 monthly data lines"
+      }
+    }
+  },
+  "file_pointer_columns": {
+    "description": "Columns that contain file names/paths rather than FK references to table rows",
+    "weather-sta.cli": {
+      "pcp": {
+        "description": "Precipitation data file name",
+        "file_pattern": "*.pcp"
+      },
+      "tmp": {
+        "description": "Temperature data file name",
+        "file_pattern": "*.tmp"
+      },
+      "slr": {
+        "description": "Solar radiation data file name",
+        "file_pattern": "*.slr"
+      },
+      "hmd": {
+        "description": "Humidity data file name",
+        "file_pattern": "*.hmd"
+      },
+      "wnd": {
+        "description": "Wind data file name",
+        "file_pattern": "*.wnd"
+      },
+      "wnd_dir": {
+        "description": "Wind direction data file name",
+        "file_pattern": "*.wnd"
+      },
+      "atmo_dep": {
+        "description": "Atmospheric deposition data file name",
+        "file_pattern": "*.atmo"
+      }
+    }
+  }
+}
