@@ -158,6 +158,7 @@ export class SwatSingleTableViewerPanel {
             this._panel.webview.postMessage({
                 command: 'showFKRowData',
                 tableName: tableName,
+                fkValue: fkValue,
                 fileName: fileName || tableName,
                 columns: columns,
                 rowData: targetRow.values,
@@ -770,13 +771,13 @@ export class SwatSingleTableViewerPanel {
             window.addEventListener('message', event => {
                 const message = event.data;
                 if (message.command === 'showFKRowData') {
-                    displayFKPeek(message.tableName, message.fileName, message.columns, message.rowData, message.lineNumber);
+                    displayFKPeek(message.tableName, message.fkValue, message.fileName, message.columns, message.rowData, message.lineNumber);
                 }
             });
 
-            function displayFKPeek(tableName, fileName, columns, rowData, lineNumber) {
-                // Find all FK cells with this table name and remove any existing peeks
-                const fkCells = document.querySelectorAll(\`td.fk-cell[data-fk-table="\${tableName}"]\`);
+            function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber) {
+                // Find the specific FK cell that matches both table name AND FK value
+                const fkCells = document.querySelectorAll(\`td.fk-cell[data-fk-table="\${tableName}"][data-fk-value="\${fkValue}"]\`);
                 
                 fkCells.forEach(cell => {
                     const currentRow = cell.closest('tr');
@@ -786,10 +787,6 @@ export class SwatSingleTableViewerPanel {
                     if (nextRow && nextRow.classList.contains('peek-row-container')) {
                         nextRow.remove();
                     }
-                    
-                    // Check if this is the cell that was clicked (it should have the matching FK value)
-                    const cellFkValue = cell.getAttribute('data-fk-value');
-                    const cellFkTable = cell.getAttribute('data-fk-table');
                     
                     // Create peek display
                     const peekDiv = document.createElement('div');

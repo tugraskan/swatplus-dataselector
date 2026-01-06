@@ -152,6 +152,7 @@ export class SwatTableViewerPanel {
             this._panel.webview.postMessage({
                 command: 'showFKRowData',
                 tableName: tableName,
+                fkValue: fkValue,
                 fileName: fileName || tableName,
                 columns: columns,
                 rowData: targetRow.values,
@@ -796,13 +797,13 @@ export class SwatTableViewerPanel {
             window.addEventListener('message', event => {
                 const message = event.data;
                 if (message.command === 'showFKRowData') {
-                    displayFKPeek(message.tableName, message.fileName, message.columns, message.rowData, message.lineNumber);
+                    displayFKPeek(message.tableName, message.fkValue, message.fileName, message.columns, message.rowData, message.lineNumber);
                 }
             });
 
-            function displayFKPeek(tableName, fileName, columns, rowData, lineNumber) {
-                // Find all FK cells with this table name that were recently clicked
-                const fkCells = document.querySelectorAll(\`td.fk-cell[data-fk-table="\${tableName}"]\`);
+            function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber) {
+                // Find the specific FK cell that matches both table name AND FK value
+                const fkCells = document.querySelectorAll(\`td.fk-cell[data-fk-table="\${tableName}"][data-fk-value="\${fkValue}"]\`);
                 
                 fkCells.forEach(cell => {
                     const currentRow = cell.closest('tr');
@@ -812,9 +813,6 @@ export class SwatTableViewerPanel {
                     if (nextRow && nextRow.classList.contains('peek-row-container')) {
                         nextRow.remove();
                     }
-                    
-                    // Check if this is the cell that was clicked (it should have the matching FK value)
-                    const cellFkValue = cell.getAttribute('data-fk-value');
                     
                     // Create peek display
                     const peekDiv = document.createElement('div');
