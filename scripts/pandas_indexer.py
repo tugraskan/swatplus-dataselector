@@ -228,8 +228,8 @@ def build_fk_references(
     file_name = file_path.name
     file_pointer_config = metadata.get("file_pointer_columns", {}).get(file_name, {})
     file_pointer_columns = set()
-    if isinstance(file_pointer_config, dict) and file_pointer_config.get("description") is None:
-        # Extract column names from the config (skip the description key if present)
+    if isinstance(file_pointer_config, dict):
+        # Extract column names from the config (exclude the description key if present)
         file_pointer_columns = {col for col in file_pointer_config.keys() if col != "description"}
 
     for fk in table.get("foreign_keys", []):
