@@ -83,12 +83,14 @@ def parse_model_file(file_path):
                     # Convert CamelCase to snake_case for table name
                     target_table = re.sub(r'(?<!^)(?=[A-Z])', '_', target_model).lower()
                     
+                    # For TxtInOut files, FKs reference the 'name' column, not 'id'
+                    # Also, the db_column is just the field name, not field_name + "_id"
                     fk_info = {
                         "column": field_name,
-                        "db_column": f"{field_name}_id",
+                        "db_column": field_name,  # TxtInOut: no "_id" suffix
                         "references": {
                             "table": target_table,
-                            "column": "id"
+                            "column": "name"  # TxtInOut: use 'name' not 'id'
                         }
                     }
                     foreign_keys.append(fk_info)
@@ -97,17 +99,15 @@ def parse_model_file(file_path):
             
             fields.append(col_info)
         
-        # Add implicit 'id' field if no primary key defined
-        if not primary_keys and not any(f['name'] == 'id' for f in fields):
-            fields.insert(0, {
-                "name": "id",
-                "db_column": "id",
-                "type": "AutoField",
-                "nullable": False,
-                "is_primary_key": True,
-                "is_foreign_key": False
-            })
-            primary_keys.append("id")
+        # For TxtInOut files, we DON'T add the implicit 'id' AutoField
+        # TxtInOut files use 'name' or other columns as identifiers, not database IDs
+        # If no primary key is defined, use 'name' if it exists
+        if not primary_keys:
+            # Look for a 'name' field
+            name_field = next((f for f in fields if f['name'] == 'name'), None)
+            if name_field:
+                name_field['is_primary_key'] = True
+                primary_keys.append('name')
         
         # Convert class name to table name (CamelCase to snake_case)
         table_name = re.sub(r'(?<!^)(?=[A-Z])', '_', class_name).lower()
