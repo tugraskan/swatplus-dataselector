@@ -605,6 +605,29 @@ export class SwatTableViewerPanel {
                 padding-bottom: 6px;
                 border-bottom: 1px solid var(--vscode-panel-border);
                 color: var(--vscode-foreground);
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .fk-peek-close-btn {
+                background: transparent;
+                border: none;
+                color: var(--vscode-foreground);
+                font-size: 20px;
+                line-height: 1;
+                cursor: pointer;
+                padding: 0;
+                width: 24px;
+                height: 24px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 4px;
+                opacity: 0.7;
+            }
+            .fk-peek-close-btn:hover {
+                background-color: var(--vscode-toolbar-hoverBackground);
+                opacity: 1;
             }
             .fk-peek-table {
                 width: 100%;
@@ -800,6 +823,20 @@ export class SwatTableViewerPanel {
                     const header = document.createElement('div');
                     header.className = 'fk-peek-header';
                     header.textContent = \`\${tableName} (File: \${fileName}, Line: \${lineNumber})\`;
+                    
+                    // Add close button to header
+                    const closeBtn = document.createElement('button');
+                    closeBtn.className = 'fk-peek-close-btn';
+                    closeBtn.textContent = '×';
+                    closeBtn.title = 'Close peek';
+                    closeBtn.onclick = function() {
+                        const peekRow = this.closest('.peek-row-container');
+                        if (peekRow) {
+                            peekRow.remove();
+                        }
+                    };
+                    header.appendChild(closeBtn);
+                    
                     peekDiv.appendChild(header);
                     
                     const table = document.createElement('table');
