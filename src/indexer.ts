@@ -36,6 +36,19 @@ interface TxtInOutMetadata {
         description: string;
         [fileName: string]: HierarchicalFileConfig | string; // Config objects or description string
     };
+    file_pointer_columns?: { [fileName: string]: any };
+    file_metadata?: { 
+        [fileName: string]: {
+            description: string;
+            metadata_structure: string;
+            special_structure: boolean;
+            primary_keys: string[];
+        }
+    };
+    foreign_key_relationships?: { [fileName: string]: any };
+    enhanced_from_markdown?: boolean;
+    markdown_sources?: string[];
+    enhanced_schema_available?: boolean;
 }
 
 interface HierarchicalFileConfig {

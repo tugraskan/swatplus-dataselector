@@ -278,32 +278,74 @@ export class SwatSingleTableViewerPanel {
 
         // Get columns from schema or first row
         let columns: string[] = [];
+        const columnMetadata = new Map<string, any>();
         if (schemaTable && schemaTable.columns) {
-            columns = schemaTable.columns.map((col: any) => col.name);
+            columns = schemaTable.columns.map((col: any) => {
+                columnMetadata.set(col.name, col);
+                return col.name;
+            });
         } else {
             columns = Object.keys(rows[0].values || {});
         }
 
-        // Get FK columns
-        const fkColumns = new Set<string>();
+        // Get FK columns and their targets
+        const fkColumns = new Map<string, any>();
         if (schemaTable && schemaTable.foreign_keys) {
             schemaTable.foreign_keys.forEach((fk: any) => {
-                fkColumns.add(fk.column);
+                fkColumns.set(fk.column, fk);
             });
         }
 
+        // Get file pointer columns from metadata
+        const metadata = this.indexer.getMetadata();
+        const fileName = this.indexer.getFileNameForTable(this.tableName);
+        const filePointers = metadata?.file_pointer_columns?.[fileName || ''] || {};
+        const fileMetadata = metadata?.file_metadata?.[fileName || ''];
+
+        // Add file description if available
+        let descriptionHtml = '';
+        if (fileMetadata && fileMetadata.description) {
+            descriptionHtml = `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
+        }
+
         let tableHtml = `
+            ${descriptionHtml}
             <div class="table-wrapper">
                 <table class="data-table">
                     <thead>
                         <tr>
                             <th class="line-col">Line</th>
-                            ${columns.map(col => `
-                                <th class="${fkColumns.has(col) ? 'fk-col' : ''}">
+                            ${columns.map(col => {
+                                const colMeta = columnMetadata.get(col);
+                                const fkInfo = fkColumns.get(col);
+                                const isFilePointer = typeof filePointers === 'object' && col in filePointers;
+                                
+                                // Build tooltip text
+                                let tooltip = col;
+                                if (colMeta) {
+                                    tooltip += `\nType: ${colMeta.type}`;
+                                    if (colMeta.nullable) {
+                                        tooltip += ' (nullable)';
+                                    }
+                                }
+                                if (fkInfo) {
+                                    tooltip += `\nForeign Key → ${fkInfo.references.table}`;
+                                }
+                                if (isFilePointer && typeof filePointers === 'object') {
+                                    const pointerDesc = filePointers[col];
+                                    if (pointerDesc && pointerDesc !== 'description') {
+                                        tooltip += `\n${pointerDesc}`;
+                                    }
+                                }
+                                
+                                return `
+                                <th class="${fkInfo ? 'fk-col' : ''}" title="${this._escapeHtml(tooltip)}">
                                     ${col}
-                                    ${fkColumns.has(col) ? '<span class="fk-indicator" title="Foreign Key">🔗</span>' : ''}
+                                    ${fkInfo ? '<span class="fk-indicator" title="Foreign Key">🔗</span>' : ''}
+                                    ${isFilePointer ? '<span class="file-pointer-indicator" title="File Pointer">📄</span>' : ''}
                                 </th>
-                            `).join('')}
+                            `;
+                            }).join('')}
                         </tr>
                     </thead>
                     <tbody>
@@ -315,23 +357,18 @@ export class SwatSingleTableViewerPanel {
             
             for (const col of columns) {
                 const value = row.values[col] || '';
-                const isFk = fkColumns.has(col);
+                const fkInfo = fkColumns.get(col);
                 
-                if (isFk && value) {
+                if (fkInfo && value) {
                     // Try to resolve FK
-                    const fkInfo = schemaTable.foreign_keys.find((fk: any) => fk.column === col);
-                    if (fkInfo) {
-                        const targetRow = this.indexer.resolveFKTarget(fkInfo.references.table, value);
-                        if (targetRow) {
-                            // Embed the FK row data as JSON in data attributes
-                            const fkRowDataJson = JSON.stringify(targetRow.values).replace(/"/g, '&quot;');
-                            const fileName = this.indexer.getFileNameForTable(fkInfo.references.table) || fkInfo.references.table;
-                            tableHtml += `<td class="fk-cell" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" onclick="toggleFKPeek(this, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" oncontextmenu="showFKContextMenu(event, '${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber}, '${this._escapeJs(fkInfo.references.table)}'); return false;" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
-                        } else {
-                            tableHtml += `<td class="fk-cell unresolved" title="Unresolved FK to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</td>`;
-                        }
+                    const targetRow = this.indexer.resolveFKTarget(fkInfo.references.table, value);
+                    if (targetRow) {
+                        // Embed the FK row data as JSON in data attributes
+                        const fkRowDataJson = JSON.stringify(targetRow.values).replace(/"/g, '&quot;');
+                        const fileName = this.indexer.getFileNameForTable(fkInfo.references.table) || fkInfo.references.table;
+                        tableHtml += `<td class="fk-cell" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" onclick="toggleFKPeek(this, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" oncontextmenu="showFKContextMenu(event, '${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber}, '${this._escapeJs(fkInfo.references.table)}'); return false;" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
                     } else {
-                        tableHtml += `<td>${this._escapeHtml(value)}</td>`;
+                        tableHtml += `<td class="fk-cell unresolved" title="Unresolved FK to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</td>`;
                     }
                 } else {
                     tableHtml += `<td>${this._escapeHtml(value)}</td>`;
@@ -524,6 +561,21 @@ export class SwatSingleTableViewerPanel {
                 margin-left: 4px;
                 font-size: 0.8em;
                 opacity: 0.7;
+            }
+            .file-pointer-indicator {
+                margin-left: 4px;
+                font-size: 0.8em;
+                opacity: 0.7;
+            }
+            .file-description {
+                padding: 12px 16px;
+                margin-bottom: 16px;
+                background-color: var(--vscode-textBlockQuote-background);
+                border-left: 4px solid var(--vscode-textLink-foreground);
+                border-radius: 4px;
+                color: var(--vscode-descriptionForeground);
+                font-size: 0.9em;
+                line-height: 1.5;
             }
             .empty-message, .truncated-message {
                 padding: 20px;
