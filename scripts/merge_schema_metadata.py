@@ -18,19 +18,60 @@ def merge_file_pointer_columns(existing: Dict, enhanced: Dict) -> Dict:
     # Start with existing file pointer columns
     merged = existing.get('file_pointer_columns', {}).copy()
     
+    # Get FK relationships for better descriptions
+    fk_relationships = enhanced.get('foreign_key_relationships', {})
+    
     # Add enhanced file pointer columns
     for file_name, columns in enhanced.get('file_pointer_columns', {}).items():
         if file_name not in merged:
+            # Build column descriptions from FK relationships if available
+            col_descriptions = {}
+            # FK relationships in enhanced schema are stored as lists directly
+            file_fks = fk_relationships.get(file_name, [])
+            if isinstance(file_fks, dict):
+                file_fks = file_fks.get('relationships', [])
+            
+            for col in columns:
+                # Try to find a better description from FK relationships
+                description = f"Points to {col} file"
+                for fk in file_fks:
+                    if fk.get('column') == col:
+                        target = fk.get('target_file', '')
+                        desc = fk.get('description', '')
+                        # Use the more specific description from markdown if available
+                        if desc:
+                            description = desc
+                        elif target:
+                            description = f"Points to {target}"
+                        break
+                col_descriptions[col] = description
+            
             merged[file_name] = {
                 "description": f"File pointer columns for {file_name}",
-                **{col: f"Points to {col} file" for col in columns}
+                **col_descriptions
             }
         else:
             # Merge with existing
             if isinstance(merged[file_name], dict):
+                file_fks = fk_relationships.get(file_name, [])
+                if isinstance(file_fks, dict):
+                    file_fks = file_fks.get('relationships', [])
+                    
                 for col in columns:
                     if col not in merged[file_name]:
-                        merged[file_name][col] = f"Points to {col} file"
+                        # Try to get description from FK relationships
+                        description = f"Points to {col} file"
+                        for fk in file_fks:
+                            if fk.get('column') == col:
+                                target = fk.get('target_file', '')
+                                desc = fk.get('description', '')
+                                # Use the more specific description from markdown if available
+                                if desc:
+                                    description = desc
+                                elif target:
+                                    description = f"Points to {target}"
+                                break
+                        merged[file_name][col] = description
             else:
                 # Convert old format to new format
                 merged[file_name] = {

@@ -18,6 +18,17 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 
 
+# Category headers to skip (not actual file names)
+CATEGORY_HEADERS = {
+    'Aquifers', 'Basin', 'Calibration', 'Channels', 'Climate',
+    'Connectivity', 'Constituents', 'Databases', 'Hydrologic Response Units',
+    'Hydrology', 'Landscape Units', 'Landuse And Management',
+    'Management Practices', 'Nutrient Initialization', 'Point Sources And Inlets',
+    'Reservoirs', 'Routing Units', 'Simulation Settings', 'Soils',
+    'Structural Practices', 'Water Allocation', 'Wetlands', 'Basin 1'
+}
+
+
 @dataclass
 class ColumnInfo:
     """Represents information about a column from markdown documentation."""
@@ -110,12 +121,7 @@ def parse_input_files_structure_md(md_path: Path) -> Dict[str, FileInfo]:
             file_header = line[3:].strip()
             
             # Skip category headers
-            if file_header in ['Aquifers', 'Basin', 'Calibration', 'Channels', 'Climate', 
-                              'Connectivity', 'Constituents', 'Databases', 'Hydrologic Response Units',
-                              'Hydrology', 'Landscape Units', 'Landuse And Management', 
-                              'Management Practices', 'Nutrient Initialization', 'Point Sources And Inlets',
-                              'Reservoirs', 'Routing Units', 'Simulation Settings', 'Soils',
-                              'Structural Practices', 'Water Allocation', 'Wetlands']:
+            if file_header in CATEGORY_HEADERS:
                 i += 1
                 continue
             

@@ -405,30 +405,30 @@
         "description": "Atmospheric deposition data file name",
         "file_pattern": "*.atmo"
       },
-      "wgn": "Points to wgn file"
+      "wgn": "Name of the weather generator station"
     },
     "aquifer.aqu": {
       "description": "File pointer columns for aquifer.aqu",
-      "aqu_init": "Points to aqu_init file"
+      "aqu_init": "Pointer to the aquifer initialization file"
     },
     "initial.aqu": {
       "description": "File pointer columns for initial.aqu",
-      "org_min": "Points to org_min file",
-      "pest": "Points to pest file",
+      "org_min": "Pointer to the organic-mineral initialization file",
+      "pest": "Pointer to the pesticide initialization file",
       "path": "Points to path file",
       "hmet": "Points to hmet file",
       "salt": "Points to salt file"
     },
     "channel-lte.cha": {
       "description": "File pointer columns for channel-lte.cha",
-      "ini": "Points to ini file",
-      "hyd": "Points to hyd file",
-      "nut": "Points to nut file"
+      "ini": "Pointer to the channel initialization file",
+      "hyd": "Pointer to the channel hydrology and sediment file",
+      "nut": "Pointer to the channel nutrient file"
     },
     "initial.cha": {
       "description": "File pointer columns for initial.cha",
-      "org_min": "Points to org_min file",
-      "pest": "Points to pest file",
+      "org_min": "Pointer to the organic-mineral initialization file",
+      "pest": "Pointer to the pesticide initialization file",
       "path": "Points to path file",
       "hmet": "Points to hmet file",
       "salt": "Points to salt file"
@@ -452,7 +452,7 @@
     "hru.con": {
       "description": "File pointer columns for hru.con",
       "hru": "Points to hru file",
-      "wst": "Points to wst file",
+      "wst": "Pointer to the weather station file",
       "cst": "Points to cst file",
       "ovfl": "Points to ovfl file",
       "rule": "Points to rule file"
@@ -483,39 +483,39 @@
     },
     "soil_plant.ini": {
       "description": "File pointer columns for soil_plant.ini",
-      "nutrients": "Points to nutrients file",
+      "nutrients": "Pointer to the nutrient initialization file",
       "pest": "Points to pest file",
       "salt": "Points to salt file"
     },
     "hru-data.hru": {
       "description": "File pointer columns for hru-data.hru",
-      "topo": "Points to topo file",
-      "hydro": "Points to hydro file",
-      "soil": "Points to soil file",
-      "lu_mgt": "Points to lu_mgt file",
+      "topo": "Pointer to the topography file",
+      "hydro": "Pointer to the hydrology file",
+      "soil": "Pointer to the soil file",
+      "lu_mgt": "Pointer to the land use and management file",
       "soil_plant_init": "Points to soil_plant_init file",
-      "surf_stor": "Points to surf_stor file",
-      "snow": "Points to snow file",
-      "field": "Points to field file"
+      "surf_stor": "Pointer to the wetland file",
+      "snow": "Pointer to the snow file",
+      "field": "Pointer to the field file"
     },
     "landuse.lum": {
       "description": "File pointer columns for landuse.lum",
-      "plnt_com": "Points to plnt_com file",
-      "mgt": "Points to mgt file",
-      "cn2": "Points to cn2 file",
-      "cons_prac": "Points to cons_prac file",
+      "plnt_com": "Pointer to the plant community file",
+      "mgt": "Pointer to the management schedule file",
+      "cn2": "Pointer to the Curve Number database",
+      "cons_prac": "Pointer to the conservation practice database",
       "urban": "Points to urban file",
-      "urb_ro": "Points to urb_ro file",
+      "urb_ro": "Urban runoff simulation option",
       "ov_mann": "Points to ov_mann file",
-      "tile": "Points to tile file",
-      "sep": "Points to sep file",
-      "vfs": "Points to vfs file",
-      "grww": "Points to grww file",
-      "bmp": "Points to bmp file"
+      "tile": "Pointer to the tile drain file",
+      "sep": "Pointer to the septic file",
+      "vfs": "Pointer to the filter strip file",
+      "grww": "Pointer to the grassed waterway file",
+      "bmp": "Pointer to the user BMP file"
     },
     "plant.ini": {
       "description": "File pointer columns for plant.ini",
-      "plnt_name": "Points to plnt_name file"
+      "plnt_name": "Plant name as in plant database"
     },
     "initial.res": {
       "description": "File pointer columns for initial.res",
@@ -533,21 +533,21 @@
     },
     "untitled": {
       "description": "File pointer columns for untitled",
-      "define": "Points to define file",
-      "topo": "Points to topo file",
-      "field": "Points to field file"
+      "define": "Pointer to the Routing Unit definition file",
+      "topo": "Pointer to the topography file",
+      "field": "Pointer to the field file"
     },
     "septic.str": {
       "description": "File pointer columns for septic.str",
-      "typ": "Points to typ file"
+      "typ": "Septic system type"
     },
     "wetland.wet": {
       "description": "File pointer columns for wetland.wet",
       "init​": "Points to init​ file",
       "hyd​": "Points to hyd​ file",
-      "rel": "Points to rel file",
-      "sed": "Points to sed file",
-      "nut": "Points to nut file"
+      "rel": "Pointer to the reservoir and wetland release decision table file",
+      "sed": "Pointer to the reservoir and wetland sediment file",
+      "nut": "Pointer to the reservoir and wetland nutrient file"
     }
   },
   "enhanced_from_markdown": true,
