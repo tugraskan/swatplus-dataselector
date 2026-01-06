@@ -285,9 +285,10 @@ export class SwatIndexer {
                     files.push(filename);
                     
                     // Check if this is a default/null value
-                    const isNullValue = filename.toLowerCase() === 'null' || 
+                    const filenameLower = filename.toLowerCase();
+                    const isNullValue = filenameLower === 'null' || 
                                        filename === '' || 
-                                       this.fkNullValues.includes(filename.toLowerCase());
+                                       this.fkNullValues.includes(filenameLower);
                     isDefault.push(isNullValue);
                     
                     if (!isNullValue && filename.includes('.')) {
