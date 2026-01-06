@@ -90,18 +90,23 @@ def filter_schema_for_txtinout(schema: Dict[str, Any]) -> Dict[str, Any]:
                         break
         
         # Update foreign keys - filter out references to removed columns
-        # Also update FK db_column to not include _id suffix for TxtInOut files
+        # For TxtInOut files, FK columns that reference "name" fields use the column name directly
+        # Foreign keys that originally referenced "id" should now reference "name"
         for fk in table_info.get("foreign_keys", []):
             fk_col = fk.get("column", "")
             # Only keep FKs where the source column still exists
             if any(col["name"] == fk_col for col in filtered_table["columns"]):
-                # For TxtInOut files, FK columns reference by name, not by id
+                # Update FK reference: if it was pointing to 'id', change to 'name'
+                target_col = fk["references"]["column"]
+                if target_col == "id":
+                    target_col = "name"
+                
                 filtered_fk = {
                     **fk,
-                    "db_column": fk_col,  # Not fk_col + "_id"
+                    "db_column": fk_col,  # TxtInOut: no "_id" suffix
                     "references": {
                         "table": fk["references"]["table"],
-                        "column": "name"  # TxtInOut files use name, not id
+                        "column": target_col  # Use 'name' if original was 'id'
                     }
                 }
                 filtered_table["foreign_keys"].append(filtered_fk)
@@ -109,8 +114,9 @@ def filter_schema_for_txtinout(schema: Dict[str, Any]) -> Dict[str, Any]:
         # Update FK column metadata
         for col in filtered_table["columns"]:
             if col.get("is_foreign_key") and col.get("fk_target"):
-                # Update fk_target to use 'name' instead of 'id'
-                col["fk_target"]["column"] = "name"
+                # Update fk_target: if it was pointing to 'id', change to 'name'
+                if col["fk_target"]["column"] == "id":
+                    col["fk_target"]["column"] = "name"
         
         filtered_schema["tables"][file_name] = filtered_table
     

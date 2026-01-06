@@ -84,7 +84,7 @@ def parse_model_file(file_path):
                     target_table = re.sub(r'(?<!^)(?=[A-Z])', '_', target_model).lower()
                     
                     # For TxtInOut files, FKs reference the 'name' column, not 'id'
-                    # Also, the db_column is just the field name, not field_name + "_id"
+                    # TxtInOut files use direct column names without _id suffix, unlike database schema
                     fk_info = {
                         "column": field_name,
                         "db_column": field_name,  # TxtInOut: no "_id" suffix

@@ -1646,6 +1646,8 @@ For each file type, the following information is provided:
 
 ## 11. Connectivity Files
 
+**Note**: Connectivity files (.con, .lin) are not part of the swatplus-editor database schema as they are pure configuration files. The schemas below are derived from SWAT+ documentation and may use integer sequence numbers to reference objects rather than string names. The exact structure may vary by SWAT+ version.
+
 ### hru.con (HRU Connectivity)
 
 **Purpose**: Connects HRUs to weather stations, aquifers, and outlet objects
