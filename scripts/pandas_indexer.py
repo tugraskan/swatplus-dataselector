@@ -52,7 +52,19 @@ def get_hierarchical_config(file_name: str, metadata: dict) -> Optional[dict]:
 
 def get_child_line_count(value_map: Dict[str, str], config: dict, file_name: str) -> int:
     """Determine the number of child lines for a hierarchical record."""
-    count_field = config.get("structure", {}).get("child_line_count_field")
+    structure = config.get("structure", {})
+    
+    # Check for fixed child line count first (e.g., weather-wgn.cli has 13 fixed lines)
+    fixed_count = structure.get("child_line_count_fixed")
+    if fixed_count is not None:
+        if fixed_count < 0:
+            return 0
+        if fixed_count > MAX_CHILD_LINES:
+            return MAX_CHILD_LINES
+        return fixed_count
+    
+    # Otherwise, check for dynamic child line count from a field
+    count_field = structure.get("child_line_count_field")
     
     if not count_field:
         return 0
@@ -211,10 +223,22 @@ def build_fk_references(
     
     # Get the default target column for TxtInOut FK references
     txtinout_target_column = metadata.get("txtinout_fk_behavior", {}).get("default_target_column", "name")
+    
+    # Get file pointer columns to skip (these point to files, not FK references)
+    file_name = file_path.name
+    file_pointer_config = metadata.get("file_pointer_columns", {}).get(file_name, {})
+    file_pointer_columns = set()
+    if isinstance(file_pointer_config, dict):
+        # Extract column names from the config (exclude the description key if present)
+        file_pointer_columns = {col for col in file_pointer_config.keys() if col != "description"}
 
     for fk in table.get("foreign_keys", []):
         column = fk.get("column")
         if not column or column not in df.columns:
+            continue
+        
+        # Skip file pointer columns (they point to files, not table rows)
+        if column in file_pointer_columns:
             continue
 
         column_values = df[column].astype(str)
