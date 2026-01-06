@@ -3385,7 +3385,7 @@
       "model_class": "project.climate.Weather_wgn_cli",
       "source_file": "project/climate.py",
       "has_metadata_line": true,
-      "has_header_line": true,
+      "has_header_line": false,
       "data_starts_after": 1,
       "columns": [
         {

@@ -229,6 +229,50 @@
         "child_line_count_field": null,
         "indexing_strategy": "Index main decision lines; skip action detail lines"
       }
+    },
+    "weather-wgn.cli": {
+      "description": "Weather generator parameters with main station record followed by 12 monthly data lines",
+      "structure": {
+        "main_record_format": "Main line contains station name, lat, lon, elev, and rain_yrs",
+        "child_line_format": "Following 13 lines total (1 header line + 12 monthly data lines, one per month)",
+        "main_record_identifier": "First data field is the station name (primary key)",
+        "child_line_count_field": null,
+        "child_line_count_fixed": 13,
+        "indexing_strategy": "Index only the main record line; skip 1 header line + 12 monthly data lines"
+      }
+    }
+  },
+  "file_pointer_columns": {
+    "description": "Columns that contain file names/paths rather than FK references to table rows",
+    "weather-sta.cli": {
+      "pcp": {
+        "description": "Precipitation data file name",
+        "file_pattern": "*.pcp"
+      },
+      "tmp": {
+        "description": "Temperature data file name",
+        "file_pattern": "*.tmp"
+      },
+      "slr": {
+        "description": "Solar radiation data file name",
+        "file_pattern": "*.slr"
+      },
+      "hmd": {
+        "description": "Humidity data file name",
+        "file_pattern": "*.hmd"
+      },
+      "wnd": {
+        "description": "Wind data file name",
+        "file_pattern": "*.wnd"
+      },
+      "wnd_dir": {
+        "description": "Wind direction data file name",
+        "file_pattern": "*.wnd"
+      },
+      "atmo_dep": {
+        "description": "Atmospheric deposition data file name",
+        "file_pattern": "*.atmo"
+      }
     }
   }
 }
