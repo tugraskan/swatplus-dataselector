@@ -232,6 +232,7 @@ def build_fk_references(
         # Extract column names from the config (exclude the description key if present)
         file_pointer_columns = {col for col in file_pointer_config.keys() if col != "description"}
 
+    # Process schema-defined foreign keys
     for fk in table.get("foreign_keys", []):
         column = fk.get("column")
         if not column or column not in df.columns:
@@ -254,10 +255,66 @@ def build_fk_references(
                     "sourceColumn": column,
                     "fkValue": str(row[column]),
                     "targetTable": fk["references"]["table"],
-                    "targetColumn": txtinout_target_column,  # Typically 'name' for TxtInOut files (configurable via metadata)
+                    "targetColumn": txtinout_target_column,
                     "resolved": False,
                 }
             )
+    
+    # Process markdown-derived FK relationships (enhanced schema)
+    # This provides additional FK information not captured in the database schema
+    md_fk_relationships = metadata.get("foreign_key_relationships", {}).get(file_name, {})
+    if isinstance(md_fk_relationships, dict):
+        md_fks = md_fk_relationships.get("relationships", [])
+        for md_fk in md_fks:
+            column = md_fk.get("column")
+            if not column or column not in df.columns:
+                continue
+            
+            # Skip if this column is a file pointer (not an FK to table rows)
+            if md_fk.get("is_pointer") and not md_fk.get("is_fk"):
+                continue
+            
+            # Skip if already processed by schema FK
+            already_processed = any(
+                ref["sourceColumn"] == column for ref in references
+            )
+            if already_processed:
+                continue
+            
+            # Extract target table from target_file
+            target_file = md_fk.get("target_file", "")
+            if not target_file:
+                continue
+            
+            # Try to resolve target file to table name
+            target_table = None
+            for table_name, file_mapping in metadata.get("table_name_to_file_name", {}).items():
+                if file_mapping == target_file:
+                    target_table = table_name
+                    break
+            
+            # If not found in mapping, use file name without extension as table name
+            if not target_table:
+                target_table = target_file.replace(".", "_").replace("-", "_")
+            
+            column_values = df[column].astype(str)
+            mask = ~column_values.str.lower().isin(null_set)
+            filtered = df.loc[mask, ["lineNumber", column]]
+
+            for _, row in filtered.iterrows():
+                references.append(
+                    {
+                        "sourceFile": str(file_path),
+                        "sourceTable": table["table_name"],
+                        "sourceLine": int(row["lineNumber"]),
+                        "sourceColumn": column,
+                        "fkValue": str(row[column]),
+                        "targetTable": target_table,
+                        "targetColumn": txtinout_target_column,
+                        "resolved": False,
+                        "from_markdown": True,  # Mark that this came from markdown docs
+                    }
+                )
 
     return references
 

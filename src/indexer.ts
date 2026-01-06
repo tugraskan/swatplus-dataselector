@@ -36,6 +36,19 @@ interface TxtInOutMetadata {
         description: string;
         [fileName: string]: HierarchicalFileConfig | string; // Config objects or description string
     };
+    file_pointer_columns?: { [fileName: string]: any };
+    file_metadata?: { 
+        [fileName: string]: {
+            description: string;
+            metadata_structure: string;
+            special_structure: boolean;
+            primary_keys: string[];
+        }
+    };
+    foreign_key_relationships?: { [fileName: string]: any };
+    enhanced_from_markdown?: boolean;
+    markdown_sources?: string[];
+    enhanced_schema_available?: boolean;
 }
 
 interface HierarchicalFileConfig {
@@ -115,6 +128,7 @@ export interface FKReference {
 export class SwatIndexer {
     private schema: Schema | null = null;
     private metadata: TxtInOutMetadata | null = null;
+    private gitbookUrls: { default_url: string; file_urls: { [fileName: string]: string } } | null = null;
     // Note: All index keys (pk_value) are stored in lowercase for case-insensitive FK resolution
     // This handles variations in casing (e.g., "HydCha01" vs "hydcha01") in SWAT+ files
     private index: Map<string, Map<string, IndexedRow>> = new Map(); // table -> pk_value (lowercase) -> row
@@ -129,6 +143,7 @@ export class SwatIndexer {
     constructor(private context: vscode.ExtensionContext) {
         this.loadSchema();
         this.loadMetadata();
+        this.loadGitbookUrls();
     }
 
     private loadSchema(): void {
@@ -191,6 +206,27 @@ export class SwatIndexer {
             }
         } catch (error) {
             console.log(`Failed to load TxtInOut metadata: ${error}`);
+        }
+    }
+
+    private loadGitbookUrls(): void {
+        try {
+            const urlsPath = path.join(
+                this.context.extensionPath,
+                'resources',
+                'schema',
+                'gitbook-urls.json'
+            );
+            
+            if (!fs.existsSync(urlsPath)) {
+                console.log('GitBook URLs file not found');
+                return;
+            }
+
+            const urlsContent = fs.readFileSync(urlsPath, 'utf-8');
+            this.gitbookUrls = JSON.parse(urlsContent);
+        } catch (error) {
+            console.log(`Failed to load GitBook URLs: ${error}`);
         }
     }
 
@@ -652,6 +688,17 @@ export class SwatIndexer {
      */
     public getMetadata(): TxtInOutMetadata | null {
         return this.metadata;
+    }
+
+    /**
+     * Get GitBook documentation URL for a file
+     */
+    public getGitbookUrl(fileName: string): string | null {
+        if (!this.gitbookUrls) {
+            return null;
+        }
+        
+        return this.gitbookUrls.file_urls[fileName] || this.gitbookUrls.default_url;
     }
 
     /**

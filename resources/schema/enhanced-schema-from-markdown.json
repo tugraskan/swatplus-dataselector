@@ -1,0 +1,970 @@
+{
+  "metadata_version": "2.0.0",
+  "description": "Enhanced metadata extracted from markdown documentation",
+  "source": "docs/schema/INPUT_FILES_STRUCTURE.md and SWAT_INPUT_FILE_STRUCTURE.md",
+  "generated_from_markdown": true,
+  "foreign_key_relationships": {
+    "aquifer.aqu": [
+      {
+        "column": "aqu_init",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "initial.aqu",
+        "description": "Pointer to the aquifer initialization file"
+      }
+    ],
+    "initial.aqu": [
+      {
+        "column": "org_min",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "om_water.ini",
+        "description": "Pointer to the organic-mineral initialization file"
+      },
+      {
+        "column": "pest",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "pest_water.ini",
+        "description": "Pointer to the pesticide initialization file"
+      }
+    ],
+    "channel-lte.cha": [
+      {
+        "column": "ini",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "initial.cha",
+        "description": "Pointer to the channel initialization file"
+      },
+      {
+        "column": "hyd",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "hyd-sed-lte.cha",
+        "description": "Pointer to the channel hydrology and sediment file"
+      },
+      {
+        "column": "nut",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "nutrients.cha",
+        "description": "Pointer to the channel nutrient file"
+      }
+    ],
+    "initial.cha": [
+      {
+        "column": "org_min",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "om_water.ini",
+        "description": "Pointer to the organic-mineral initialization file"
+      },
+      {
+        "column": "pest",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "pest_water.ini",
+        "description": "Pointer to the pesticide initialization file"
+      }
+    ],
+    "weather-sta.cli": [
+      {
+        "column": "wgn",
+        "is_fk": true,
+        "is_pointer": false,
+        "target_file": "weather-wgn.cli",
+        "description": "Name of the weather generator station"
+      },
+      {
+        "column": "pcp",
+        "is_fk": true,
+        "is_pointer": false,
+        "target_file": "pcp.cli",
+        "description": "Name of the precipitation station"
+      },
+      {
+        "column": "tmp",
+        "is_fk": true,
+        "is_pointer": false,
+        "target_file": "tmp.cli",
+        "description": "Name of the temperature station"
+      },
+      {
+        "column": "slr",
+        "is_fk": true,
+        "is_pointer": false,
+        "target_file": "slr.cli",
+        "description": "Name of the solar radiation station"
+      },
+      {
+        "column": "hmd",
+        "is_fk": true,
+        "is_pointer": false,
+        "target_file": "hmd.cli",
+        "description": "Name of the relative humidity station"
+      },
+      {
+        "column": "wnd",
+        "is_fk": true,
+        "is_pointer": false,
+        "target_file": "wnd.cli",
+        "description": "Name of the wind speed station"
+      }
+    ],
+    "hru.con": [
+      {
+        "column": "wst",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "weather-sta.cli",
+        "description": "Pointer to the weather station file"
+      }
+    ],
+    "soil_plant.ini": [
+      {
+        "column": "nutrients",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "nutrients.sol",
+        "description": "Pointer to the nutrient initialization file"
+      }
+    ],
+    "hru-data.hru": [
+      {
+        "column": "topo",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "topography.hyd",
+        "description": "Pointer to the topography file"
+      },
+      {
+        "column": "hydro",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "hydrology.hyd",
+        "description": "Pointer to the hydrology file"
+      },
+      {
+        "column": "soil",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "soils.sol",
+        "description": "Pointer to the soil file"
+      },
+      {
+        "column": "lu_mgt",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "landuse.lum",
+        "description": "Pointer to the land use and management file"
+      },
+      {
+        "column": "surf_stor",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "wetland.wet",
+        "description": "Pointer to the wetland file"
+      },
+      {
+        "column": "snow",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "snow.sno",
+        "description": "Pointer to the snow file"
+      },
+      {
+        "column": "field",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "field.fld",
+        "description": "Pointer to the field file"
+      }
+    ],
+    "landuse.lum": [
+      {
+        "column": "plnt_com",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "plant.ini",
+        "description": "Pointer to the plant community file"
+      },
+      {
+        "column": "mgt",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "management.sch",
+        "description": "Pointer to the management schedule file"
+      },
+      {
+        "column": "cn2",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "cntable.lum",
+        "description": "Pointer to the Curve Number database"
+      },
+      {
+        "column": "cons_prac",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "cons_practice.lum",
+        "description": "Pointer to the conservation practice database"
+      },
+      {
+        "column": "urb_ro",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "urban.urb",
+        "description": "Urban runoff simulation option"
+      },
+      {
+        "column": "tile",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "tiledrain.str",
+        "description": "Pointer to the tile drain file"
+      },
+      {
+        "column": "sep",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "septic.str",
+        "description": "Pointer to the septic file"
+      },
+      {
+        "column": "vfs",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "filterstrip.str",
+        "description": "Pointer to the filter strip file"
+      },
+      {
+        "column": "grww",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "grassedww.str",
+        "description": "Pointer to the grassed waterway file"
+      },
+      {
+        "column": "bmp",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "bmpuser.str",
+        "description": "Pointer to the user BMP file"
+      }
+    ],
+    "plant.ini": [
+      {
+        "column": "plnt_name",
+        "is_fk": true,
+        "is_pointer": false,
+        "target_file": "plants.plt",
+        "description": "Plant name as in plant database"
+      }
+    ],
+    "untitled": [
+      {
+        "column": "define",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "rout_unit.def",
+        "description": "Pointer to the Routing Unit definition file"
+      },
+      {
+        "column": "topo",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "topography.hyd",
+        "description": "Pointer to the topography file"
+      },
+      {
+        "column": "field",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "field.fld",
+        "description": "Pointer to the field file"
+      }
+    ],
+    "septic.str": [
+      {
+        "column": "typ",
+        "is_fk": true,
+        "is_pointer": false,
+        "target_file": "septic.sep",
+        "description": "Septic system type"
+      }
+    ],
+    "wetland.wet": [
+      {
+        "column": "rel",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "res_rel.dtl",
+        "description": "Pointer to the reservoir and wetland release decision table file"
+      },
+      {
+        "column": "sed",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "sediment.res",
+        "description": "Pointer to the reservoir and wetland sediment file"
+      },
+      {
+        "column": "nut",
+        "is_fk": true,
+        "is_pointer": true,
+        "target_file": "nutrients.res",
+        "description": "Pointer to the reservoir and wetland nutrient file"
+      }
+    ]
+  },
+  "file_pointer_columns": {
+    "aquifer.aqu": [
+      "aqu_init"
+    ],
+    "initial.aqu": [
+      "org_min",
+      "pest",
+      "path",
+      "hmet",
+      "salt"
+    ],
+    "channel-lte.cha": [
+      "ini",
+      "hyd",
+      "nut"
+    ],
+    "initial.cha": [
+      "org_min",
+      "pest",
+      "path",
+      "hmet",
+      "salt"
+    ],
+    "weather-sta.cli": [
+      "wgn",
+      "pcp",
+      "tmp",
+      "slr",
+      "hmd",
+      "wnd"
+    ],
+    "aquifer.con": [
+      "aqu",
+      "wst",
+      "cst",
+      "ovfl",
+      "rule"
+    ],
+    "chandeg.con": [
+      "lcha",
+      "wst",
+      "cst",
+      "ovfl",
+      "rule"
+    ],
+    "hru.con": [
+      "hru",
+      "wst",
+      "cst",
+      "ovfl",
+      "rule"
+    ],
+    "recall.con": [
+      "rec",
+      "wst",
+      "cst",
+      "ovfl",
+      "rule"
+    ],
+    "reservoir.con": [
+      "res",
+      "wst",
+      "cst",
+      "ovfl",
+      "rule"
+    ],
+    "rout_unit.con": [
+      "ru",
+      "wst",
+      "cst",
+      "ovfl",
+      "rule"
+    ],
+    "soil_plant.ini": [
+      "nutrients",
+      "pest",
+      "salt"
+    ],
+    "hru-data.hru": [
+      "topo",
+      "hydro",
+      "soil",
+      "lu_mgt",
+      "soil_plant_init",
+      "surf_stor",
+      "snow",
+      "field"
+    ],
+    "landuse.lum": [
+      "plnt_com",
+      "mgt",
+      "cn2",
+      "cons_prac",
+      "urban",
+      "urb_ro",
+      "ov_mann",
+      "tile",
+      "sep",
+      "vfs",
+      "grww",
+      "bmp"
+    ],
+    "plant.ini": [
+      "plnt_name"
+    ],
+    "initial.res": [
+      "org_min​",
+      "pest​",
+      "salt​"
+    ],
+    "reservoir.res": [
+      "init​",
+      "hyd​",
+      "rel​",
+      "sed​",
+      "nut​"
+    ],
+    "untitled": [
+      "define",
+      "topo",
+      "field"
+    ],
+    "septic.str": [
+      "typ"
+    ],
+    "wetland.wet": [
+      "init​",
+      "hyd​",
+      "rel",
+      "sed",
+      "nut"
+    ]
+  },
+  "file_metadata": {
+    "aquifer.aqu": {
+      "description": "This file contains the general physical and chemical aquifer properties.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "id"
+      ]
+    },
+    "initial.aqu": {
+      "description": ">-",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "codes.bsn": {
+      "description": "This file contains control codes for the simulation of basin-level processes.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": []
+    },
+    "parameters.bsn": {
+      "description": "This file contains basin-level parameters.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": []
+    },
+    "channel-lte.cha": {
+      "description": ">-",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "id"
+      ]
+    },
+    "hyd-sed-lte.cha": {
+      "description": "This file controls the channel hydrology and sediment properties.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "initial.cha": {
+      "description": ">-",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "nutrients.cha": {
+      "description": "This file controls the channel nutrient properties.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "atmo.cli": {
+      "description": "This file contains observed atmospheric deposition data.",
+      "metadata_structure": "Non-standard - first line is reserved for user comments. The second line contains the column headers for the third line, which lists basic information about the atmospheric deposition stations.",
+      "special_structure": true,
+      "primary_keys": []
+    },
+    "weather-sta.cli": {
+      "description": "This file lists the weather stations defined for a SWAT+ setup.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name",
+        "wgn"
+      ]
+    },
+    "weather-wgn.cli": {
+      "description": "This file contains weather generator data to be used for a SWAT+ setup.",
+      "metadata_structure": "Non-standard - second line for each weather generator station contains the headers for the following 12 lines, which list the weather generator data for each month of the year. An overview of the weather generator data variables is given in the second table below.",
+      "special_structure": true,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "aquifer.con": {
+      "description": "This file defines the aquifer connectivity.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": []
+    },
+    "chandeg.con": {
+      "description": "This file defines the channel connectivity.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": []
+    },
+    "hru.con": {
+      "description": "This file defines the connectivity of spatial objects.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "id"
+      ]
+    },
+    "recall.con": {
+      "description": "This file defines the recall connectivity.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": []
+    },
+    "reservoir.con": {
+      "description": "This file defines the reservoir connectivity.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": []
+    },
+    "rout_unit.con": {
+      "description": "This file defines the routing unit connectivity.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": []
+    },
+    "om_water.ini": {
+      "description": "",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": []
+    },
+    "soil_plant.ini": {
+      "description": ">-",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "fertilizer.frt": {
+      "description": ">-",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "pesticide.pes": {
+      "description": ">-",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "plants.plt": {
+      "description": ">-",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": []
+    },
+    "septic.sep": {
+      "description": ">-",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "tillage.til": {
+      "description": ">-",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "urban.urb": {
+      "description": ">-",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "hru-data.hru": {
+      "description": "This file contains pointers to several files that specify the HRU properties.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "id"
+      ]
+    },
+    "hru-lte.hru": {
+      "description": "",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "id"
+      ]
+    },
+    "field.fld": {
+      "description": "This file specifies the properties of representative fields.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "hydrology.hyd": {
+      "description": "This file defines the hydrological characteristics of the HRUs",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "snow.sno": {
+      "description": "This file controls the simulation of snowfall and snowmelt processes.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "topography.hyd": {
+      "description": ">-",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "ls_unit.def": {
+      "description": ">-",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": []
+    },
+    "ls_unit.ele": {
+      "description": "This file lists the HRUs that are elements in a Landscape Unit.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "id"
+      ]
+    },
+    "cntable.lum": {
+      "description": "This file lists typical Curve Number values for different land use types.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "cons_practice.lum": {
+      "description": ">-",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "landuse.lum": {
+      "description": ">-",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "lum.dtl": {
+      "description": "This file contains land use and management decision tables.",
+      "metadata_structure": "Non-standard - first line is reserved for a title. The second line in the file specifies the total number of decision tables included in the file.",
+      "special_structure": true,
+      "primary_keys": []
+    },
+    "management.sch": {
+      "description": "This file is used to schedule management operations.",
+      "metadata_structure": "Non-standard - first line for each management schedule specifies the name of the schedule and the number of scheduled and/or automatic operations. When using scheduled operations, it is followed by one line per operation listing operation-specific data.",
+      "special_structure": true,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "ovn_table.lum": {
+      "description": ">-",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name_ovn"
+      ]
+    },
+    "plant.ini": {
+      "description": "This file stores information about the plants growing in a plant community.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": true,
+      "primary_keys": [
+        "name",
+        "plnt_name"
+      ]
+    },
+    "chem_app.ops": {
+      "description": ">-",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "fire.ops": {
+      "description": "This file contains pre-defined burning/fire operations.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "graze.ops": {
+      "description": "This file contains pre-defined grazing operations.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "harv.ops": {
+      "description": "This file contains pre-defined harvest operations.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "irr.ops": {
+      "description": "This file contains pre-defined irrigation operations.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "sweep.ops": {
+      "description": "This file contains pre-defined street sweeping operations.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "hydrology.res": {
+      "description": "This file contains the reservoir hydrology parameters.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "initial.res": {
+      "description": ">-",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": []
+    },
+    "nutrients.res": {
+      "description": "This file contains the reservoir and wetland nutrient parameters.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": []
+    },
+    "reservoir.res": {
+      "description": ">-",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "id"
+      ]
+    },
+    "sediment.res": {
+      "description": "This file contains the reservoir and wetland sediment parameters.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "weir.res": {
+      "description": "This file contains the reservoir weir parameters.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "untitled": {
+      "description": ">-",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "id"
+      ]
+    },
+    "untitled-1": {
+      "description": "This file specifies which elements a Routing Unit contains.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "id"
+      ]
+    },
+    "untitled-2": {
+      "description": "This file lists all elements that are part of a Routing Unit.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": []
+    },
+    "object.prt": {
+      "description": ">-",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": []
+    },
+    "print.prt": {
+      "description": "This file controls which output files will be printed during the simulation.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": []
+    },
+    "time.sim": {
+      "description": "This file controls the simulation time period and time step.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": []
+    },
+    "nutrients.sol": {
+      "description": "This file specifies the initial soil nutrient contents.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "soils-lte.sol": {
+      "description": "This file contains the soil properties of HRU-ltes.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": []
+    },
+    "soils.sol": {
+      "description": "This file contains the physical soil properties.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": true,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "bmpuser.str": {
+      "description": "This file contains the user Best Management Practice parameters.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "filterstrip.str": {
+      "description": "This file contains the filter strip parameters.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "grassedww.str": {
+      "description": "This file contains the grassed waterway parameters.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "septic.str": {
+      "description": "This file contains the septic system parameters.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "tiledrain.str": {
+      "description": "This file contains the tile drainage parameters.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "water_allocation.wro": {
+      "description": "This file contains water allocation tables.",
+      "metadata_structure": "Non-standard - first line is reserved for a title. The second line in the file specifies the total number of water allocation tables included in the file.",
+      "special_structure": true,
+      "primary_keys": []
+    },
+    "hydrology.wet": {
+      "description": "This file contains the wetland hydrology parameters.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "wetland.wet": {
+      "description": ">-",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    }
+  }
+}

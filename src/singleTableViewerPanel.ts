@@ -254,7 +254,10 @@ export class SwatSingleTableViewerPanel {
         </head>
         <body>
             <div class="header">
-                <h1>${this.tableName}</h1>
+                <h1>
+                    ${this.tableName}
+                    ${this._getGitbookLink(fileName)}
+                </h1>
                 <div class="stats">
                     <span class="stat-item">File: <a href="#" onclick="openFileForTable('${this._escapeJs(this.tableName)}'); return false;" class="file-link" title="Click to open file">${fileName}</a></span>
                     <span class="stat-item">Rows: ${rowCount}</span>
@@ -278,32 +281,74 @@ export class SwatSingleTableViewerPanel {
 
         // Get columns from schema or first row
         let columns: string[] = [];
+        const columnMetadata = new Map<string, any>();
         if (schemaTable && schemaTable.columns) {
-            columns = schemaTable.columns.map((col: any) => col.name);
+            columns = schemaTable.columns.map((col: any) => {
+                columnMetadata.set(col.name, col);
+                return col.name;
+            });
         } else {
             columns = Object.keys(rows[0].values || {});
         }
 
-        // Get FK columns
-        const fkColumns = new Set<string>();
+        // Get FK columns and their targets
+        const fkColumns = new Map<string, any>();
         if (schemaTable && schemaTable.foreign_keys) {
             schemaTable.foreign_keys.forEach((fk: any) => {
-                fkColumns.add(fk.column);
+                fkColumns.set(fk.column, fk);
             });
         }
 
+        // Get file pointer columns from metadata
+        const metadata = this.indexer.getMetadata();
+        const fileName = this.indexer.getFileNameForTable(this.tableName);
+        const filePointers = metadata?.file_pointer_columns?.[fileName || ''] || {};
+        const fileMetadata = metadata?.file_metadata?.[fileName || ''];
+
+        // Add file description if available
+        let descriptionHtml = '';
+        if (fileMetadata && fileMetadata.description) {
+            descriptionHtml = `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
+        }
+
         let tableHtml = `
+            ${descriptionHtml}
             <div class="table-wrapper">
                 <table class="data-table">
                     <thead>
                         <tr>
                             <th class="line-col">Line</th>
-                            ${columns.map(col => `
-                                <th class="${fkColumns.has(col) ? 'fk-col' : ''}">
+                            ${columns.map(col => {
+                                const colMeta = columnMetadata.get(col);
+                                const fkInfo = fkColumns.get(col);
+                                const isFilePointer = typeof filePointers === 'object' && col in filePointers;
+                                
+                                // Build tooltip text
+                                let tooltip = col;
+                                if (colMeta) {
+                                    tooltip += `\nType: ${colMeta.type}`;
+                                    if (colMeta.nullable) {
+                                        tooltip += ' (nullable)';
+                                    }
+                                }
+                                if (fkInfo) {
+                                    tooltip += `\nForeign Key → ${fkInfo.references.table}`;
+                                }
+                                if (isFilePointer && typeof filePointers === 'object') {
+                                    const pointerDesc = filePointers[col];
+                                    if (pointerDesc && pointerDesc !== 'description') {
+                                        tooltip += `\n${pointerDesc}`;
+                                    }
+                                }
+                                
+                                return `
+                                <th class="${fkInfo ? 'fk-col' : ''}" title="${this._escapeHtml(tooltip)}">
                                     ${col}
-                                    ${fkColumns.has(col) ? '<span class="fk-indicator" title="Foreign Key">🔗</span>' : ''}
+                                    ${fkInfo ? '<span class="fk-indicator" title="Foreign Key">🔗</span>' : ''}
+                                    ${isFilePointer ? '<span class="file-pointer-indicator" title="File Pointer">📄</span>' : ''}
                                 </th>
-                            `).join('')}
+                            `;
+                            }).join('')}
                         </tr>
                     </thead>
                     <tbody>
@@ -315,23 +360,18 @@ export class SwatSingleTableViewerPanel {
             
             for (const col of columns) {
                 const value = row.values[col] || '';
-                const isFk = fkColumns.has(col);
+                const fkInfo = fkColumns.get(col);
                 
-                if (isFk && value) {
+                if (fkInfo && value) {
                     // Try to resolve FK
-                    const fkInfo = schemaTable.foreign_keys.find((fk: any) => fk.column === col);
-                    if (fkInfo) {
-                        const targetRow = this.indexer.resolveFKTarget(fkInfo.references.table, value);
-                        if (targetRow) {
-                            // Embed the FK row data as JSON in data attributes
-                            const fkRowDataJson = JSON.stringify(targetRow.values).replace(/"/g, '&quot;');
-                            const fileName = this.indexer.getFileNameForTable(fkInfo.references.table) || fkInfo.references.table;
-                            tableHtml += `<td class="fk-cell" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" onclick="toggleFKPeek(this, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" oncontextmenu="showFKContextMenu(event, '${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber}, '${this._escapeJs(fkInfo.references.table)}'); return false;" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
-                        } else {
-                            tableHtml += `<td class="fk-cell unresolved" title="Unresolved FK to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</td>`;
-                        }
+                    const targetRow = this.indexer.resolveFKTarget(fkInfo.references.table, value);
+                    if (targetRow) {
+                        // Embed the FK row data as JSON in data attributes
+                        const fkRowDataJson = JSON.stringify(targetRow.values).replace(/"/g, '&quot;');
+                        const fileName = this.indexer.getFileNameForTable(fkInfo.references.table) || fkInfo.references.table;
+                        tableHtml += `<td class="fk-cell" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" onclick="toggleFKPeek(this, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" oncontextmenu="showFKContextMenu(event, '${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber}, '${this._escapeJs(fkInfo.references.table)}'); return false;" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
                     } else {
-                        tableHtml += `<td>${this._escapeHtml(value)}</td>`;
+                        tableHtml += `<td class="fk-cell unresolved" title="Unresolved FK to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</td>`;
                     }
                 } else {
                     tableHtml += `<td>${this._escapeHtml(value)}</td>`;
@@ -367,6 +407,19 @@ export class SwatSingleTableViewerPanel {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
+    }
+
+    private _getGitbookLink(fileName: string): string {
+        const url = this.indexer.getGitbookUrl(fileName);
+        if (!url) {
+            return '';
+        }
+        
+        return `<a href="${this._escapeHtml(url)}" target="_blank" class="gitbook-link" title="View documentation on GitBook (Click or Ctrl+Right Click)">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: middle; margin-left: 8px;">
+                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+            </svg>
+        </a>`;
     }
 
     private _escapeJs(text: string): string {
@@ -458,6 +511,20 @@ export class SwatSingleTableViewerPanel {
                 margin: 0 0 10px 0;
                 font-size: 1.5em;
                 font-weight: 600;
+                display: flex;
+                align-items: center;
+            }
+            .gitbook-link {
+                color: var(--vscode-textLink-foreground);
+                text-decoration: none;
+                display: inline-flex;
+                align-items: center;
+                opacity: 0.7;
+                transition: opacity 0.2s;
+            }
+            .gitbook-link:hover {
+                opacity: 1;
+                color: var(--vscode-textLink-activeForeground);
             }
             .stats {
                 display: flex;
@@ -524,6 +591,21 @@ export class SwatSingleTableViewerPanel {
                 margin-left: 4px;
                 font-size: 0.8em;
                 opacity: 0.7;
+            }
+            .file-pointer-indicator {
+                margin-left: 4px;
+                font-size: 0.8em;
+                opacity: 0.7;
+            }
+            .file-description {
+                padding: 12px 16px;
+                margin-bottom: 16px;
+                background-color: var(--vscode-textBlockQuote-background);
+                border-left: 4px solid var(--vscode-textLink-foreground);
+                border-radius: 4px;
+                color: var(--vscode-descriptionForeground);
+                font-size: 0.9em;
+                line-height: 1.5;
             }
             .empty-message, .truncated-message {
                 padding: 20px;
