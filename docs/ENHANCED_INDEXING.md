@@ -20,19 +20,22 @@ The indexing system **requires** a pandas-backed indexer with several advantages
 
 ### 1. file.cio Master File Indexing
 
-The indexer now parses `file.cio` first before indexing other files. This is critical because:
+The indexer now parses `file.cio` with proper classification-based indexing. This is critical because:
 
+- **Classification as Primary Key**: Each line represents a classification category with its associated files
 - **Handles Custom File Names**: If users rename input files, file.cio contains the actual filenames being used
+- **Default Value Detection**: Detects when files use default values ('null') vs. customized values
 - **Provides File Discovery**: The master file lists all input files that should be indexed
 - **Prioritized Indexing**: file.cio is always processed first to establish the file reference map
 - **Go-to-Definition Support**: Clicking on filenames in file.cio opens the referenced file
 
 **How it works**:
 1. When building the index, `file.cio` is parsed first
-2. All file references are extracted and stored
-3. file.cio is then indexed as a regular table
-4. Other tables are indexed in their normal order
-5. Special navigation support added for file.cio (works without header line)
+2. Each classification is indexed with its array of file references
+3. The system tracks which files are 'null' (default) vs. actual filenames
+4. file.cio is indexed as a regular table with classification as the primary key
+5. Other tables are indexed in their normal order
+6. Special navigation support added for file.cio (works without header line)
 
 **Navigation in file.cio**:
 - **Ctrl+Click** on any filename in file.cio to open that file (works on any line after the title line)
@@ -45,22 +48,30 @@ Title: Master SWAT+ Input Files
 simulation    time.sim    print.prt    object.prt    object.cnt
 basin         codes.bsn    parameters.bsn
 climate       weather-sta.cli    weather-wgn.cli
-connect       hru.con    hru-lte.con    rout_unit.con    aquifer.con
-hru           hru-data.hru
+landuse       landuse.lum    management.sch    cntable.lum    null
+reservoir     null    null    null
 ...
 ```
 
 - Line 0: Title/description (metadata line)
 - Line 1+: classification_name  file1  file2  file3  ...
-- Column 0 is the classification name, columns 1+ are filenames
+- Column 0 is the classification name (primary key), columns 1+ are filenames
+- Files can be actual filenames or 'null' if not used for this simulation
 
 **API**:
 ```typescript
-// Get all file references from file.cio
-const fileRefs = indexer.getFileCioReferences();
+// Get all classification data from file.cio
+const fileCioData = indexer.getFileCioData();
 
-// Check if a specific file is referenced
+// Get file references for a specific classification
+const simulationData = indexer.getFileCioClassification('simulation');
+// Returns: { files: ['time.sim', 'print.prt', ...], isDefault: [false, false, ...] }
+
+// Check if a specific file is referenced (in any classification)
 const isReferenced = indexer.isFileReferencedInCio('hru-data.hru');
+
+// Get all active file references (excludes null/default values)
+const activeFiles = indexer.getAllFileCioReferences();
 ```
 
 ### 2. Documentation-Driven Metadata
