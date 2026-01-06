@@ -2,7 +2,7 @@
 """
 Parse GitBook URL mappings from INPUT_FILES_GITBOOK_URLS.md.
 
-Extracts the JSON mapping of file names to GitBook documentation URLs.
+Extracts the table mapping of file names to GitBook documentation URLs.
 """
 
 import json
@@ -10,9 +10,9 @@ import re
 from pathlib import Path
 
 
-def parse_gitbook_urls(md_path: Path) -> dict:
+def parse_gitbook_urls_table(md_path: Path) -> dict:
     """
-    Parse the markdown file to extract the JSON URL mapping.
+    Parse the markdown file to extract the table URL mapping.
     
     Returns:
         Dictionary mapping file names to GitBook URLs
@@ -20,22 +20,21 @@ def parse_gitbook_urls(md_path: Path) -> dict:
     with open(md_path, 'r', encoding='utf-8') as f:
         content = f.read()
     
-    # Extract JSON block from markdown
-    # Look for ```json ... ``` blocks
-    json_pattern = r'```json\s*\n(.*?)\n```'
-    matches = re.findall(json_pattern, content, re.DOTALL)
+    # Extract table data using regex
+    # Pattern: | `filename` | Category | [URL](actual_url) |
+    pattern = r'\| `([^`]+)` \| ([^|]+) \| \[https://[^\]]+\]\((https://[^)]+)\) \|'
+    matches = re.findall(pattern, content)
     
-    if not matches:
-        print("Warning: No JSON block found in markdown file")
-        return {}
+    # Build a mapping of filename to URL
+    url_map = {}
+    for filename, category, url in matches:
+        # Only keep actual file entries (not category headers)
+        # Files should have extensions or be special cases like 'file.cio'
+        if '.' in filename or filename in ['file.cio']:
+            if filename not in url_map:  # Keep first occurrence
+                url_map[filename] = url
     
-    # Parse the first JSON block (the main mapping)
-    try:
-        url_mapping = json.loads(matches[0])
-        return url_mapping
-    except json.JSONDecodeError as e:
-        print(f"Error parsing JSON: {e}")
-        return {}
+    return url_map
 
 
 def get_default_url(md_path: Path) -> str:
@@ -45,18 +44,8 @@ def get_default_url(md_path: Path) -> str:
     Returns:
         Default GitBook URL
     """
-    with open(md_path, 'r', encoding='utf-8') as f:
-        content = f.read()
-    
-    # Look for the default URL in the "Default URL" section
-    default_pattern = r'For files without specific documentation:\s*```\s*\n(https://[^\n]+)\s*\n```'
-    match = re.search(default_pattern, content)
-    
-    if match:
-        return match.group(1)
-    
-    # Fallback default
-    return "https://swatplus.gitbook.io/docs/"
+    # Default URL for SWAT+ I/O documentation
+    return "https://swatplus.gitbook.io/io-docs/introduction-1/"
 
 
 def generate_url_json(output_path: Path):
@@ -71,7 +60,7 @@ def generate_url_json(output_path: Path):
         return False
     
     # Parse the markdown file
-    url_mapping = parse_gitbook_urls(md_path)
+    url_mapping = parse_gitbook_urls_table(md_path)
     default_url = get_default_url(md_path)
     
     # Create output structure
