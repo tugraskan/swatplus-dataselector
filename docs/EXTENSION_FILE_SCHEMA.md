@@ -2,6 +2,18 @@
 
 This document provides detailed schema information for SWAT+ TxtInOut input files to support building a relational database-like index for navigation and validation in a VSCode extension.
 
+## Important Note on Schema vs Database
+
+**The schemas in this document describe the actual TxtInOut file structure, NOT the database structure.**
+
+Key differences between TxtInOut files and the swatplus-editor database:
+- **No `id` column**: TxtInOut files do not have auto-generated integer ID columns. The database adds these, but they don't exist in the files.
+- **Primary keys**: Files typically use `name` as the primary key, not `id`.
+- **Foreign key references**: In files, foreign keys reference the `name` column of the target file, not an `id` column.
+- **Column names**: FK columns in files are named directly (e.g., `topo`), not with `_id` suffix (e.g., `topo_id`).
+
+When you see references to `id` columns or `id`-based foreign keys in older documentation, these refer to the database schema, not the actual file structure.
+
 ## Document Structure
 
 For each file type, the following information is provided:
@@ -275,7 +287,7 @@ For each file type, the following information is provided:
 - Header line: Line 2
 - Data starts: Line 3
 
-**Primary Key**: `id`, `name`
+**Primary Key**: `name`
 
 **Foreign Keys**:
 | Column | References | Target PK |
@@ -293,7 +305,6 @@ For each file type, the following information is provided:
 **Schema**:
 | Column | Type | Description | FK Reference |
 |--------|------|-------------|--------------|
-| id | integer | HRU ID (PK) | - |
 | name | string | HRU name (PK) | - |
 | topo | string | Topography file pointer | topography.hyd:name |
 | hydro | string | Hydrology file pointer | hydrology.hyd:name |
@@ -315,7 +326,7 @@ For each file type, the following information is provided:
 - Header line: Line 2
 - Data starts: Line 3
 
-**Primary Key**: `id`, `name`
+**Primary Key**: `name`
 
 **Foreign Keys**: None (self-contained)
 
@@ -332,7 +343,7 @@ For each file type, the following information is provided:
 - Header line: Line 2
 - Data starts: Line 3
 
-**Primary Key**: `id`, `name`
+**Primary Key**: `name`
 
 **Foreign Keys**:
 | Column | References | Target PK |
@@ -346,7 +357,6 @@ For each file type, the following information is provided:
 **Schema**:
 | Column | Type | Description | FK Reference |
 |--------|------|-------------|--------------|
-| id | integer | Routing unit ID (PK) | - |
 | name | string | Routing unit name (PK) | - |
 | define | string | Definition file pointer | rout_unit.def:name |
 | topo | string | Topography pointer | topography.hyd:name |
@@ -363,7 +373,7 @@ For each file type, the following information is provided:
 - Header line: Line 2
 - Data starts: Line 3
 
-**Primary Key**: `id`, `name`
+**Primary Key**: `name`
 
 **Foreign Keys**:
 | Column | References | Target PK |
@@ -373,7 +383,6 @@ For each file type, the following information is provided:
 **Schema**:
 | Column | Type | Description | FK Reference |
 |--------|------|-------------|--------------|
-| id | integer | Definition ID (PK) | - |
 | name | string | Definition name (PK) | - |
 | elem_tot | integer | Total number of elements | - |
 | elements | string | Elements file pointer | rout_unit.ele:name |
@@ -389,7 +398,7 @@ For each file type, the following information is provided:
 - Header line: Line 2
 - Data starts: Line 3
 
-**Primary Key**: `id`, `name`
+**Primary Key**: `name`
 
 **Foreign Keys**:
 | Column | References | Target PK |
@@ -399,10 +408,9 @@ For each file type, the following information is provided:
 **Schema**:
 | Column | Type | Description | FK Reference |
 |--------|------|-------------|--------------|
-| id | integer | Element ID (PK) | - |
 | name | string | Element name (PK) | - |
 | obj_typ | string | Object type (hru, cha, etc.) | Object type |
-| obj_id | integer | Object ID | Object file:id |
+| obj_id | integer | Object ID | Object file:name |
 
 ---
 
@@ -412,7 +420,7 @@ For each file type, the following information is provided:
 
 **File Format**: Same as rout_unit.def/ele
 
-**Primary Key**: `id`, `name`
+**Primary Key**: `name`
 
 **Foreign Keys**: Same pattern as routing units
 
@@ -1128,7 +1136,7 @@ For each file type, the following information is provided:
 - Header line: Line 2
 - Data starts: Line 3
 
-**Primary Key**: `id`, `name`
+**Primary Key**: `name`
 
 **Foreign Keys**:
 | Column | References | Target PK |
@@ -1140,7 +1148,6 @@ For each file type, the following information is provided:
 **Schema**:
 | Column | Type | Description | FK Reference |
 |--------|------|-------------|--------------|
-| id | integer | Aquifer ID (PK) | - |
 | name | string | Aquifer name (PK) | - |
 | aqu_init | string | Initialization file pointer | initial.aqu:name |
 | gw_flo | real | Initial groundwater flow (mm) | - |
@@ -1204,7 +1211,7 @@ For each file type, the following information is provided:
 - Header line: Line 2
 - Data starts: Line 3
 
-**Primary Key**: `id`, `name`
+**Primary Key**: `name`
 
 **Foreign Keys**:
 | Column | References | Target PK |
@@ -1219,7 +1226,6 @@ For each file type, the following information is provided:
 **Schema**:
 | Column | Type | Description | FK Reference |
 |--------|------|-------------|--------------|
-| id | integer | Channel ID (PK) | - |
 | name | string | Channel name (PK) | - |
 | init | string | Initialization pointer | initial.cha:name |
 | hyd | string | Hydrology pointer | hydrology.cha:name |
@@ -1310,7 +1316,7 @@ For each file type, the following information is provided:
 - Header line: Line 2
 - Data starts: Line 3
 
-**Primary Key**: `id`, `name`
+**Primary Key**: `name`
 
 **Foreign Keys**:
 | Column | References | Target PK |
@@ -1326,7 +1332,6 @@ For each file type, the following information is provided:
 **Schema**:
 | Column | Type | Description | FK Reference |
 |--------|------|-------------|--------------|
-| id | integer | Reservoir ID (PK) | - |
 | name | string | Reservoir name (PK) | - |
 | init | string | Initialization pointer | initial.res:name |
 | hyd | string | Hydrology pointer | hydrology.res:name |
@@ -1443,7 +1448,7 @@ For each file type, the following information is provided:
 - Header line: Line 2
 - Data starts: Line 3
 
-**Primary Key**: `id`, `name`
+**Primary Key**: `name`
 
 **Foreign Keys**: Similar to reservoir.res (init, hyd, rel, sed, nut pointers)
 
@@ -1650,7 +1655,7 @@ For each file type, the following information is provided:
 - Header line: Line 2
 - Data starts: Line 3
 
-**Primary Key**: `id`
+**Primary Key**: `name` (when present), otherwise row number
 
 **Foreign Keys**:
 | Column | References | Target PK |
@@ -1666,21 +1671,20 @@ For each file type, the following information is provided:
 **Schema**:
 | Column | Type | Description | FK Reference |
 |--------|------|-------------|--------------|
-| id | integer | Connection ID (PK) | - |
 | name | string | HRU name (optional FK) | hru-data.hru:name |
 | gis_id | integer | GIS identifier | - |
 | area | real | Area (ha) | - |
 | lat | real | Latitude | - |
 | lon | real | Longitude | - |
 | elev | real | Elevation (m) | - |
-| hru | integer | HRU object number | hru-data.hru:id |
+| hru | integer | HRU object number | hru-data.hru:name |
 | wst | string | Weather station | weather-sta.cli:name |
 | cst | string | Constituents | constituents.cs:name |
 | ovfl | integer | Overflow land object | - |
 | rule | string | Decision table | - |
 | out_tot | integer | Number of outlets | - |
 | obj_typ | string | Outlet object type (cha, aqu, res, etc.) | Object type |
-| obj_id | integer | Outlet object ID | Object file:id |
+| obj_id | integer | Outlet object ID | Object file:name |
 | hyd_typ | string | Hydrograph type | - |
 | frac | real | Flow fraction | - |
 
@@ -1695,7 +1699,7 @@ For each file type, the following information is provided:
 - Header line: Line 2
 - Data starts: Line 3
 
-**Primary Key**: `id`
+**Primary Key**: Row sequence (implicit)
 
 **Foreign Keys**:
 | Column | References | Target PK |
@@ -1716,7 +1720,7 @@ For each file type, the following information is provided:
 - Header line: Line 2
 - Data starts: Line 3
 
-**Primary Key**: `id`
+**Primary Key**: Row sequence (implicit)
 
 **Foreign Keys**:
 | Column | References | Target PK |
@@ -1737,7 +1741,7 @@ For each file type, the following information is provided:
 - Header line: Line 2
 - Data starts: Line 3
 
-**Primary Key**: `id`
+**Primary Key**: Row sequence (implicit)
 
 **Foreign Keys**:
 | Column | References | Target PK |
@@ -1758,7 +1762,7 @@ For each file type, the following information is provided:
 - Header line: Line 2
 - Data starts: Line 3
 
-**Primary Key**: `id`
+**Primary Key**: Row sequence (implicit)
 
 **Foreign Keys**: Similar to reservoir.con
 
@@ -1773,7 +1777,7 @@ For each file type, the following information is provided:
 - Header line: Line 2
 - Data starts: Line 3
 
-**Primary Key**: `id`
+**Primary Key**: Row sequence (implicit)
 
 **Foreign Keys**:
 | Column | References | Target PK |
@@ -1803,8 +1807,8 @@ For each file type, the following information is provided:
 **Schema**:
 | Column | Type | Description | FK Reference |
 |--------|------|-------------|--------------|
-| aqu_id | integer | Aquifer ID | aquifer.aqu:id |
-| cha_id | integer | Channel ID | channel.cha:id |
+| aqu_id | integer | Aquifer ID | aquifer.aqu:name |
+| cha_id | integer | Channel ID | channel.cha:name |
 | frac | real | Flow fraction | - |
 
 ---
@@ -1854,7 +1858,7 @@ For each file type, the following information is provided:
 - Header line: Line 2
 - Data starts: Line 3
 
-**Primary Key**: `id`
+**Primary Key**: `name`
 
 **Foreign Keys**:
 | Column | References | Target PK |
@@ -1864,9 +1868,8 @@ For each file type, the following information is provided:
 **Schema**:
 | Column | Type | Description | FK Reference |
 |--------|------|-------------|--------------|
-| id | integer | Recall point ID (PK) | - |
-| rec_typ | string | Recall type (point source, inlet, etc.) | - |
-| file | string | Time series data file | Data file |
+| name | string | Recall point name (PK) | - |
+| rec_typ | integer | Recall type code | - |
 
 ---
 
@@ -2071,14 +2074,14 @@ Line 3+: Data rows
    - Finally configuration files
 
 2. **Primary Key Extraction**:
-   - Most files: `id` and/or `name` column
-   - Connectivity files: `id` only
+   - Most files: `name` column
+   - Some connectivity/config files may not have explicit PKs (use row number/sequence)
    - Configuration files: may not have PK
 
 3. **Foreign Key Resolution**:
-   - String FKs: Look up by name in target file
-   - Integer FKs: Look up by id in target file
+   - All FKs: Look up by name in target file (TxtInOut files use name-based references)
    - Composite FKs: obj_typ + obj_id requires dynamic lookup based on obj_typ
+   - Note: Database uses integer IDs, but TxtInOut files use string names
 
 4. **Null Handling**:
    - Check for "null", blank, empty string
