@@ -14,7 +14,9 @@ The pandas indexer has been significantly enhanced with the following capabiliti
    - `soils.sol`: Main record detection using non-numeric name field validation
    - `plant.ini`: Child line count based on `plnt_cnt` field
    - `management.sch`: Child line count based on `numb_auto + numb_ops` fields
+   - `weather-wgn.cli`: Fixed child line count of 13 (1 header + 12 monthly data lines)
    - Automatic skipping of child lines to avoid duplicate indexing
+   - Support for both dynamic (`child_line_count_field`) and fixed (`child_line_count_fixed`) child line counts
 
 2. **Decision Table Parsing**
    - Full parser for `*.dtl` files with complex condition-action structures
@@ -30,6 +32,7 @@ The pandas indexer has been significantly enhanced with the following capabiliti
    - Use of TxtInOut-specific target column (defaults to 'name' instead of 'id')
    - Metadata-driven configuration of FK behavior
    - Vectorized null value filtering using pandas operations
+   - **File Pointer Column Support**: Skips columns that point to files (e.g., `pcp`, `tmp`, `slr`, `hmd`, `wnd` in `weather-sta.cli`) rather than FK references to table rows
 
 ### Documentation Updates
 
@@ -84,7 +87,10 @@ Potential future improvements:
 
 ## Files Modified
 
-- `scripts/pandas_indexer.py` - Enhanced with hierarchical and decision table support
+- `scripts/pandas_indexer.py` - Enhanced with hierarchical and decision table support, file pointer column handling
+- `resources/schema/txtinout-metadata.json` - Added file_pointer_columns configuration for climate files and weather-wgn.cli hierarchical structure
+- `resources/schema/swatplus-editor-schema.json` - Fixed weather-wgn.cli schema (has_header_line: false)
+- `resources/schema/swatplus-editor-schema-full.json` - Fixed weather-wgn.cli schema (has_header_line: false)
 - `.gitignore` - Added Python cache file patterns
 - `README.md` - Updated feature list
 - `scripts/README.md` - Expanded pandas indexer documentation
