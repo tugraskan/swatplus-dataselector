@@ -469,7 +469,7 @@ export class SwatIndexer {
             cancellable: true
         }, async (progress, token) => {
             // Use pandas-backed indexing (required)
-            progress.report({ message: 'Indexing files...', increment: 0 });
+            progress.report({ message: 'Indexing files...', increment: 10 });
             const pandasResult = this.buildIndexWithPandas(datasetPath);
             if (!pandasResult.success) {
                 const errorDetail = pandasResult.error || 'Unknown error';
@@ -482,10 +482,10 @@ export class SwatIndexer {
 
             // Parse file.cio after pandas indexing to add it to the index
             // file.cio has a special classification-based format handled separately
-            progress.report({ message: 'Parsing file.cio...', increment: 0 });
+            progress.report({ message: 'Parsing file.cio...', increment: 70 });
             this.parseFileCio();
 
-            progress.report({ message: 'Resolving foreign key references...' });
+            progress.report({ message: 'Resolving foreign key references...', increment: 20 });
             this.resolveFKReferences();
 
             vscode.window.showInformationMessage(
