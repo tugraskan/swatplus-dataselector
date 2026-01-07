@@ -236,6 +236,10 @@ export class SwatIndexer {
      * Parse file.cio to extract file references organized by classification
      * Format: classification_name  file1  file2  file3  ...
      * where files can be actual filenames or 'null' if not used
+     * 
+     * The data is stored in two ways:
+     * 1. fileCioData: classification-based structure for API access
+     * 2. index: schema-based structure (one row per file) for table viewer
      */
     private parseFileCio(): void {
         this.fileCioData.clear();
@@ -260,6 +264,14 @@ export class SwatIndexer {
             // Column 0 is classification name, columns 1+ are filenames
             
             let totalFileReferences = 0;
+            let rowId = 1; // Auto-incrementing ID for schema compatibility
+            
+            // Ensure file_cio table exists in index
+            const tableName = 'file_cio';
+            if (!this.index.has(tableName)) {
+                this.index.set(tableName, new Map());
+            }
+            const tableIndex = this.index.get(tableName)!;
             
             for (let i = 1; i < lines.length; i++) {
                 const line = lines[i].trim();
@@ -294,33 +306,32 @@ export class SwatIndexer {
                     if (!isNullValue && filename.includes('.')) {
                         totalFileReferences++;
                     }
+                    
+                    // Create a row for each file in schema format
+                    // This allows the table viewer to display the data correctly
+                    const indexedRow: IndexedRow = {
+                        file: 'file.cio',
+                        tableName: tableName,
+                        lineNumber: i + 1,
+                        pkValue: `${rowId}`, // Use rowId as PK for uniqueness
+                        values: {
+                            id: `${rowId}`,
+                            classification: classification,
+                            order_in_class: `${j}`, // Position within classification
+                            file_name: filename,
+                            customization: '0' // Default value, could be enhanced later
+                        }
+                    };
+                    
+                    tableIndex.set(`${rowId}`, indexedRow);
+                    rowId++;
                 }
                 
-                // Store the classification data
+                // Store the classification data for API access
                 this.fileCioData.set(classification.toLowerCase(), { files, isDefault });
-                
-                // Also index this as a regular row for standard FK navigation
-                const tableName = 'file_cio';
-                if (!this.index.has(tableName)) {
-                    this.index.set(tableName, new Map());
-                }
-                
-                const tableIndex = this.index.get(tableName)!;
-                const indexedRow: IndexedRow = {
-                    file: 'file.cio',
-                    tableName: tableName,
-                    lineNumber: i + 1,
-                    pkValue: classification,
-                    values: {
-                        classification: classification,
-                        files: files.join(' ')
-                    }
-                };
-                
-                tableIndex.set(classification.toLowerCase(), indexedRow);
             }
             
-            console.log(`Parsed file.cio: ${this.fileCioData.size} classifications, ${totalFileReferences} file references found`);
+            console.log(`Parsed file.cio: ${this.fileCioData.size} classifications, ${totalFileReferences} file references found, ${rowId - 1} rows indexed`);
         } catch (error) {
             console.error(`Error parsing file.cio: ${error}`);
         }
