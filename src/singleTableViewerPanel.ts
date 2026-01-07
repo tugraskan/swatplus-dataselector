@@ -545,22 +545,22 @@ export class SwatSingleTableViewerPanel {
                         </span>
                     </div>
                     <div class="classification-content">
-                        <div class="classification-files-row">
+                        <div class="classification-files-vertical">
             `;
 
-            // Build horizontal file list
+            // Build vertical file list with file names as headers
             for (const row of classRows) {
                 const fileName = row.values.file_name || '';
                 const isNull = !fileName || fileName === 'null' || !fileName.includes('.');
                 
                 if (isNull) {
-                    html += `<span class="file-item null-value">${this._escapeHtml(fileName)}</span>`;
+                    html += `<div class="file-item-row null-value">${this._escapeHtml(fileName)}</div>`;
                 } else {
                     // Check if file can be opened (is indexed)
                     const canOpen = this.canOpenFile(fileName);
                     const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
                     const title = canOpen ? `Click to open ${this._escapeHtml(fileName)}` : `${this._escapeHtml(fileName)} - Not indexed (may not exist in dataset)`;
-                    html += `<span class="file-item"><a href="#" onclick="openFileByName('${this._escapeJs(fileName)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(fileName)}</a></span>`;
+                    html += `<div class="file-item-row"><a href="#" onclick="openFileByName('${this._escapeJs(fileName)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(fileName)}</a></div>`;
                 }
             }
 
@@ -840,29 +840,28 @@ export class SwatSingleTableViewerPanel {
                 overflow: hidden;
                 padding: 0;
             }
-            .classification-files-row {
+            .classification-files-vertical {
                 display: flex;
-                flex-wrap: wrap;
-                gap: 8px;
-                align-items: center;
+                flex-direction: column;
+                gap: 4px;
             }
-            .file-item {
-                display: inline-block;
-                padding: 4px 8px;
+            .file-item-row {
+                padding: 6px 8px;
                 background-color: var(--vscode-editor-background);
                 border: 1px solid var(--vscode-panel-border);
                 border-radius: 3px;
             }
-            .file-item.null-value {
+            .file-item-row.null-value {
                 font-style: italic;
                 color: var(--vscode-descriptionForeground);
                 opacity: 0.5;
             }
-            .file-item a.file-link {
+            .file-item-row a.file-link {
                 color: var(--vscode-textLink-foreground);
                 text-decoration: none;
+                display: block;
             }
-            .file-item a.file-link:hover {
+            .file-item-row a.file-link:hover {
                 text-decoration: underline;
                 color: var(--vscode-textLink-activeForeground);
             }

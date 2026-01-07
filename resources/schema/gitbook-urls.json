@@ -3,6 +3,7 @@
   "source": "docs/schema/INPUT_FILES_GITBOOK_URLS.md",
   "default_url": "https://swatplus.gitbook.io/io-docs/introduction-1/",
   "file_urls": {
+    "file.cio": "https://swatplus.gitbook.io/io-docs/introduction-1/master-file-file.cio",
     "aquifer.aqu": "https://swatplus.gitbook.io/io-docs/introduction-1/aquifers/aquifer.aqu",
     "aquifer.con": "https://swatplus.gitbook.io/io-docs/introduction-1/connectivity/aquifer.con",
     "atmo.cli": "https://swatplus.gitbook.io/io-docs/introduction-1/climate/atmo.cli",
