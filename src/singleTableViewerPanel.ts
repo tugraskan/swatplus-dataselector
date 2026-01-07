@@ -301,6 +301,11 @@ export class SwatSingleTableViewerPanel {
             return '<p class="empty-message">No data</p>';
         }
 
+        // Special rendering for file.cio - use classification-based sub-table view
+        if (this.tableName === 'file_cio') {
+            return this._getFileCioSubTableHtml(rows);
+        }
+
         // Get columns from schema or first row
         let columns: string[] = [];
         const columnMetadata = new Map<string, any>();
@@ -424,6 +429,104 @@ export class SwatSingleTableViewerPanel {
         `;
 
         return tableHtml;
+    }
+
+    private _getFileCioSubTableHtml(rows: any[]): string {
+        // Group rows by classification
+        const classificationGroups = new Map<string, any[]>();
+        
+        for (const row of rows) {
+            const classification = row.values.classification || '';
+            if (!classificationGroups.has(classification)) {
+                classificationGroups.set(classification, []);
+            }
+            classificationGroups.get(classification)!.push(row);
+        }
+
+        // Sort classifications by their first appearance (line number)
+        const sortedClassifications = Array.from(classificationGroups.entries())
+            .sort((a, b) => {
+                const aLine = a[1][0]?.lineNumber || 0;
+                const bLine = b[1][0]?.lineNumber || 0;
+                return aLine - bLine;
+            });
+
+        const metadata = this.indexer.getMetadata();
+        const fileMetadata = metadata?.file_metadata?.['file.cio'];
+        
+        let html = '';
+        
+        // Add file description if available
+        if (fileMetadata && fileMetadata.description) {
+            html += `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
+        }
+
+        html += `<div class="file-cio-subtables">`;
+
+        for (const [classification, classRows] of sortedClassifications) {
+            const lineNumber = classRows[0]?.lineNumber || 0;
+            const file = classRows[0]?.file || 'file.cio';
+            
+            // Filter out null files for display
+            const activeFiles = classRows.filter(r => {
+                const fileName = r.values.file_name || '';
+                return fileName && fileName !== 'null' && fileName.includes('.');
+            });
+            
+            const totalFiles = classRows.length;
+            const activeCount = activeFiles.length;
+            const nullCount = totalFiles - activeCount;
+
+            html += `
+                <div class="classification-section" data-classification="${this._escapeHtml(classification)}">
+                    <div class="classification-header" onclick="toggleClassificationSection('${this._escapeJs(classification)}')">
+                        <span class="toggle-icon">▶</span>
+                        <span class="classification-name">
+                            <a href="#" onclick="event.stopPropagation(); navigateToFile('${this._escapeJs(file)}', ${lineNumber}); return false;" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(classification)}</a>
+                        </span>
+                        <span class="classification-stats">
+                            ${activeCount} file${activeCount !== 1 ? 's' : ''}${nullCount > 0 ? ` (${nullCount} null)` : ''}
+                        </span>
+                    </div>
+                    <div class="classification-content collapsed">
+                        <table class="classification-table">
+                            <thead>
+                                <tr>
+                                    <th>Order</th>
+                                    <th>File Name</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+
+            for (const row of classRows) {
+                const fileName = row.values.file_name || '';
+                const order = row.values.order_in_class || '';
+                const isNull = !fileName || fileName === 'null' || !fileName.includes('.');
+                
+                html += `<tr class="${isNull ? 'null-file' : ''}">`;
+                html += `<td class="order-col">${this._escapeHtml(order)}</td>`;
+                
+                if (isNull) {
+                    html += `<td class="file-name-col null-value">${this._escapeHtml(fileName)}</td>`;
+                } else {
+                    html += `<td class="file-name-col"><a href="#" onclick="openFileByName('${this._escapeJs(fileName)}'); return false;" class="file-link" title="Click to open ${this._escapeHtml(fileName)}">${this._escapeHtml(fileName)}</a></td>`;
+                }
+                
+                html += `</tr>`;
+            }
+
+            html += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        html += `</div>`;
+        
+        return html;
     }
 
     private _escapeHtml(text: string): string {
@@ -625,6 +728,98 @@ export class SwatSingleTableViewerPanel {
                 text-decoration: underline;
                 color: var(--vscode-textLink-activeForeground);
             }
+            /* Classification-based sub-table view for file.cio */
+            .file-cio-subtables {
+                margin: 16px 0;
+            }
+            .classification-section {
+                margin-bottom: 12px;
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                overflow: hidden;
+            }
+            .classification-header {
+                padding: 12px 16px;
+                background-color: var(--vscode-editor-background);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                user-select: none;
+                transition: background-color 0.2s;
+            }
+            .classification-header:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            .toggle-icon {
+                font-size: 0.7em;
+                transition: transform 0.2s;
+                display: inline-block;
+                width: 12px;
+            }
+            .classification-header:not(.collapsed) .toggle-icon {
+                transform: rotate(90deg);
+            }
+            .classification-name {
+                font-weight: 600;
+                flex: 1;
+            }
+            .classification-name .line-link {
+                color: var(--vscode-foreground);
+                text-decoration: none;
+            }
+            .classification-name .line-link:hover {
+                color: var(--vscode-textLink-activeForeground);
+                text-decoration: underline;
+            }
+            .classification-stats {
+                font-size: 0.85em;
+                color: var(--vscode-descriptionForeground);
+            }
+            .classification-content {
+                max-height: 500px;
+                overflow-y: auto;
+                transition: max-height 0.3s ease-out;
+            }
+            .classification-content.collapsed {
+                max-height: 0;
+                overflow: hidden;
+            }
+            .classification-table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            .classification-table thead {
+                background-color: var(--vscode-editorGroupHeader-tabsBackground);
+                position: sticky;
+                top: 0;
+                z-index: 1;
+            }
+            .classification-table th {
+                padding: 8px 12px;
+                text-align: left;
+                font-weight: 600;
+                border-bottom: 1px solid var(--vscode-panel-border);
+            }
+            .classification-table td {
+                padding: 6px 12px;
+                border-bottom: 1px solid var(--vscode-editorWidget-border);
+            }
+            .classification-table tr:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            .classification-table tr.null-file {
+                opacity: 0.5;
+            }
+            .classification-table .order-col {
+                width: 80px;
+                text-align: center;
+                font-family: var(--vscode-editor-font-family);
+            }
+            .classification-table .null-value {
+                font-style: italic;
+                color: var(--vscode-descriptionForeground);
+            }
             .fk-indicator {
                 margin-left: 4px;
                 font-size: 0.8em;
@@ -795,6 +990,22 @@ export class SwatSingleTableViewerPanel {
                     command: 'openFile',
                     fileName: fileName
                 });
+            }
+
+            function toggleClassificationSection(classification) {
+                const section = document.querySelector('[data-classification="' + classification + '"]');
+                if (!section) return;
+                
+                const header = section.querySelector('.classification-header');
+                const content = section.querySelector('.classification-content');
+                
+                if (content.classList.contains('collapsed')) {
+                    content.classList.remove('collapsed');
+                    header.classList.remove('collapsed');
+                } else {
+                    content.classList.add('collapsed');
+                    header.classList.add('collapsed');
+                }
             }
 
             function openFileForTable(tableName) {
