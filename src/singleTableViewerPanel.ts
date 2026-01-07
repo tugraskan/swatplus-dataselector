@@ -192,10 +192,19 @@ export class SwatSingleTableViewerPanel {
     private async openFileByName(fileName: string) {
         try {
             // Map the file name to a table name using the indexer
-            const tableName = this.indexer.getTableNameFromFile(fileName);
+            let tableName = this.indexer.getTableNameFromFile(fileName);
+            
+            // If not found, try deriving table name from file name (remove extension)
+            if (!tableName) {
+                const baseName = fileName.replace(/\.[^/.]+$/, ''); // Remove extension
+                // Check if this table exists in the index
+                if (this.indexer.isTableIndexed(baseName)) {
+                    tableName = baseName;
+                }
+            }
             
             if (!tableName) {
-                vscode.window.showErrorMessage(`Could not find table for file: ${fileName}`);
+                vscode.window.showWarningMessage(`Table for file "${fileName}" is not indexed yet. The file may not exist in your dataset or hasn't been processed during indexing.`);
                 return;
             }
             
