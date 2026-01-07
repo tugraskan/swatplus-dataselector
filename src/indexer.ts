@@ -468,12 +468,8 @@ export class SwatIndexer {
             title: 'Building SWAT+ Inputs Index',
             cancellable: true
         }, async (progress, token) => {
-            // Parse file.cio first to get the actual file references
-            // This is important in case users have renamed input files
-            progress.report({ message: 'Parsing file.cio...', increment: 0 });
-            this.parseFileCio();
-
             // Use pandas-backed indexing (required)
+            progress.report({ message: 'Indexing files...', increment: 0 });
             const pandasResult = this.buildIndexWithPandas(datasetPath);
             if (!pandasResult.success) {
                 const errorDetail = pandasResult.error || 'Unknown error';
@@ -483,6 +479,11 @@ export class SwatIndexer {
                 );
                 return false;
             }
+
+            // Parse file.cio after pandas indexing to add it to the index
+            // file.cio has a special classification-based format handled separately
+            progress.report({ message: 'Parsing file.cio...', increment: 0 });
+            this.parseFileCio();
 
             progress.report({ message: 'Resolving foreign key references...' });
             this.resolveFKReferences();
