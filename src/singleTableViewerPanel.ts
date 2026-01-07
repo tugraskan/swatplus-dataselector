@@ -480,7 +480,7 @@ export class SwatSingleTableViewerPanel {
             html += `
                 <div class="classification-section" data-classification="${this._escapeHtml(classification)}">
                     <div class="classification-header" onclick="toggleClassificationSection('${this._escapeJs(classification)}')">
-                        <span class="toggle-icon">▶</span>
+                        <span class="toggle-icon">▼</span>
                         <span class="classification-name">
                             <a href="#" onclick="event.stopPropagation(); navigateToFile('${this._escapeJs(file)}', ${lineNumber}); return false;" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(classification)}</a>
                         </span>
@@ -488,37 +488,24 @@ export class SwatSingleTableViewerPanel {
                             ${activeCount} file${activeCount !== 1 ? 's' : ''}${nullCount > 0 ? ` (${nullCount} null)` : ''}
                         </span>
                     </div>
-                    <div class="classification-content collapsed">
-                        <table class="classification-table">
-                            <thead>
-                                <tr>
-                                    <th>Order</th>
-                                    <th>File Name</th>
-                                </tr>
-                            </thead>
-                            <tbody>
+                    <div class="classification-content">
+                        <div class="classification-files-row">
             `;
 
+            // Build horizontal file list
             for (const row of classRows) {
                 const fileName = row.values.file_name || '';
-                const order = row.values.order_in_class || '';
                 const isNull = !fileName || fileName === 'null' || !fileName.includes('.');
                 
-                html += `<tr class="${isNull ? 'null-file' : ''}">`;
-                html += `<td class="order-col">${this._escapeHtml(order)}</td>`;
-                
                 if (isNull) {
-                    html += `<td class="file-name-col null-value">${this._escapeHtml(fileName)}</td>`;
+                    html += `<span class="file-item null-value">${this._escapeHtml(fileName)}</span>`;
                 } else {
-                    html += `<td class="file-name-col"><a href="#" onclick="openFileByName('${this._escapeJs(fileName)}'); return false;" class="file-link" title="Click to open ${this._escapeHtml(fileName)}">${this._escapeHtml(fileName)}</a></td>`;
+                    html += `<span class="file-item"><a href="#" onclick="openFileByName('${this._escapeJs(fileName)}'); return false;" class="file-link" title="Click to open ${this._escapeHtml(fileName)}">${this._escapeHtml(fileName)}</a></span>`;
                 }
-                
-                html += `</tr>`;
             }
 
             html += `
-                            </tbody>
-                        </table>
+                        </div>
                     </div>
                 </div>
             `;
@@ -757,8 +744,8 @@ export class SwatSingleTableViewerPanel {
                 display: inline-block;
                 width: 12px;
             }
-            .classification-header:not(.collapsed) .toggle-icon {
-                transform: rotate(90deg);
+            .classification-header.collapsed .toggle-icon {
+                transform: rotate(-90deg);
             }
             .classification-name {
                 font-weight: 600;
@@ -777,48 +764,41 @@ export class SwatSingleTableViewerPanel {
                 color: var(--vscode-descriptionForeground);
             }
             .classification-content {
-                max-height: 500px;
+                max-height: 1000px;
                 overflow-y: auto;
                 transition: max-height 0.3s ease-out;
+                padding: 12px 16px;
             }
             .classification-content.collapsed {
                 max-height: 0;
                 overflow: hidden;
+                padding: 0;
             }
-            .classification-table {
-                width: 100%;
-                border-collapse: collapse;
+            .classification-files-row {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                align-items: center;
             }
-            .classification-table thead {
-                background-color: var(--vscode-editorGroupHeader-tabsBackground);
-                position: sticky;
-                top: 0;
-                z-index: 1;
+            .file-item {
+                display: inline-block;
+                padding: 4px 8px;
+                background-color: var(--vscode-editor-background);
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 3px;
             }
-            .classification-table th {
-                padding: 8px 12px;
-                text-align: left;
-                font-weight: 600;
-                border-bottom: 1px solid var(--vscode-panel-border);
-            }
-            .classification-table td {
-                padding: 6px 12px;
-                border-bottom: 1px solid var(--vscode-editorWidget-border);
-            }
-            .classification-table tr:hover {
-                background-color: var(--vscode-list-hoverBackground);
-            }
-            .classification-table tr.null-file {
-                opacity: 0.5;
-            }
-            .classification-table .order-col {
-                width: 80px;
-                text-align: center;
-                font-family: var(--vscode-editor-font-family);
-            }
-            .classification-table .null-value {
+            .file-item.null-value {
                 font-style: italic;
                 color: var(--vscode-descriptionForeground);
+                opacity: 0.5;
+            }
+            .file-item a.file-link {
+                color: var(--vscode-textLink-foreground);
+                text-decoration: none;
+            }
+            .file-item a.file-link:hover {
+                text-decoration: underline;
+                color: var(--vscode-textLink-activeForeground);
             }
             .fk-indicator {
                 margin-left: 4px;
