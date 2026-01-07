@@ -586,10 +586,7 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
         tables_payload[table["table_name"]] = row_payload
         
         # Build FK references for main records
-        # Skip FK building for file.cio - it has a special classification-based format
-        # that doesn't match the schema's column structure
-        if file_name != 'file.cio':
-            fk_references.extend(build_fk_references(df, table, file_path, fk_null_values, metadata))
+        fk_references.extend(build_fk_references(df, table, file_path, fk_null_values, metadata))
         
         # Special handling for management.sch child lines
         if file_name == 'management.sch' and child_line_info:
