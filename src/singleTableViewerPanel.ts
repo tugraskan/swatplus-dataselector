@@ -545,6 +545,50 @@ export class SwatSingleTableViewerPanel {
             'water_rights': {
                 displayName: 'Water Rights',
                 files: ['water_allocation.wro']
+            },
+            'link': {
+                displayName: 'Link',
+                files: ['chan-surf.lin', 'aqu_cha.lin']
+            },
+            'hydrology': {
+                displayName: 'Hydrology',
+                files: ['hydrology.hyd', 'topography.hyd', 'field.fld']
+            },
+            'structural': {
+                displayName: 'Structural',
+                files: ['tiledrain.str', 'septic.str', 'filterstrip.str', 'grassedww.str', 'bmpuser.str']
+            },
+            'hru_parm_db': {
+                displayName: 'HRU Databases',
+                files: ['plants.plt', 'fertilizer.frt', 'tillage.til', 'pesticide.pes', 'pathogens.pth', 'metals.mtl', 'salt.slt', 'urban.urb', 'septic.sep', 'snow.sno']
+            },
+            'ops': {
+                displayName: 'Operation Scheduling',
+                files: ['harv.ops', 'graze.ops', 'irr.ops', 'chem_app.ops', 'fire.ops', 'sweep.ops']
+            },
+            'lum': {
+                displayName: 'Land Use Management',
+                files: ['landuse.lum', 'management.sch', 'cntable.lum', 'cons_practice.lum', 'ovn_table.lum']
+            },
+            'chg': {
+                displayName: 'Change',
+                files: ['cal_parms.cal', 'calibration.cal', 'codes.sft', 'wb_parms.sft', 'water_balance.sft', 'ch_sed_budget.sft', 'ch_sed_parms.sft', 'plant_parms.sft', 'plant_gro.sft']
+            },
+            'init': {
+                displayName: 'Initial',
+                files: ['plant.ini', 'soil_plant.ini', 'om_water.ini', 'pest_hru.ini', 'pest_water.ini', 'path_hru.ini', 'path_water.ini', 'hmet_hru.ini', 'hmet_water.ini', 'salt_hru.ini', 'salt_water.ini']
+            },
+            'soils': {
+                displayName: 'Soils',
+                files: ['soils.sol', 'nutrients.sol', 'soils_lte.sol']
+            },
+            'decision_table': {
+                displayName: 'Conditional',
+                files: ['lum.dtl', 'res_rel.dtl', 'scen_lu.dtl', 'flo_con.dtl']
+            },
+            'regions': {
+                displayName: 'Regions',
+                files: ['ls_unit.ele', 'ls_unit.def', 'ls_reg.ele', 'ls_reg.def', 'ls_cal.reg', 'ch_catunit.ele', 'ch_catunit.def', 'ch_reg.def', 'aqu_catunit.ele', 'aqu_catunit.def', 'aqu_reg.def', 'res_catunit.ele', 'res_catunit.def', 'res_reg.def', 'rec_catunit.ele', 'rec_catunit.def', 'rec_reg.def']
             }
         };
 
