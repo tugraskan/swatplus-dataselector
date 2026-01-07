@@ -40,6 +40,11 @@ export class SwatSingleTableViewerPanel {
                             this.navigateToLocation(message.file, message.line);
                         }
                         break;
+                    case 'openFile':
+                        if (message.fileName) {
+                            this.openFileByName(message.fileName);
+                        }
+                        break;
                     case 'getFKRowData':
                         if (message.tableName && message.fkValue) {
                             this.sendFKRowData(message.tableName, message.fkValue);
@@ -172,6 +177,40 @@ export class SwatSingleTableViewerPanel {
     private openTableInNewTab(tableName: string) {
         // Create a new table viewer panel for this specific table
         SwatSingleTableViewerPanel.createOrShow(this.indexer, tableName);
+    }
+
+    private async openFileByName(fileName: string) {
+        try {
+            // Get the TxtInOut path from the indexer
+            const indexData = this.indexer.getIndexData();
+            if (!indexData || indexData.size === 0) {
+                vscode.window.showErrorMessage('No dataset indexed');
+                return;
+            }
+            
+            // Get any row to find the dataset path
+            const firstTable = indexData.values().next().value;
+            if (!firstTable || firstTable.size === 0) {
+                vscode.window.showErrorMessage('No data in index');
+                return;
+            }
+            
+            const firstRow = firstTable.values().next().value;
+            if (!firstRow || !firstRow.file) {
+                vscode.window.showErrorMessage('Could not determine dataset path');
+                return;
+            }
+            
+            // Construct the file path
+            const datasetDir = path.dirname(firstRow.file);
+            const filePath = path.join(datasetDir, fileName);
+            
+            // Open the file
+            const document = await vscode.workspace.openTextDocument(filePath);
+            await vscode.window.showTextDocument(document, { preview: false });
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to open file ${fileName}: ${error}`);
+        }
     }
 
     private async openFileInEditor(file: string) {
@@ -362,7 +401,10 @@ export class SwatSingleTableViewerPanel {
                 const value = row.values[col] || '';
                 const fkInfo = fkColumns.get(col);
                 
-                if (fkInfo && value) {
+                // Special handling for file.cio file_name column - make it a clickable file link
+                if (this.tableName === 'file_cio' && col === 'file_name' && value && value !== 'null' && value.includes('.')) {
+                    tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByName('${this._escapeJs(value)}'); return false;" class="file-link" title="Click to open ${this._escapeHtml(value)}">${this._escapeHtml(value)}</a></td>`;
+                } else if (fkInfo && value) {
                     // Try to resolve FK
                     const targetRow = this.indexer.resolveFKTarget(fkInfo.references.table, value);
                     if (targetRow) {
@@ -587,6 +629,18 @@ export class SwatSingleTableViewerPanel {
                 text-decoration: underline;
                 color: var(--vscode-textLink-activeForeground);
             }
+            .file-link-cell {
+                font-weight: 500;
+            }
+            .file-link {
+                color: var(--vscode-textLink-foreground);
+                text-decoration: none;
+                cursor: pointer;
+            }
+            .file-link:hover {
+                text-decoration: underline;
+                color: var(--vscode-textLink-activeForeground);
+            }
             .fk-indicator {
                 margin-left: 4px;
                 font-size: 0.8em;
@@ -749,6 +803,13 @@ export class SwatSingleTableViewerPanel {
                     command: 'navigateToTarget',
                     file: file,
                     line: line
+                });
+            }
+
+            function openFileByName(fileName) {
+                vscode.postMessage({
+                    command: 'openFile',
+                    fileName: fileName
                 });
             }
 
