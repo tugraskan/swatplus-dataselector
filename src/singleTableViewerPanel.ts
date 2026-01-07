@@ -664,7 +664,7 @@ export class SwatSingleTableViewerPanel {
                     </div>
                     <div class="classification-content">
                         <div class="classification-files-grid">
-                            <div class="files-row files-header">
+                            <div class="files-row files-header" style="grid-template-columns: repeat(${expectedFiles.length}, 1fr);">
             `;
 
             // Row 1: Expected files from GitBook (headers)
@@ -674,11 +674,12 @@ export class SwatSingleTableViewerPanel {
 
             html += `
                             </div>
-                            <div class="files-row files-actual">
+                            <div class="files-row files-actual" style="grid-template-columns: repeat(${expectedFiles.length}, 1fr);">
             `;
 
             // Row 2: Actual files from file.cio (clickable if they exist)
-            for (const fileName of actualFiles) {
+            for (let i = 0; i < expectedFiles.length; i++) {
+                const fileName = i < actualFiles.length ? actualFiles[i] : null;
                 if (!fileName) {
                     html += `<span class="file-null">null</span>`;
                 } else {
@@ -973,8 +974,6 @@ export class SwatSingleTableViewerPanel {
             }
             .files-row {
                 display: grid;
-                grid-auto-flow: column;
-                grid-auto-columns: 1fr;
                 gap: 8px;
                 align-items: center;
             }
@@ -990,15 +989,19 @@ export class SwatSingleTableViewerPanel {
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
+                min-width: 0;
             }
             .file-link {
                 display: block;
+                text-align: center;
                 text-decoration: none;
                 color: var(--vscode-textLink-foreground);
                 font-size: 0.85em;
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
+                min-width: 0;
+                padding: 4px 8px;
             }
             .file-link:hover {
                 text-decoration: underline;
@@ -1010,6 +1013,8 @@ export class SwatSingleTableViewerPanel {
                 cursor: default;
                 text-align: center;
                 color: var(--vscode-descriptionForeground);
+                padding: 4px 8px;
+                min-width: 0;
             }
             .fk-indicator {
                 margin-left: 4px;
