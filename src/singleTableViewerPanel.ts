@@ -680,10 +680,10 @@ export class SwatSingleTableViewerPanel {
             // Row 2: Actual files from file.cio (clickable if they exist)
             for (const fileName of actualFiles) {
                 if (!fileName) {
-                    html += `<span class="file-badge file-null">null</span>`;
+                    html += `<span class="file-null">null</span>`;
                 } else {
                     const canOpen = this.canOpenFile(fileName);
-                    const linkClass = canOpen ? 'file-badge' : 'file-badge broken-link';
+                    const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
                     const title = canOpen ? `Click to open ${this._escapeHtml(fileName)}` : `${this._escapeHtml(fileName)} - Not indexed (may not exist in dataset)`;
                     html += `<a href="#" onclick="openFileByName('${this._escapeJs(fileName)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(fileName)}</a>`;
                 }
@@ -991,31 +991,25 @@ export class SwatSingleTableViewerPanel {
                 overflow: hidden;
                 text-overflow: ellipsis;
             }
-            .file-badge {
+            .file-link {
                 display: block;
-                padding: 6px 12px;
-                background-color: var(--vscode-badge-background);
-                color: var(--vscode-badge-foreground);
-                border-radius: 12px;
                 text-decoration: none;
+                color: var(--vscode-textLink-foreground);
                 font-size: 0.85em;
-                transition: background-color 0.2s;
-                border: 1px solid var(--vscode-panel-border);
-                text-align: center;
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
             }
-            .file-badge:hover {
-                background-color: var(--vscode-list-hoverBackground);
+            .file-link:hover {
+                text-decoration: underline;
                 color: var(--vscode-textLink-activeForeground);
             }
             .file-null {
                 font-style: italic;
                 opacity: 0.5;
                 cursor: default;
-                padding: 6px 12px;
                 text-align: center;
+                color: var(--vscode-descriptionForeground);
             }
             .fk-indicator {
                 margin-left: 4px;
