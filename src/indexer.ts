@@ -263,12 +263,15 @@ export class SwatIndexer {
             // Line 1+: classification_name  file1  file2  file3  ...
             // Column 0 is classification name, columns 1+ are filenames
             
+            const DEFAULT_CUSTOMIZATION = '0'; // Default customization value
             let totalFileReferences = 0;
             let rowId = 1; // Auto-incrementing ID for schema compatibility
             
-            // Ensure file_cio table exists in index
+            // Ensure file_cio table exists in index (clear any existing data)
             const tableName = 'file_cio';
-            if (!this.index.has(tableName)) {
+            if (this.index.has(tableName)) {
+                this.index.get(tableName)!.clear();
+            } else {
                 this.index.set(tableName, new Map());
             }
             const tableIndex = this.index.get(tableName)!;
@@ -309,21 +312,22 @@ export class SwatIndexer {
                     
                     // Create a row for each file in schema format
                     // This allows the table viewer to display the data correctly
+                    const rowIdStr = rowId.toString();
                     const indexedRow: IndexedRow = {
                         file: 'file.cio',
                         tableName: tableName,
                         lineNumber: i + 1,
-                        pkValue: `${rowId}`, // Use rowId as PK for uniqueness
+                        pkValue: rowIdStr,
                         values: {
-                            id: `${rowId}`,
+                            id: rowIdStr,
                             classification: classification,
-                            order_in_class: `${j}`, // Position within classification
+                            order_in_class: j.toString(),
                             file_name: filename,
-                            customization: '0' // Default value, could be enhanced later
+                            customization: DEFAULT_CUSTOMIZATION
                         }
                     };
                     
-                    tableIndex.set(`${rowId}`, indexedRow);
+                    tableIndex.set(rowIdStr, indexedRow);
                     rowId++;
                 }
                 
