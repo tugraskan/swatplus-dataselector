@@ -553,7 +553,7 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
         
         # Skip file.cio - it has a special classification-based format that is handled
         # separately in the TypeScript parseFileCio() method
-        if file_name == 'file.cio':
+        if file_name.lower() == 'file.cio':
             continue
         
         # Special handling for decision table files (*.dtl)
