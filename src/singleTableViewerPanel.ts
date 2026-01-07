@@ -597,7 +597,7 @@ export class SwatSingleTableViewerPanel {
         const classificationMeta = new Map<string, { lineNumber: number, file: string }>();
         
         for (const row of rows) {
-            const classification = row.values.classification || '';
+            const classification = (row.values.classification || '').toLowerCase(); // Normalize to lowercase
             const fileName = row.values.file_name;
             const orderInClass = parseInt(row.values.order_in_class) || 0;
             
