@@ -117,7 +117,17 @@ export class SwatSingleTableViewerPanel {
 
     private async navigateToLocation(file: string, line: number) {
         try {
-            const document = await vscode.workspace.openTextDocument(file);
+            // Resolve the file path if it's relative
+            let filePath = file;
+            if (!path.isAbsolute(file)) {
+                // Get the workspace folder
+                const workspaceFolders = vscode.workspace.workspaceFolders;
+                if (workspaceFolders && workspaceFolders.length > 0) {
+                    filePath = path.join(workspaceFolders[0].uri.fsPath, file);
+                }
+            }
+            
+            const document = await vscode.workspace.openTextDocument(filePath);
             const editor = await vscode.window.showTextDocument(document);
             const position = new vscode.Position(line - 1, 0);
             editor.selection = new vscode.Selection(position, position);
