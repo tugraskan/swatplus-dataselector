@@ -923,40 +923,44 @@ export class SwatSingleTableViewerPanel {
                 padding: 0;
             }
             .classification-files-grid {
-                display: flex;
-                flex-direction: column;
+                display: grid;
+                grid-template-rows: auto auto;
                 gap: 8px;
             }
             .files-row {
-                display: flex;
-                flex-wrap: wrap;
+                display: grid;
+                grid-auto-flow: column;
+                grid-auto-columns: 1fr;
                 gap: 8px;
                 align-items: center;
             }
             .files-header {
-                margin-bottom: 4px;
+                margin-bottom: 0;
             }
             .file-header {
-                display: inline-block;
-                padding: 6px 12px;
-                background-color: var(--vscode-textBlockQuote-background);
-                color: var(--vscode-foreground);
-                border-radius: 12px;
-                font-size: 0.85em;
-                font-weight: 600;
-                border: 1px solid var(--vscode-panel-border);
-                opacity: 0.8;
+                text-align: center;
+                padding: 4px 8px;
+                color: var(--vscode-descriptionForeground);
+                font-size: 0.8em;
+                font-weight: 500;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
             .file-badge {
-                display: inline-block;
+                display: block;
                 padding: 6px 12px;
                 background-color: var(--vscode-badge-background);
                 color: var(--vscode-badge-foreground);
                 border-radius: 12px;
                 text-decoration: none;
-                font-size: 0.9em;
+                font-size: 0.85em;
                 transition: background-color 0.2s;
                 border: 1px solid var(--vscode-panel-border);
+                text-align: center;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
             .file-badge:hover {
                 background-color: var(--vscode-list-hoverBackground);
@@ -966,6 +970,8 @@ export class SwatSingleTableViewerPanel {
                 font-style: italic;
                 opacity: 0.5;
                 cursor: default;
+                padding: 6px 12px;
+                text-align: center;
             }
             .fk-indicator {
                 margin-left: 4px;
