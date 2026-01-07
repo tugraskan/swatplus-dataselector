@@ -548,15 +548,30 @@ export class SwatSingleTableViewerPanel {
             }
         };
 
-        // Group rows by classification to get line numbers
+        // Group rows by classification to get actual files from file.cio
+        const classificationActualFiles = new Map<string, Map<number, string | null>>();
         const classificationMeta = new Map<string, { lineNumber: number, file: string }>();
+        
         for (const row of rows) {
             const classification = row.values.classification || '';
-            if (!classificationMeta.has(classification) && classification) {
-                classificationMeta.set(classification, {
-                    lineNumber: row.lineNumber || 0,
-                    file: row.file || 'file.cio'
-                });
+            const fileName = row.values.file_name;
+            const orderInClass = parseInt(row.values.order_in_class) || 0;
+            
+            if (classification) {
+                // Store line number and file for classification header link
+                if (!classificationMeta.has(classification)) {
+                    classificationMeta.set(classification, {
+                        lineNumber: row.lineNumber || 0,
+                        file: row.file || 'file.cio'
+                    });
+                }
+                
+                // Store actual files by order
+                if (!classificationActualFiles.has(classification)) {
+                    classificationActualFiles.set(classification, new Map());
+                }
+                const filesMap = classificationActualFiles.get(classification)!;
+                filesMap.set(orderInClass, fileName === 'null' || !fileName ? null : fileName);
             }
         }
 
@@ -578,12 +593,19 @@ export class SwatSingleTableViewerPanel {
             const lineNumber = meta?.lineNumber || 0;
             const file = meta?.file || 'file.cio';
             const displayName = classificationData.displayName;
-            const files = classificationData.files;
+            const expectedFiles = classificationData.files;
+            
+            // Get actual files from file.cio
+            const actualFilesMap = classificationActualFiles.get(classificationKey) || new Map();
+            const actualFiles: (string | null)[] = [];
+            for (let i = 1; i <= expectedFiles.length; i++) {
+                actualFiles.push(actualFilesMap.get(i) || null);
+            }
             
             // Count active files (that exist in the index)
-            const activeFiles = files.filter(fileName => this.canOpenFile(fileName));
+            const activeFiles = actualFiles.filter(fileName => fileName && this.canOpenFile(fileName));
             const activeCount = activeFiles.length;
-            const totalCount = files.length;
+            const totalCount = expectedFiles.length;
 
             html += `
                 <div class="classification-section" data-classification="${this._escapeHtml(classificationKey)}">
@@ -597,18 +619,34 @@ export class SwatSingleTableViewerPanel {
                         </span>
                     </div>
                     <div class="classification-content">
-                        <div class="classification-files">
+                        <div class="classification-files-grid">
+                            <div class="files-row files-header">
             `;
 
-            // Build horizontal file list with badges
-            for (const fileName of files) {
-                const canOpen = this.canOpenFile(fileName);
-                const linkClass = canOpen ? 'file-badge' : 'file-badge broken-link';
-                const title = canOpen ? `Click to open ${this._escapeHtml(fileName)}` : `${this._escapeHtml(fileName)} - Not indexed (may not exist in dataset)`;
-                html += `<a href="#" onclick="openFileByName('${this._escapeJs(fileName)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(fileName)}</a>`;
+            // Row 1: Expected files from GitBook (headers)
+            for (const fileName of expectedFiles) {
+                html += `<span class="file-header">${this._escapeHtml(fileName)}</span>`;
             }
 
             html += `
+                            </div>
+                            <div class="files-row files-actual">
+            `;
+
+            // Row 2: Actual files from file.cio (clickable if they exist)
+            for (const fileName of actualFiles) {
+                if (!fileName) {
+                    html += `<span class="file-badge file-null">null</span>`;
+                } else {
+                    const canOpen = this.canOpenFile(fileName);
+                    const linkClass = canOpen ? 'file-badge' : 'file-badge broken-link';
+                    const title = canOpen ? `Click to open ${this._escapeHtml(fileName)}` : `${this._escapeHtml(fileName)} - Not indexed (may not exist in dataset)`;
+                    html += `<a href="#" onclick="openFileByName('${this._escapeJs(fileName)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(fileName)}</a>`;
+                }
+            }
+
+            html += `
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -884,10 +922,30 @@ export class SwatSingleTableViewerPanel {
                 overflow: hidden;
                 padding: 0;
             }
-            .classification-files {
+            .classification-files-grid {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .files-row {
                 display: flex;
                 flex-wrap: wrap;
                 gap: 8px;
+                align-items: center;
+            }
+            .files-header {
+                margin-bottom: 4px;
+            }
+            .file-header {
+                display: inline-block;
+                padding: 6px 12px;
+                background-color: var(--vscode-textBlockQuote-background);
+                color: var(--vscode-foreground);
+                border-radius: 12px;
+                font-size: 0.85em;
+                font-weight: 600;
+                border: 1px solid var(--vscode-panel-border);
+                opacity: 0.8;
             }
             .file-badge {
                 display: inline-block;
@@ -903,6 +961,11 @@ export class SwatSingleTableViewerPanel {
             .file-badge:hover {
                 background-color: var(--vscode-list-hoverBackground);
                 color: var(--vscode-textLink-activeForeground);
+            }
+            .file-null {
+                font-style: italic;
+                opacity: 0.5;
+                cursor: default;
             }
             .fk-indicator {
                 margin-left: 4px;
