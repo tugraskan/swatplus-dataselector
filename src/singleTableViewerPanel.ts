@@ -194,12 +194,12 @@ export class SwatSingleTableViewerPanel {
             // Map the file name to a table name using the indexer
             let tableName = this.indexer.getTableNameFromFile(fileName);
             
-            // If not found, try deriving table name from file name (remove extension)
+            // If not found, try deriving table name from file name
             if (!tableName) {
-                const baseName = path.parse(fileName).name; // Remove extension using path module
-                // Check if this table exists in the index
-                if (this.indexer.isTableIndexed(baseName)) {
-                    tableName = baseName;
+                // Replace dots with underscores (e.g., pcp.cli -> pcp_cli)
+                const tableNameFromFile = fileName.replace(/\./g, '_');
+                if (this.indexer.isTableIndexed(tableNameFromFile)) {
+                    tableName = tableNameFromFile;
                 }
             }
             
@@ -226,11 +226,12 @@ export class SwatSingleTableViewerPanel {
         // Check if it maps to a table
         let tableName = this.indexer.getTableNameFromFile(fileName);
         
-        // If not found, try deriving table name from file name (remove extension)
+        // If not found, try deriving table name from file name
         if (!tableName) {
-            const baseName = path.parse(fileName).name;
-            if (this.indexer.isTableIndexed(baseName)) {
-                tableName = baseName;
+            // Replace dots with underscores (e.g., pcp.cli -> pcp_cli)
+            const tableNameFromFile = fileName.replace(/\./g, '_');
+            if (this.indexer.isTableIndexed(tableNameFromFile)) {
+                tableName = tableNameFromFile;
             }
         }
         
