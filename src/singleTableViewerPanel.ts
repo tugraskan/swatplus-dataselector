@@ -162,12 +162,9 @@ export class SwatSingleTableViewerPanel {
             const fileName = this.indexer.getFileNameForTable(tableName);
             const schemaTable = fileName && schema.tables[fileName] ? schema.tables[fileName] : undefined;
             
+            // Get columns from actual indexed data (not schema)
             let columns: string[] = [];
-            if (schemaTable && schemaTable.columns) {
-                columns = schemaTable.columns.map((col: any) => col.name);
-            } else {
-                columns = Object.keys(targetRow.values || {});
-            }
+            columns = Object.keys(targetRow.values || {});
             
             // Send the row data back to the webview
             this._panel.webview.postMessage({
@@ -359,16 +356,17 @@ export class SwatSingleTableViewerPanel {
             return this._getFileCioSubTableHtml(rows);
         }
 
-        // Get columns from schema or first row
+        // Get columns from actual indexed data (not schema)
+        // This ensures we only show columns that exist in the actual input files
         let columns: string[] = [];
         const columnMetadata = new Map<string, any>();
+        columns = Object.keys(rows[0].values || {});
+        
+        // Build metadata map from schema if available
         if (schemaTable && schemaTable.columns) {
-            columns = schemaTable.columns.map((col: any) => {
+            schemaTable.columns.forEach((col: any) => {
                 columnMetadata.set(col.name, col);
-                return col.name;
             });
-        } else {
-            columns = Object.keys(rows[0].values || {});
         }
 
         // Get FK columns and their targets
