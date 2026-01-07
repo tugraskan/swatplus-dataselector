@@ -488,24 +488,77 @@ export class SwatSingleTableViewerPanel {
     }
 
     private _getFileCioSubTableHtml(rows: any[]): string {
-        // Group rows by classification
-        const classificationGroups = new Map<string, any[]>();
-        
+        // Define the official file.cio structure from GitBook documentation
+        const fileCioStructure: { [key: string]: { displayName: string, files: string[] } } = {
+            'simulation': { 
+                displayName: 'Simulation',
+                files: ['time.sim', 'print.prt', 'object.prt', 'object.cnt', 'constituents.cs']
+            },
+            'basin': {
+                displayName: 'Basin',
+                files: ['codes.bsn', 'parameters.bsn']
+            },
+            'climate': {
+                displayName: 'Climate',
+                files: ['weather-sta.cli', 'weather-wgn.cli', 'wind-dir.cli', 'pcp.cli', 'tmp.cli', 'slr.cli', 'hmd.cli', 'wnd.cli', 'atmo.cli']
+            },
+            'connect': {
+                displayName: 'Connect',
+                files: ['hru.con', 'hru-lte.con', 'rout_unit.con', 'gwflow.con', 'aquifer.con', 'aquifer2d.con', 'channel.con', 'reservoir.con', 'recall.con', 'exco.con', 'delratio.con', 'outlet.con', 'chandeg.con']
+            },
+            'channel': {
+                displayName: 'Channel',
+                files: ['initial.cha', 'channel.cha', 'hydrology.cha', 'sediment.cha', 'nutrients.cha', 'channel-lte.cha', 'hyd-sed-lte.cha', 'temperature.cha']
+            },
+            'reservoir': {
+                displayName: 'Reservoir',
+                files: ['initial.res', 'reservoir.res', 'hydrology.res', 'sediment.res', 'nutrients.res', 'weir.res', 'wetland.wet', 'hydrology.wet']
+            },
+            'routing_unit': {
+                displayName: 'Routing Unit',
+                files: ['rout_unit.def', 'rout_unit.ele', 'rout_unit.rtu', 'rout_unit.dr']
+            },
+            'hru': {
+                displayName: 'HRU',
+                files: ['hru-data.hru', 'hru-lte.hru']
+            },
+            'exco': {
+                displayName: 'Export Coefficient',
+                files: ['exco.exc', 'exco_om.exc', 'exco_pest.exc', 'exco_path.exc', 'exco_hmet.exc', 'exco_salt.exc']
+            },
+            'recall': {
+                displayName: 'Recall',
+                files: ['recall.rec']
+            },
+            'dr': {
+                displayName: 'Delivery Ratio',
+                files: ['del_ratio.del', 'dr_om.del', 'dr_pest.del', 'dr_path.del', 'dr_hmet.del', 'dr_salt.del']
+            },
+            'aquifer': {
+                displayName: 'Aquifer',
+                files: ['initial.aqu', 'aquifer.aqu']
+            },
+            'herd': {
+                displayName: 'Herd',
+                files: ['animal.hrd', 'herd.hrd', 'ranch.hrd']
+            },
+            'water_rights': {
+                displayName: 'Water Rights',
+                files: ['water_allocation.wro']
+            }
+        };
+
+        // Group rows by classification to get line numbers
+        const classificationMeta = new Map<string, { lineNumber: number, file: string }>();
         for (const row of rows) {
             const classification = row.values.classification || '';
-            if (!classificationGroups.has(classification)) {
-                classificationGroups.set(classification, []);
+            if (!classificationMeta.has(classification) && classification) {
+                classificationMeta.set(classification, {
+                    lineNumber: row.lineNumber || 0,
+                    file: row.file || 'file.cio'
+                });
             }
-            classificationGroups.get(classification)!.push(row);
         }
-
-        // Sort classifications by their first appearance (line number)
-        const sortedClassifications = Array.from(classificationGroups.entries())
-            .sort((a, b) => {
-                const aLine = a[1][0]?.lineNumber || 0;
-                const bLine = b[1][0]?.lineNumber || 0;
-                return aLine - bLine;
-            });
 
         const metadata = this.indexer.getMetadata();
         const fileMetadata = metadata?.file_metadata?.['file.cio'];
@@ -519,49 +572,40 @@ export class SwatSingleTableViewerPanel {
 
         html += `<div class="file-cio-subtables">`;
 
-        for (const [classification, classRows] of sortedClassifications) {
-            const lineNumber = classRows[0]?.lineNumber || 0;
-            const file = classRows[0]?.file || 'file.cio';
+        // Render each classification in the defined order
+        for (const [classificationKey, classificationData] of Object.entries(fileCioStructure)) {
+            const meta = classificationMeta.get(classificationKey);
+            const lineNumber = meta?.lineNumber || 0;
+            const file = meta?.file || 'file.cio';
+            const displayName = classificationData.displayName;
+            const files = classificationData.files;
             
-            // Filter out null files for display
-            const activeFiles = classRows.filter(r => {
-                const fileName = r.values.file_name || '';
-                return fileName && fileName !== 'null' && fileName.includes('.');
-            });
-            
-            const totalFiles = classRows.length;
+            // Count active files (that exist in the index)
+            const activeFiles = files.filter(fileName => this.canOpenFile(fileName));
             const activeCount = activeFiles.length;
-            const nullCount = totalFiles - activeCount;
+            const totalCount = files.length;
 
             html += `
-                <div class="classification-section" data-classification="${this._escapeHtml(classification)}">
-                    <div class="classification-header" onclick="toggleClassificationSection('${this._escapeJs(classification)}')">
+                <div class="classification-section" data-classification="${this._escapeHtml(classificationKey)}">
+                    <div class="classification-header" onclick="toggleClassificationSection('${this._escapeJs(classificationKey)}')">
                         <span class="toggle-icon">▼</span>
                         <span class="classification-name">
-                            <a href="#" onclick="event.stopPropagation(); navigateToFile('${this._escapeJs(file)}', ${lineNumber}); return false;" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(classification)}</a>
+                            <a href="#" onclick="event.stopPropagation(); navigateToFile('${this._escapeJs(file)}', ${lineNumber}); return false;" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(displayName)}</a>
                         </span>
                         <span class="classification-stats">
-                            ${activeCount} file${activeCount !== 1 ? 's' : ''}${nullCount > 0 ? ` (${nullCount} null)` : ''}
+                            ${activeCount} of ${totalCount} file${totalCount !== 1 ? 's' : ''} indexed
                         </span>
                     </div>
                     <div class="classification-content">
-                        <div class="classification-files-vertical">
+                        <div class="classification-files">
             `;
 
-            // Build vertical file list with file names as headers
-            for (const row of classRows) {
-                const fileName = row.values.file_name || '';
-                const isNull = !fileName || fileName === 'null' || !fileName.includes('.');
-                
-                if (isNull) {
-                    html += `<div class="file-item-row null-value">${this._escapeHtml(fileName)}</div>`;
-                } else {
-                    // Check if file can be opened (is indexed)
-                    const canOpen = this.canOpenFile(fileName);
-                    const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
-                    const title = canOpen ? `Click to open ${this._escapeHtml(fileName)}` : `${this._escapeHtml(fileName)} - Not indexed (may not exist in dataset)`;
-                    html += `<div class="file-item-row"><a href="#" onclick="openFileByName('${this._escapeJs(fileName)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(fileName)}</a></div>`;
-                }
+            // Build horizontal file list with badges
+            for (const fileName of files) {
+                const canOpen = this.canOpenFile(fileName);
+                const linkClass = canOpen ? 'file-badge' : 'file-badge broken-link';
+                const title = canOpen ? `Click to open ${this._escapeHtml(fileName)}` : `${this._escapeHtml(fileName)} - Not indexed (may not exist in dataset)`;
+                html += `<a href="#" onclick="openFileByName('${this._escapeJs(fileName)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(fileName)}</a>`;
             }
 
             html += `
@@ -840,29 +884,24 @@ export class SwatSingleTableViewerPanel {
                 overflow: hidden;
                 padding: 0;
             }
-            .classification-files-vertical {
+            .classification-files {
                 display: flex;
-                flex-direction: column;
-                gap: 4px;
+                flex-wrap: wrap;
+                gap: 8px;
             }
-            .file-item-row {
-                padding: 6px 8px;
-                background-color: var(--vscode-editor-background);
-                border: 1px solid var(--vscode-panel-border);
-                border-radius: 3px;
-            }
-            .file-item-row.null-value {
-                font-style: italic;
-                color: var(--vscode-descriptionForeground);
-                opacity: 0.5;
-            }
-            .file-item-row a.file-link {
-                color: var(--vscode-textLink-foreground);
+            .file-badge {
+                display: inline-block;
+                padding: 6px 12px;
+                background-color: var(--vscode-badge-background);
+                color: var(--vscode-badge-foreground);
+                border-radius: 12px;
                 text-decoration: none;
-                display: block;
+                font-size: 0.9em;
+                transition: background-color 0.2s;
+                border: 1px solid var(--vscode-panel-border);
             }
-            .file-item-row a.file-link:hover {
-                text-decoration: underline;
+            .file-badge:hover {
+                background-color: var(--vscode-list-hoverBackground);
                 color: var(--vscode-textLink-activeForeground);
             }
             .fk-indicator {
