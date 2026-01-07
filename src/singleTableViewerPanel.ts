@@ -664,7 +664,7 @@ export class SwatSingleTableViewerPanel {
                     </div>
                     <div class="classification-content">
                         <div class="classification-files-grid">
-                            <div class="files-row files-header" style="grid-template-columns: repeat(${expectedFiles.length}, 1fr);">
+                            <div class="files-row files-header" style="grid-template-columns: repeat(${expectedFiles.length}, minmax(120px, 1fr));">
             `;
 
             // Row 1: Expected files from GitBook (headers)
@@ -674,7 +674,7 @@ export class SwatSingleTableViewerPanel {
 
             html += `
                             </div>
-                            <div class="files-row files-actual" style="grid-template-columns: repeat(${expectedFiles.length}, 1fr);">
+                            <div class="files-row files-actual" style="grid-template-columns: repeat(${expectedFiles.length}, minmax(120px, 1fr));">
             `;
 
             // Row 2: Actual files from file.cio (clickable if they exist)
