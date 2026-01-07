@@ -313,8 +313,16 @@ export class SwatIndexer {
                     // Create a row for each file in schema format
                     // This allows the table viewer to display the data correctly
                     const rowIdStr = rowId.toString();
+                    
+                    // Calculate relative path from workspace to file.cio
+                    const workspaceFolders = vscode.workspace.workspaceFolders;
+                    let relativeFilePath = 'file.cio';
+                    if (workspaceFolders && workspaceFolders.length > 0) {
+                        relativeFilePath = path.relative(workspaceFolders[0].uri.fsPath, fileCioPath);
+                    }
+                    
                     const indexedRow: IndexedRow = {
-                        file: 'file.cio',
+                        file: relativeFilePath,
                         tableName: tableName,
                         lineNumber: i + 1,
                         pkValue: rowIdStr,
