@@ -141,7 +141,8 @@ def parse_lines_to_dataframe(
     """
     file_name = file_path.name
     start_line = table.get("data_starts_after", 0)
-    columns = [col["name"] for col in table.get("columns", [])]
+    # Filter out AutoField columns (database-only fields like 'id' that don't exist in physical files)
+    columns = [col["name"] for col in table.get("columns", []) if col.get("type") != "AutoField"]
     records: List[Dict[str, str]] = []
     child_line_info: List[Tuple[int, int]] = []  # (line_number, num_children)
     
@@ -572,7 +573,8 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
         # Build row payload
         row_payload = []
         for _, row in df.iterrows():
-            values = {col["name"]: str(row.get(col["name"], "")) for col in table.get("columns", [])}
+            # Filter out AutoField columns (same as parsing logic)
+            values = {col["name"]: str(row.get(col["name"], "")) for col in table.get("columns", []) if col.get("type") != "AutoField"}
             row_payload.append(
                 {
                     "file": str(file_path),
