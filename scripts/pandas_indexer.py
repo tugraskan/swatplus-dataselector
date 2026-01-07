@@ -573,7 +573,8 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
         # Build row payload
         row_payload = []
         for _, row in df.iterrows():
-            values = {col["name"]: str(row.get(col["name"], "")) for col in table.get("columns", [])}
+            # Filter out AutoField columns (same as parsing logic)
+            values = {col["name"]: str(row.get(col["name"], "")) for col in table.get("columns", []) if col.get("type") != "AutoField"}
             row_payload.append(
                 {
                     "file": str(file_path),
