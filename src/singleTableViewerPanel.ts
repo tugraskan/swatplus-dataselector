@@ -196,7 +196,7 @@ export class SwatSingleTableViewerPanel {
             
             // If not found, try deriving table name from file name (remove extension)
             if (!tableName) {
-                const baseName = fileName.replace(/\.[^/.]+$/, ''); // Remove extension
+                const baseName = path.parse(fileName).name; // Remove extension using path module
                 // Check if this table exists in the index
                 if (this.indexer.isTableIndexed(baseName)) {
                     tableName = baseName;
@@ -204,7 +204,7 @@ export class SwatSingleTableViewerPanel {
             }
             
             if (!tableName) {
-                vscode.window.showWarningMessage(`Table for file "${fileName}" is not indexed yet. The file may not exist in your dataset or hasn't been processed during indexing.`);
+                vscode.window.showWarningMessage(`Table for file "${fileName}" is not indexed. This file is listed in file.cio but was not found in your dataset. It may be optional for your SWAT+ configuration.`);
                 return;
             }
             
