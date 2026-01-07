@@ -181,35 +181,18 @@ export class SwatSingleTableViewerPanel {
 
     private async openFileByName(fileName: string) {
         try {
-            // Get the TxtInOut path from the indexer
-            const indexData = this.indexer.getIndexData();
-            if (!indexData || indexData.size === 0) {
-                vscode.window.showErrorMessage('No dataset indexed');
+            // Map the file name to a table name using the indexer
+            const tableName = this.indexer.getTableNameFromFile(fileName);
+            
+            if (!tableName) {
+                vscode.window.showErrorMessage(`Could not find table for file: ${fileName}`);
                 return;
             }
             
-            // Get any row to find the dataset path
-            const firstTable = indexData.values().next().value;
-            if (!firstTable || firstTable.size === 0) {
-                vscode.window.showErrorMessage('No data in index');
-                return;
-            }
-            
-            const firstRow = firstTable.values().next().value;
-            if (!firstRow || !firstRow.file) {
-                vscode.window.showErrorMessage('Could not determine dataset path');
-                return;
-            }
-            
-            // Construct the file path
-            const datasetDir = path.dirname(firstRow.file);
-            const filePath = path.join(datasetDir, fileName);
-            
-            // Open the file
-            const document = await vscode.workspace.openTextDocument(filePath);
-            await vscode.window.showTextDocument(document, { preview: false });
+            // Open the table in a new viewer panel
+            SwatSingleTableViewerPanel.createOrShow(this.indexer, tableName);
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to open file ${fileName}: ${error}`);
+            vscode.window.showErrorMessage(`Failed to open table for ${fileName}: ${error}`);
         }
     }
 
@@ -332,7 +315,8 @@ export class SwatSingleTableViewerPanel {
 
         // Get FK columns and their targets
         const fkColumns = new Map<string, any>();
-        if (schemaTable && schemaTable.foreign_keys) {
+        // Skip FK detection for file.cio - it has a special format that doesn't match the database schema
+        if (schemaTable && schemaTable.foreign_keys && this.tableName !== 'file_cio') {
             schemaTable.foreign_keys.forEach((fk: any) => {
                 fkColumns.set(fk.column, fk);
             });

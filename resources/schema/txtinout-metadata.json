@@ -927,6 +927,8 @@
         ]
       },
       "primary_keys": ["classification"],
+      "foreign_keys": [],
+      "skip_fk_validation": true,
       "indexing_strategy": "Use classification as primary key, store array of file references per classification"
     },
     "aquifer.aqu": {
