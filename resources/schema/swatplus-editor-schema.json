@@ -3714,14 +3714,6 @@
           "is_foreign_key": false
         },
         {
-          "name": "pet",
-          "db_column": "pet",
-          "type": "CharField",
-          "nullable": true,
-          "is_primary_key": false,
-          "is_foreign_key": false
-        },
-        {
           "name": "atmo_dep",
           "db_column": "atmo_dep",
           "type": "CharField",
@@ -3730,17 +3722,9 @@
           "is_foreign_key": false
         },
         {
-          "name": "lat",
-          "db_column": "lat",
-          "type": "DoubleField",
-          "nullable": true,
-          "is_primary_key": false,
-          "is_foreign_key": false
-        },
-        {
-          "name": "lon",
-          "db_column": "lon",
-          "type": "DoubleField",
+          "name": "pet",
+          "db_column": "pet",
+          "type": "CharField",
           "nullable": true,
           "is_primary_key": false,
           "is_foreign_key": false
