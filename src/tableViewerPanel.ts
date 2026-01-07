@@ -8,6 +8,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { SwatIndexer } from './indexer';
+import { SwatSingleTableViewerPanel } from './singleTableViewerPanel';
 
 export class SwatTableViewerPanel {
     public static currentPanel: SwatTableViewerPanel | undefined;
