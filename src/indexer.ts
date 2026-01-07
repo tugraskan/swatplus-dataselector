@@ -138,7 +138,9 @@ export class SwatIndexer {
     private txtInOutPath: string | null = null;
     private tableToFileMap: Map<string, string> = new Map(); // table_name -> file_name
     private fkNullValues: string[] = ['null', '0', '']; // Default, can be overridden by metadata
-    private fileCioReferences: Map<string, string> = new Map(); // classification -> actual_filename
+    // file.cio data indexed by classification
+    // Structure: classification -> { files: string[], isDefault: boolean[] }
+    private fileCioData: Map<string, { files: string[], isDefault: boolean[] }> = new Map();
 
     constructor(private context: vscode.ExtensionContext) {
         this.loadSchema();
@@ -231,11 +233,16 @@ export class SwatIndexer {
     }
 
     /**
-     * Parse file.cio to extract file references
-     * This allows us to handle cases where users rename input files
+     * Parse file.cio to extract file references organized by classification
+     * Format: classification_name  file1  file2  file3  ...
+     * where files can be actual filenames or 'null' if not used
+     * 
+     * The data is stored in two ways:
+     * 1. fileCioData: classification-based structure for API access
+     * 2. index: schema-based structure (one row per file) for table viewer
      */
     private parseFileCio(): void {
-        this.fileCioReferences.clear();
+        this.fileCioData.clear();
         
         if (!this.txtInOutPath) {
             return;
@@ -256,6 +263,19 @@ export class SwatIndexer {
             // Line 1+: classification_name  file1  file2  file3  ...
             // Column 0 is classification name, columns 1+ are filenames
             
+            const DEFAULT_CUSTOMIZATION = '0'; // Default customization value
+            let totalFileReferences = 0;
+            let rowId = 1; // Auto-incrementing ID for schema compatibility
+            
+            // Ensure file_cio table exists in index (clear any existing data)
+            const tableName = 'file_cio';
+            if (this.index.has(tableName)) {
+                this.index.get(tableName)!.clear();
+            } else {
+                this.index.set(tableName, new Map());
+            }
+            const tableIndex = this.index.get(tableName)!;
+            
             for (let i = 1; i < lines.length; i++) {
                 const line = lines[i].trim();
                 if (!line || line.startsWith('#')) {
@@ -265,21 +285,65 @@ export class SwatIndexer {
                 // Parse the line - split by whitespace
                 const parts = line.split(/\s+/);
                 
-                // Skip classification name (column 0), process filenames from column 1 onwards
-                for (let j = 1; j < parts.length; j++) {
-                    const part = parts[j];
-                    
-                    // Check if it looks like a filename (has extension) and not null
-                    if (part.includes('.') && part !== 'null') {
-                        const filename = part;
-                        // Store with the filename as both key and value
-                        // This allows us to track which files are actually referenced
-                        this.fileCioReferences.set(filename, filename);
-                    }
+                if (parts.length < 2) {
+                    // Need at least classification and one file
+                    continue;
                 }
+                
+                const classification = parts[0];
+                const files: string[] = [];
+                const isDefault: boolean[] = [];
+                
+                // Process filenames from column 1 onwards
+                for (let j = 1; j < parts.length; j++) {
+                    const filename = parts[j];
+                    files.push(filename);
+                    
+                    // Check if this is a default/null value
+                    const filenameLower = filename.toLowerCase();
+                    const isNullValue = filenameLower === 'null' || 
+                                       filename === '' || 
+                                       this.fkNullValues.includes(filenameLower);
+                    isDefault.push(isNullValue);
+                    
+                    if (!isNullValue && filename.includes('.')) {
+                        totalFileReferences++;
+                    }
+                    
+                    // Create a row for each file in schema format
+                    // This allows the table viewer to display the data correctly
+                    const rowIdStr = rowId.toString();
+                    
+                    // Calculate relative path from workspace to file.cio
+                    const workspaceFolders = vscode.workspace.workspaceFolders;
+                    let relativeFilePath = 'file.cio';
+                    if (workspaceFolders && workspaceFolders.length > 0) {
+                        relativeFilePath = path.relative(workspaceFolders[0].uri.fsPath, fileCioPath);
+                    }
+                    
+                    const indexedRow: IndexedRow = {
+                        file: relativeFilePath,
+                        tableName: tableName,
+                        lineNumber: i + 1,
+                        pkValue: rowIdStr,
+                        values: {
+                            id: rowIdStr,
+                            classification: classification,
+                            order_in_class: j.toString(),
+                            file_name: filename,
+                            customization: DEFAULT_CUSTOMIZATION
+                        }
+                    };
+                    
+                    tableIndex.set(rowIdStr, indexedRow);
+                    rowId++;
+                }
+                
+                // Store the classification data for API access
+                this.fileCioData.set(classification.toLowerCase(), { files, isDefault });
             }
             
-            console.log(`Parsed file.cio: ${this.fileCioReferences.size} file references found`);
+            console.log(`Parsed file.cio: ${this.fileCioData.size} classifications, ${totalFileReferences} file references found, ${rowId - 1} rows indexed`);
         } catch (error) {
             console.error(`Error parsing file.cio: ${error}`);
         }
@@ -427,12 +491,8 @@ export class SwatIndexer {
             title: 'Building SWAT+ Inputs Index',
             cancellable: true
         }, async (progress, token) => {
-            // Parse file.cio first to get the actual file references
-            // This is important in case users have renamed input files
-            progress.report({ message: 'Parsing file.cio...', increment: 0 });
-            this.parseFileCio();
-
             // Use pandas-backed indexing (required)
+            progress.report({ message: 'Indexing files...', increment: 10 });
             const pandasResult = this.buildIndexWithPandas(datasetPath);
             if (!pandasResult.success) {
                 const errorDetail = pandasResult.error || 'Unknown error';
@@ -443,7 +503,12 @@ export class SwatIndexer {
                 return false;
             }
 
-            progress.report({ message: 'Resolving foreign key references...' });
+            // Parse file.cio after pandas indexing to add it to the index
+            // file.cio has a special classification-based format handled separately
+            progress.report({ message: 'Parsing file.cio...', increment: 70 });
+            this.parseFileCio();
+
+            progress.report({ message: 'Resolving foreign key references...', increment: 20 });
             this.resolveFKReferences();
 
             vscode.window.showInformationMessage(
@@ -785,17 +850,46 @@ export class SwatIndexer {
     }
 
     /**
-     * Get file references from file.cio
-     * Returns map of filename -> filename
+     * Get file references from file.cio by classification
+     * Returns structured data with classification as key
      */
-    public getFileCioReferences(): Map<string, string> {
-        return new Map(this.fileCioReferences);
+    public getFileCioData(): Map<string, { files: string[], isDefault: boolean[] }> {
+        return new Map(this.fileCioData);
     }
 
     /**
-     * Check if a file is referenced in file.cio
+     * Get file references for a specific classification
+     */
+    public getFileCioClassification(classification: string): { files: string[], isDefault: boolean[] } | undefined {
+        return this.fileCioData.get(classification.toLowerCase());
+    }
+
+    /**
+     * Check if a file is referenced in file.cio (in any classification)
      */
     public isFileReferencedInCio(filename: string): boolean {
-        return this.fileCioReferences.has(filename);
+        for (const data of this.fileCioData.values()) {
+            const idx = data.files.indexOf(filename);
+            if (idx !== -1 && !data.isDefault[idx]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Get all unique file references from file.cio
+     * Returns a list of all non-null filenames across all classifications
+     */
+    public getAllFileCioReferences(): string[] {
+        const files = new Set<string>();
+        for (const data of this.fileCioData.values()) {
+            data.files.forEach((file, idx) => {
+                if (!data.isDefault[idx] && file.includes('.')) {
+                    files.add(file);
+                }
+            });
+        }
+        return Array.from(files);
     }
 }

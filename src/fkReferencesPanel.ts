@@ -115,7 +115,7 @@ export class SwatFKReferencesPanel {
 
         const allRefs = this.indexer.getAllFKReferences();
         const stats = this.indexer.getIndexStats();
-        const fileCioRefs = this.indexer.getFileCioReferences();
+        const fileCioData = this.indexer.getFileCioData();
 
         // Group references by source file
         const refsByFile = new Map<string, typeof allRefs>();
@@ -189,32 +189,56 @@ export class SwatFKReferencesPanel {
 
         // Add file.cio references section
         let fileCioHtml = '';
-        if (fileCioRefs.size > 0) {
+        if (fileCioData.size > 0) {
+            const totalFiles = this.indexer.getAllFileCioReferences().length;
             fileCioHtml = `
                 <div class="file-section">
                     <h3 class="file-header" onclick="toggleSection('file.cio-refs')">
                         <span class="toggle-icon">▼</span>
                         file.cio File References
-                        <span class="badge">${fileCioRefs.size} files</span>
+                        <span class="badge">${fileCioData.size} classifications, ${totalFiles} files</span>
                     </h3>
                     <div id="file.cio-refs" class="file-content">
                         <table class="refs-table">
                             <thead>
                                 <tr>
-                                    <th>Referenced File</th>
-                                    <th>Purpose</th>
+                                    <th>Classification</th>
+                                    <th>Files</th>
+                                    <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody>
             `;
 
-            const sortedCioRefs = Array.from(fileCioRefs.keys()).sort();
-            for (const fileName of sortedCioRefs) {
-                const purpose = this.indexer.getFilePurpose(fileName) || '-';
+            const sortedClassifications = Array.from(fileCioData.keys()).sort();
+            for (const classification of sortedClassifications) {
+                const data = fileCioData.get(classification)!;
+                const fileList = data.files.map((file, idx) => {
+                    if (data.isDefault[idx]) {
+                        return `<span class="null-value">${file}</span>`;
+                    }
+                    const purpose = this.indexer.getFilePurpose(file) || '';
+                    const tooltip = purpose ? `title="${purpose}"` : '';
+                    return `<code ${tooltip}>${file}</code>`;
+                }).join(' ');
+                
+                // Count customized files efficiently
+                let customizedCount = 0;
+                for (let i = 0; i < data.isDefault.length; i++) {
+                    if (!data.isDefault[i]) {
+                        customizedCount++;
+                    }
+                }
+                const totalCount = data.files.length;
+                const statusText = customizedCount === totalCount 
+                    ? `${customizedCount} files` 
+                    : `${customizedCount}/${totalCount} customized`;
+                
                 fileCioHtml += `
                     <tr>
-                        <td><code>${fileName}</code></td>
-                        <td>${purpose}</td>
+                        <td><strong>${classification}</strong></td>
+                        <td>${fileList}</td>
+                        <td>${statusText}</td>
                     </tr>
                 `;
             }
@@ -350,6 +374,11 @@ export class SwatFKReferencesPanel {
             padding: 2px 4px;
             border-radius: 2px;
             font-family: var(--vscode-editor-font-family);
+        }
+        .null-value {
+            color: var(--vscode-descriptionForeground);
+            font-style: italic;
+            opacity: 0.7;
         }
         .no-index {
             text-align: center;

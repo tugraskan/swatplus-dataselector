@@ -8,6 +8,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { SwatIndexer } from './indexer';
+import { SwatSingleTableViewerPanel } from './singleTableViewerPanel';
 
 export class SwatTableViewerPanel {
     public static currentPanel: SwatTableViewerPanel | undefined;
@@ -39,6 +40,11 @@ export class SwatTableViewerPanel {
                     case 'navigateToTarget':
                         if (message.file && message.line) {
                             this.navigateToLocation(message.file, message.line);
+                        }
+                        break;
+                    case 'openFile':
+                        if (message.fileName) {
+                            this.openFileByName(message.fileName);
                         }
                         break;
                     case 'getFKRowData':
@@ -168,6 +174,23 @@ export class SwatTableViewerPanel {
         SwatTableViewerPanel.createOrShow(this.indexer, tableName);
     }
 
+    private async openFileByName(fileName: string) {
+        try {
+            // Map the file name to a table name using the indexer
+            const tableName = this.indexer.getTableNameFromFile(fileName);
+            
+            if (!tableName) {
+                vscode.window.showErrorMessage(`Could not find table for file: ${fileName}`);
+                return;
+            }
+            
+            // Open the table in a new viewer panel
+            SwatSingleTableViewerPanel.createOrShow(this.indexer, tableName);
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to open table for ${fileName}: ${error}`);
+        }
+    }
+
     private async openFileInEditor(file: string) {
         try {
             const document = await vscode.workspace.openTextDocument(file);
@@ -285,7 +308,8 @@ export class SwatTableViewerPanel {
 
         // Get FK columns and their targets
         const fkColumns = new Map<string, any>();
-        if (schemaTable && schemaTable.foreign_keys) {
+        // Skip FK detection for file.cio - it has a special format that doesn't match the database schema
+        if (schemaTable && schemaTable.foreign_keys && tableName !== 'file_cio') {
             schemaTable.foreign_keys.forEach((fk: any) => {
                 fkColumns.set(fk.column, fk);
             });
@@ -354,7 +378,10 @@ export class SwatTableViewerPanel {
                 const value = row.values[col] || '';
                 const fkInfo = fkColumns.get(col);
                 
-                if (fkInfo && value) {
+                // Special handling for file.cio file_name column - make it a clickable file link
+                if (tableName === 'file_cio' && col === 'file_name' && value && value !== 'null' && value.includes('.')) {
+                    tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByName('${this._escapeJs(value)}'); return false;" class="file-link" title="Click to open ${this._escapeHtml(value)}">${this._escapeHtml(value)}</a></td>`;
+                } else if (fkInfo && value) {
                     // Try to resolve FK
                     const targetRow = this.indexer.resolveFKTarget(fkInfo.references.table, value);
                     if (targetRow) {
@@ -618,6 +645,18 @@ export class SwatTableViewerPanel {
                 text-decoration: underline;
                 color: var(--vscode-textLink-activeForeground);
             }
+            .file-link-cell {
+                font-weight: 500;
+            }
+            .file-link {
+                color: var(--vscode-textLink-foreground);
+                text-decoration: none;
+                cursor: pointer;
+            }
+            .file-link:hover {
+                text-decoration: underline;
+                color: var(--vscode-textLink-activeForeground);
+            }
             .fk-indicator {
                 margin-left: 4px;
                 font-size: 0.8em;
@@ -784,6 +823,13 @@ export class SwatTableViewerPanel {
                     command: 'navigateToTarget',
                     file: file,
                     line: line
+                });
+            }
+
+            function openFileByName(fileName) {
+                vscode.postMessage({
+                    command: 'openFile',
+                    fileName: fileName
                 });
             }
 

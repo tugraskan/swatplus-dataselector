@@ -40,6 +40,11 @@ export class SwatSingleTableViewerPanel {
                             this.navigateToLocation(message.file, message.line);
                         }
                         break;
+                    case 'openFile':
+                        if (message.fileName) {
+                            this.openFileByName(message.fileName);
+                        }
+                        break;
                     case 'getFKRowData':
                         if (message.tableName && message.fkValue) {
                             this.sendFKRowData(message.tableName, message.fkValue);
@@ -112,7 +117,17 @@ export class SwatSingleTableViewerPanel {
 
     private async navigateToLocation(file: string, line: number) {
         try {
-            const document = await vscode.workspace.openTextDocument(file);
+            // Resolve the file path if it's relative
+            let filePath = file;
+            if (!path.isAbsolute(file)) {
+                // Get the workspace folder
+                const workspaceFolders = vscode.workspace.workspaceFolders;
+                if (workspaceFolders && workspaceFolders.length > 0) {
+                    filePath = path.join(workspaceFolders[0].uri.fsPath, file);
+                }
+            }
+            
+            const document = await vscode.workspace.openTextDocument(filePath);
             const editor = await vscode.window.showTextDocument(document);
             const position = new vscode.Position(line - 1, 0);
             editor.selection = new vscode.Selection(position, position);
@@ -174,6 +189,55 @@ export class SwatSingleTableViewerPanel {
         SwatSingleTableViewerPanel.createOrShow(this.indexer, tableName);
     }
 
+    private async openFileByName(fileName: string) {
+        try {
+            // Map the file name to a table name using the indexer
+            let tableName = this.indexer.getTableNameFromFile(fileName);
+            
+            // If not found, try deriving table name from file name
+            if (!tableName) {
+                // Replace dots with underscores (e.g., pcp.cli -> pcp_cli)
+                const tableNameFromFile = fileName.replace(/\./g, '_');
+                if (this.indexer.isTableIndexed(tableNameFromFile)) {
+                    tableName = tableNameFromFile;
+                }
+            }
+            
+            if (!tableName) {
+                vscode.window.showWarningMessage(`Table for file "${fileName}" is not indexed. This file is listed in file.cio but was not found in your dataset. It may be optional for your SWAT+ configuration.`);
+                return;
+            }
+            
+            // Open the table in a new viewer panel
+            SwatSingleTableViewerPanel.createOrShow(this.indexer, tableName);
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to open table for ${fileName}: ${error}`);
+        }
+    }
+
+    /**
+     * Check if a file can be opened (exists in index)
+     */
+    private canOpenFile(fileName: string): boolean {
+        if (!fileName || fileName === 'null' || !fileName.includes('.')) {
+            return false;
+        }
+        
+        // Check if it maps to a table
+        let tableName = this.indexer.getTableNameFromFile(fileName);
+        
+        // If not found, try deriving table name from file name
+        if (!tableName) {
+            // Replace dots with underscores (e.g., pcp.cli -> pcp_cli)
+            const tableNameFromFile = fileName.replace(/\./g, '_');
+            if (this.indexer.isTableIndexed(tableNameFromFile)) {
+                tableName = tableNameFromFile;
+            }
+        }
+        
+        return !!tableName;
+    }
+
     private async openFileInEditor(file: string) {
         try {
             const document = await vscode.workspace.openTextDocument(file);
@@ -201,11 +265,22 @@ export class SwatSingleTableViewerPanel {
             
             const firstRow = Array.from(tableData.values())[0];
             if (firstRow && firstRow.file) {
-                const document = await vscode.workspace.openTextDocument(firstRow.file);
+                // Resolve the file path if it's relative
+                let filePath = firstRow.file;
+                if (!path.isAbsolute(filePath)) {
+                    const workspaceFolders = vscode.workspace.workspaceFolders;
+                    if (workspaceFolders && workspaceFolders.length > 0) {
+                        filePath = path.join(workspaceFolders[0].uri.fsPath, filePath);
+                    }
+                }
+                
+                const document = await vscode.workspace.openTextDocument(filePath);
                 await vscode.window.showTextDocument(document, { preview: false });
+            } else {
+                vscode.window.showErrorMessage(`Could not find file path for table: ${tableName}`);
             }
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to open file for table ${tableName}`);
+            vscode.window.showErrorMessage(`Failed to open file for table ${tableName}: ${error}`);
         }
     }
 
@@ -260,7 +335,7 @@ export class SwatSingleTableViewerPanel {
                 </h1>
                 <div class="stats">
                     <span class="stat-item">File: <a href="#" onclick="openFileForTable('${this._escapeJs(this.tableName)}'); return false;" class="file-link" title="Click to open file">${fileName}</a></span>
-                    <span class="stat-item">Rows: ${rowCount}</span>
+                    ${this.tableName !== 'file_cio' ? `<span class="stat-item">Rows: ${rowCount}</span>` : ''}
                 </div>
             </div>
             <div class="content">
@@ -279,6 +354,11 @@ export class SwatSingleTableViewerPanel {
             return '<p class="empty-message">No data</p>';
         }
 
+        // Special rendering for file.cio - use classification-based sub-table view
+        if (this.tableName === 'file_cio') {
+            return this._getFileCioSubTableHtml(rows);
+        }
+
         // Get columns from schema or first row
         let columns: string[] = [];
         const columnMetadata = new Map<string, any>();
@@ -293,7 +373,8 @@ export class SwatSingleTableViewerPanel {
 
         // Get FK columns and their targets
         const fkColumns = new Map<string, any>();
-        if (schemaTable && schemaTable.foreign_keys) {
+        // Skip FK detection for file.cio - it has a special format that doesn't match the database schema
+        if (schemaTable && schemaTable.foreign_keys && this.tableName !== 'file_cio') {
             schemaTable.foreign_keys.forEach((fk: any) => {
                 fkColumns.set(fk.column, fk);
             });
@@ -362,7 +443,13 @@ export class SwatSingleTableViewerPanel {
                 const value = row.values[col] || '';
                 const fkInfo = fkColumns.get(col);
                 
-                if (fkInfo && value) {
+                // Special handling for file.cio file_name column - make it a clickable file link
+                if (this.tableName === 'file_cio' && col === 'file_name' && value && value !== 'null' && value.includes('.')) {
+                    const canOpen = this.canOpenFile(value);
+                    const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
+                    const title = canOpen ? `Click to open ${this._escapeHtml(value)}` : `${this._escapeHtml(value)} - Not indexed (may not exist in dataset)`;
+                    tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByName('${this._escapeJs(value)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                } else if (fkInfo && value) {
                     // Try to resolve FK
                     const targetRow = this.indexer.resolveFKTarget(fkInfo.references.table, value);
                     if (targetRow) {
@@ -398,6 +485,222 @@ export class SwatSingleTableViewerPanel {
         `;
 
         return tableHtml;
+    }
+
+    private _getFileCioSubTableHtml(rows: any[]): string {
+        // Define the official file.cio structure from GitBook documentation
+        const fileCioStructure: { [key: string]: { displayName: string, files: string[] } } = {
+            'simulation': { 
+                displayName: 'Simulation',
+                files: ['time.sim', 'print.prt', 'object.prt', 'object.cnt', 'constituents.cs']
+            },
+            'basin': {
+                displayName: 'Basin',
+                files: ['codes.bsn', 'parameters.bsn']
+            },
+            'climate': {
+                displayName: 'Climate',
+                files: ['weather-sta.cli', 'weather-wgn.cli', 'wind-dir.cli', 'pcp.cli', 'tmp.cli', 'slr.cli', 'hmd.cli', 'wnd.cli', 'atmo.cli']
+            },
+            'connect': {
+                displayName: 'Connect',
+                files: ['hru.con', 'hru-lte.con', 'rout_unit.con', 'gwflow.con', 'aquifer.con', 'aquifer2d.con', 'channel.con', 'reservoir.con', 'recall.con', 'exco.con', 'delratio.con', 'outlet.con', 'chandeg.con']
+            },
+            'channel': {
+                displayName: 'Channel',
+                files: ['initial.cha', 'channel.cha', 'hydrology.cha', 'sediment.cha', 'nutrients.cha', 'channel-lte.cha', 'hyd-sed-lte.cha', 'temperature.cha']
+            },
+            'reservoir': {
+                displayName: 'Reservoir',
+                files: ['initial.res', 'reservoir.res', 'hydrology.res', 'sediment.res', 'nutrients.res', 'weir.res', 'wetland.wet', 'hydrology.wet']
+            },
+            'routing_unit': {
+                displayName: 'Routing Unit',
+                files: ['rout_unit.def', 'rout_unit.ele', 'rout_unit.rtu', 'rout_unit.dr']
+            },
+            'hru': {
+                displayName: 'HRU',
+                files: ['hru-data.hru', 'hru-lte.hru']
+            },
+            'exco': {
+                displayName: 'Export Coefficient',
+                files: ['exco.exc', 'exco_om.exc', 'exco_pest.exc', 'exco_path.exc', 'exco_hmet.exc', 'exco_salt.exc']
+            },
+            'recall': {
+                displayName: 'Recall',
+                files: ['recall.rec']
+            },
+            'dr': {
+                displayName: 'Delivery Ratio',
+                files: ['del_ratio.del', 'dr_om.del', 'dr_pest.del', 'dr_path.del', 'dr_hmet.del', 'dr_salt.del']
+            },
+            'aquifer': {
+                displayName: 'Aquifer',
+                files: ['initial.aqu', 'aquifer.aqu']
+            },
+            'herd': {
+                displayName: 'Herd',
+                files: ['animal.hrd', 'herd.hrd', 'ranch.hrd']
+            },
+            'water_rights': {
+                displayName: 'Water Rights',
+                files: ['water_allocation.wro']
+            },
+            'link': {
+                displayName: 'Link',
+                files: ['chan-surf.lin', 'aqu_cha.lin']
+            },
+            'hydrology': {
+                displayName: 'Hydrology',
+                files: ['hydrology.hyd', 'topography.hyd', 'field.fld']
+            },
+            'structural': {
+                displayName: 'Structural',
+                files: ['tiledrain.str', 'septic.str', 'filterstrip.str', 'grassedww.str', 'bmpuser.str']
+            },
+            'hru_parm_db': {
+                displayName: 'HRU Databases',
+                files: ['plants.plt', 'fertilizer.frt', 'tillage.til', 'pesticide.pes', 'pathogens.pth', 'metals.mtl', 'salt.slt', 'urban.urb', 'septic.sep', 'snow.sno']
+            },
+            'ops': {
+                displayName: 'Operation Scheduling',
+                files: ['harv.ops', 'graze.ops', 'irr.ops', 'chem_app.ops', 'fire.ops', 'sweep.ops']
+            },
+            'lum': {
+                displayName: 'Land Use Management',
+                files: ['landuse.lum', 'management.sch', 'cntable.lum', 'cons_practice.lum', 'ovn_table.lum']
+            },
+            'chg': {
+                displayName: 'Change',
+                files: ['cal_parms.cal', 'calibration.cal', 'codes.sft', 'wb_parms.sft', 'water_balance.sft', 'ch_sed_budget.sft', 'ch_sed_parms.sft', 'plant_parms.sft', 'plant_gro.sft']
+            },
+            'init': {
+                displayName: 'Initial',
+                files: ['plant.ini', 'soil_plant.ini', 'om_water.ini', 'pest_hru.ini', 'pest_water.ini', 'path_hru.ini', 'path_water.ini', 'hmet_hru.ini', 'hmet_water.ini', 'salt_hru.ini', 'salt_water.ini']
+            },
+            'soils': {
+                displayName: 'Soils',
+                files: ['soils.sol', 'nutrients.sol', 'soils_lte.sol']
+            },
+            'decision_table': {
+                displayName: 'Conditional',
+                files: ['lum.dtl', 'res_rel.dtl', 'scen_lu.dtl', 'flo_con.dtl']
+            },
+            'regions': {
+                displayName: 'Regions',
+                files: ['ls_unit.ele', 'ls_unit.def', 'ls_reg.ele', 'ls_reg.def', 'ls_cal.reg', 'ch_catunit.ele', 'ch_catunit.def', 'ch_reg.def', 'aqu_catunit.ele', 'aqu_catunit.def', 'aqu_reg.def', 'res_catunit.ele', 'res_catunit.def', 'res_reg.def', 'rec_catunit.ele', 'rec_catunit.def', 'rec_reg.def']
+            }
+        };
+
+        // Group rows by classification to get actual files from file.cio
+        const classificationActualFiles = new Map<string, Map<number, string | null>>();
+        const classificationMeta = new Map<string, { lineNumber: number, file: string }>();
+        
+        for (const row of rows) {
+            const classification = (row.values.classification || '').toLowerCase(); // Normalize to lowercase
+            const fileName = row.values.file_name;
+            const orderInClass = parseInt(row.values.order_in_class) || 0;
+            
+            if (classification) {
+                // Store line number and file for classification header link
+                if (!classificationMeta.has(classification)) {
+                    classificationMeta.set(classification, {
+                        lineNumber: row.lineNumber || 0,
+                        file: row.file || 'file.cio'
+                    });
+                }
+                
+                // Store actual files by order
+                if (!classificationActualFiles.has(classification)) {
+                    classificationActualFiles.set(classification, new Map());
+                }
+                const filesMap = classificationActualFiles.get(classification)!;
+                filesMap.set(orderInClass, fileName === 'null' || !fileName ? null : fileName);
+            }
+        }
+
+        const metadata = this.indexer.getMetadata();
+        const fileMetadata = metadata?.file_metadata?.['file.cio'];
+        
+        let html = '';
+        
+        // Add file description if available
+        if (fileMetadata && fileMetadata.description) {
+            html += `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
+        }
+
+        html += `<div class="file-cio-subtables">`;
+
+        // Render each classification in the defined order
+        for (const [classificationKey, classificationData] of Object.entries(fileCioStructure)) {
+            const meta = classificationMeta.get(classificationKey);
+            const lineNumber = meta?.lineNumber || 0;
+            const file = meta?.file || 'file.cio';
+            const displayName = classificationData.displayName;
+            const expectedFiles = classificationData.files;
+            
+            // Get actual files from file.cio
+            const actualFilesMap = classificationActualFiles.get(classificationKey) || new Map();
+            const actualFiles: (string | null)[] = [];
+            for (let i = 1; i <= expectedFiles.length; i++) {
+                actualFiles.push(actualFilesMap.get(i) || null);
+            }
+            
+            // Count active files (that exist in the index)
+            const activeFiles = actualFiles.filter(fileName => fileName && this.canOpenFile(fileName));
+            const activeCount = activeFiles.length;
+            const totalCount = expectedFiles.length;
+
+            html += `
+                <div class="classification-section" data-classification="${this._escapeHtml(classificationKey)}">
+                    <div class="classification-header" onclick="toggleClassificationSection('${this._escapeJs(classificationKey)}')">
+                        <span class="toggle-icon">▼</span>
+                        <span class="classification-name">
+                            <a href="#" onclick="event.stopPropagation(); navigateToFile('${this._escapeJs(file)}', ${lineNumber}); return false;" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(displayName)}</a>
+                        </span>
+                        <span class="classification-stats">
+                            ${activeCount} of ${totalCount} file${totalCount !== 1 ? 's' : ''} indexed
+                        </span>
+                    </div>
+                    <div class="classification-content">
+                        <div class="classification-files-grid">
+                            <div class="files-row files-header" style="grid-template-columns: repeat(${expectedFiles.length}, minmax(150px, auto)); text-align: right;">
+            `;
+
+            // Row 1: Expected files from GitBook (headers)
+            for (const fileName of expectedFiles) {
+                html += `<span class="file-header">${this._escapeHtml(fileName)}</span>`;
+            }
+
+            html += `
+                            </div>
+                            <div class="files-row files-actual" style="grid-template-columns: repeat(${expectedFiles.length}, minmax(150px, auto)); text-align: right;">
+            `;
+
+            // Row 2: Actual files from file.cio (clickable if they exist)
+            for (let i = 0; i < expectedFiles.length; i++) {
+                const fileName = i < actualFiles.length ? actualFiles[i] : null;
+                if (!fileName) {
+                    html += `<span class="file-null">null</span>`;
+                } else {
+                    const canOpen = this.canOpenFile(fileName);
+                    const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
+                    const title = canOpen ? `Click to open ${this._escapeHtml(fileName)}` : `${this._escapeHtml(fileName)} - Not indexed (may not exist in dataset)`;
+                    html += `<a href="#" onclick="openFileByName('${this._escapeJs(fileName)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(fileName)}</a>`;
+                }
+            }
+
+            html += `
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        html += `</div>`;
+        
+        return html;
     }
 
     private _escapeHtml(text: string): string {
@@ -587,6 +890,129 @@ export class SwatSingleTableViewerPanel {
                 text-decoration: underline;
                 color: var(--vscode-textLink-activeForeground);
             }
+            .file-link-cell {
+                font-weight: 500;
+            }
+            .file-link {
+                color: var(--vscode-textLink-foreground);
+                text-decoration: none;
+                cursor: pointer;
+            }
+            .file-link:hover {
+                text-decoration: underline;
+                color: var(--vscode-textLink-activeForeground);
+            }
+            .broken-link {
+                color: #f48771 !important;
+            }
+            .broken-link:hover {
+                color: #f14c28 !important;
+            }
+            /* Classification-based sub-table view for file.cio */
+            .file-cio-subtables {
+                margin: 16px 0;
+            }
+            .classification-section {
+                margin-bottom: 12px;
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                overflow: hidden;
+            }
+            .classification-header {
+                padding: 12px 16px;
+                background-color: var(--vscode-editor-background);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                user-select: none;
+                transition: background-color 0.2s;
+            }
+            .classification-header:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            .toggle-icon {
+                font-size: 0.7em;
+                transition: transform 0.2s;
+                display: inline-block;
+                width: 12px;
+            }
+            .classification-header.collapsed .toggle-icon {
+                transform: rotate(-90deg);
+            }
+            .classification-name {
+                font-weight: 600;
+                flex: 1;
+            }
+            .classification-name .line-link {
+                color: var(--vscode-foreground);
+                text-decoration: none;
+            }
+            .classification-name .line-link:hover {
+                color: var(--vscode-textLink-activeForeground);
+                text-decoration: underline;
+            }
+            .classification-stats {
+                font-size: 0.85em;
+                color: var(--vscode-descriptionForeground);
+            }
+            .classification-content {
+                max-height: 1000px;
+                overflow-y: auto;
+                transition: max-height 0.3s ease-out;
+                padding: 12px 16px;
+            }
+            .classification-content.collapsed {
+                max-height: 0;
+                overflow: hidden;
+                padding: 0;
+            }
+            .classification-files-grid {
+                display: grid;
+                grid-template-rows: auto auto;
+                gap: 8px;
+            }
+            .files-row {
+                display: grid;
+                gap: 8px;
+                align-items: center;
+            }
+            .files-header {
+                margin-bottom: 0;
+            }
+            .file-header {
+                padding: 4px 8px;
+                color: var(--vscode-descriptionForeground);
+                font-size: 0.8em;
+                font-weight: 500;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                min-width: 0;
+            }
+            .file-link {
+                display: block;
+                text-decoration: none;
+                color: var(--vscode-textLink-foreground);
+                font-size: 0.85em;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                min-width: 0;
+                padding: 4px 8px;
+            }
+            .file-link:hover {
+                text-decoration: underline;
+                color: var(--vscode-textLink-activeForeground);
+            }
+            .file-null {
+                font-style: italic;
+                opacity: 0.5;
+                cursor: default;
+                color: var(--vscode-descriptionForeground);
+                padding: 4px 8px;
+                min-width: 0;
+            }
             .fk-indicator {
                 margin-left: 4px;
                 font-size: 0.8em;
@@ -750,6 +1176,29 @@ export class SwatSingleTableViewerPanel {
                     file: file,
                     line: line
                 });
+            }
+
+            function openFileByName(fileName) {
+                vscode.postMessage({
+                    command: 'openFile',
+                    fileName: fileName
+                });
+            }
+
+            function toggleClassificationSection(classification) {
+                const section = document.querySelector('[data-classification="' + classification + '"]');
+                if (!section) return;
+                
+                const header = section.querySelector('.classification-header');
+                const content = section.querySelector('.classification-content');
+                
+                if (content.classList.contains('collapsed')) {
+                    content.classList.remove('collapsed');
+                    header.classList.remove('collapsed');
+                } else {
+                    content.classList.add('collapsed');
+                    header.classList.add('collapsed');
+                }
             }
 
             function openFileForTable(tableName) {
