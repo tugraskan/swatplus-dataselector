@@ -664,7 +664,7 @@ export class SwatSingleTableViewerPanel {
                     </div>
                     <div class="classification-content">
                         <div class="classification-files-grid">
-                            <div class="files-row files-header" style="grid-template-columns: repeat(${expectedFiles.length}, minmax(120px, 1fr));">
+                            <div class="files-row files-header" style="grid-template-columns: repeat(${expectedFiles.length}, minmax(150px, auto)); text-align: right;">
             `;
 
             // Row 1: Expected files from GitBook (headers)
@@ -674,7 +674,7 @@ export class SwatSingleTableViewerPanel {
 
             html += `
                             </div>
-                            <div class="files-row files-actual" style="grid-template-columns: repeat(${expectedFiles.length}, minmax(120px, 1fr));">
+                            <div class="files-row files-actual" style="grid-template-columns: repeat(${expectedFiles.length}, minmax(150px, auto)); text-align: right;">
             `;
 
             // Row 2: Actual files from file.cio (clickable if they exist)
@@ -981,7 +981,6 @@ export class SwatSingleTableViewerPanel {
                 margin-bottom: 0;
             }
             .file-header {
-                text-align: center;
                 padding: 4px 8px;
                 color: var(--vscode-descriptionForeground);
                 font-size: 0.8em;
@@ -993,7 +992,6 @@ export class SwatSingleTableViewerPanel {
             }
             .file-link {
                 display: block;
-                text-align: center;
                 text-decoration: none;
                 color: var(--vscode-textLink-foreground);
                 font-size: 0.85em;
@@ -1011,7 +1009,6 @@ export class SwatSingleTableViewerPanel {
                 font-style: italic;
                 opacity: 0.5;
                 cursor: default;
-                text-align: center;
                 color: var(--vscode-descriptionForeground);
                 padding: 4px 8px;
                 min-width: 0;
