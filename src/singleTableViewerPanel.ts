@@ -233,7 +233,16 @@ export class SwatSingleTableViewerPanel {
             
             const firstRow = Array.from(tableData.values())[0];
             if (firstRow && firstRow.file) {
-                const document = await vscode.workspace.openTextDocument(firstRow.file);
+                // Resolve the file path if it's relative
+                let filePath = firstRow.file;
+                if (!path.isAbsolute(filePath)) {
+                    const workspaceFolders = vscode.workspace.workspaceFolders;
+                    if (workspaceFolders && workspaceFolders.length > 0) {
+                        filePath = path.join(workspaceFolders[0].uri.fsPath, filePath);
+                    }
+                }
+                
+                const document = await vscode.workspace.openTextDocument(filePath);
                 await vscode.window.showTextDocument(document, { preview: false });
             }
         } catch (error) {
@@ -292,7 +301,7 @@ export class SwatSingleTableViewerPanel {
                 </h1>
                 <div class="stats">
                     <span class="stat-item">File: <a href="#" onclick="openFileForTable('${this._escapeJs(this.tableName)}'); return false;" class="file-link" title="Click to open file">${fileName}</a></span>
-                    <span class="stat-item">Rows: ${rowCount}</span>
+                    ${this.tableName !== 'file_cio' ? `<span class="stat-item">Rows: ${rowCount}</span>` : ''}
                 </div>
             </div>
             <div class="content">
