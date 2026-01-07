@@ -356,6 +356,11 @@ export class SwatSingleTableViewerPanel {
             return this._getFileCioSubTableHtml(rows);
         }
 
+        // Special rendering for weather-wgn.cli - use station-based sub-table view with monthly data
+        if (this.tableName === 'weather_wgn_cli') {
+            return this._getWeatherWgnSubTableHtml(rows);
+        }
+
         // Get columns from actual indexed data (not schema)
         // This ensures we only show columns that exist in the actual input files
         let columns: string[] = [];
@@ -701,6 +706,119 @@ export class SwatSingleTableViewerPanel {
         return html;
     }
 
+    private _getWeatherWgnSubTableHtml(rows: any[]): string {
+        const metadata = this.indexer.getMetadata();
+        const fileMetadata = metadata?.file_metadata?.['weather-wgn.cli'];
+        
+        let html = '';
+        
+        // Add file description if available
+        if (fileMetadata && fileMetadata.description) {
+            html += `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
+        }
+
+        html += `<div class="weather-wgn-subtables">`;
+
+        // Month names for better readability
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                           'July', 'August', 'September', 'October', 'November', 'December'];
+
+        // Render each weather station as an expandable section
+        for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
+            const stationName = row.values.name || 'Unknown Station';
+            const lat = row.values.lat || 'N/A';
+            const lon = row.values.lon || 'N/A';
+            const elev = row.values.elev || 'N/A';
+            const rainYrs = row.values.rain_yrs || 'N/A';
+            const lineNumber = row.lineNumber || 0;
+            const file = row.file || 'weather-wgn.cli';
+
+            html += `
+                <div class="wgn-station-section" data-station="${this._escapeHtml(stationName)}">
+                    <div class="wgn-station-header" onclick="toggleWgnStationSection('${this._escapeJs(stationName)}')">
+                        <span class="toggle-icon">▼</span>
+                        <span class="station-name">
+                            <a href="#" onclick="event.stopPropagation(); navigateToFile('${this._escapeJs(file)}', ${lineNumber}); return false;" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(stationName)}</a>
+                        </span>
+                        <span class="station-info">
+                            Lat: ${this._escapeHtml(lat)}, Lon: ${this._escapeHtml(lon)}, Elev: ${this._escapeHtml(elev)}m, Years: ${this._escapeHtml(rainYrs)}
+                        </span>
+                    </div>
+                    <div class="wgn-station-content">
+            `;
+
+            // Check if we have child rows (monthly data)
+            if (row.childRows && Array.isArray(row.childRows) && row.childRows.length > 0) {
+                // Monthly data columns
+                const monthlyColumns = [
+                    { key: 'month', label: 'Month' },
+                    { key: 'tmp_max_ave', label: 'Tmp Max Avg (°C)' },
+                    { key: 'tmp_min_ave', label: 'Tmp Min Avg (°C)' },
+                    { key: 'tmp_max_sd', label: 'Tmp Max SD (°C)' },
+                    { key: 'tmp_min_sd', label: 'Tmp Min SD (°C)' },
+                    { key: 'pcp_ave', label: 'Pcp Avg (mm)' },
+                    { key: 'pcp_sd', label: 'Pcp SD (mm/day)' },
+                    { key: 'pcp_skew', label: 'Pcp Skew' },
+                    { key: 'wet_dry', label: 'Wet/Dry' },
+                    { key: 'wet_wet', label: 'Wet/Wet' },
+                    { key: 'pcp_days', label: 'Pcp Days' },
+                    { key: 'pcp_hhr', label: 'Pcp 0.5hr (mm)' },
+                    { key: 'slr_ave', label: 'Solar Avg (MJ/m²/day)' },
+                    { key: 'dew_ave', label: 'Dew Avg (°C)' },
+                    { key: 'wnd_ave', label: 'Wind Avg (m/s)' }
+                ];
+
+                html += `
+                        <div class="table-wrapper">
+                            <table class="monthly-data-table">
+                                <thead>
+                                    <tr>
+                                        <th class="line-col">Line</th>
+                                        ${monthlyColumns.map(col => `<th title="${this._escapeHtml(col.label)}">${this._escapeHtml(col.key === 'month' ? 'Month' : col.label)}</th>`).join('')}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                `;
+
+                for (const childRow of row.childRows) {
+                    const monthNum = parseInt(childRow.values.month || '0');
+                    const monthName = monthNum > 0 && monthNum <= 12 ? monthNames[monthNum - 1] : `Month ${monthNum}`;
+                    
+                    html += `<tr>`;
+                    html += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(file)}', ${childRow.lineNumber})">${childRow.lineNumber}</a></td>`;
+                    
+                    for (const col of monthlyColumns) {
+                        let value = childRow.values[col.key] || '';
+                        // Display month name instead of number
+                        if (col.key === 'month') {
+                            value = monthName;
+                        }
+                        html += `<td>${this._escapeHtml(value)}</td>`;
+                    }
+                    
+                    html += `</tr>`;
+                }
+
+                html += `
+                                </tbody>
+                            </table>
+                        </div>
+                `;
+            } else {
+                html += `<p class="empty-message">No monthly data available</p>`;
+            }
+
+            html += `
+                    </div>
+                </div>
+            `;
+        }
+
+        html += `</div>`;
+        
+        return html;
+    }
+
     private _escapeHtml(text: string): string {
         return text
             .replace(/&/g, '&amp;')
@@ -1011,6 +1129,87 @@ export class SwatSingleTableViewerPanel {
                 padding: 4px 8px;
                 min-width: 0;
             }
+            .file-null {
+                color: var(--vscode-disabledForeground);
+                font-style: italic;
+                padding: 4px 8px;
+                min-width: 0;
+            }
+            /* Weather-wgn.cli station-based sub-table view */
+            .weather-wgn-subtables {
+                margin: 16px 0;
+            }
+            .wgn-station-section {
+                margin-bottom: 12px;
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                overflow: hidden;
+            }
+            .wgn-station-header {
+                padding: 12px 16px;
+                background-color: var(--vscode-editor-background);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                user-select: none;
+                transition: background-color 0.2s;
+            }
+            .wgn-station-header:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            .wgn-station-header.collapsed .toggle-icon {
+                transform: rotate(-90deg);
+            }
+            .station-name {
+                font-weight: 600;
+                flex: 0 0 auto;
+            }
+            .station-name .line-link {
+                color: var(--vscode-foreground);
+                text-decoration: none;
+            }
+            .station-name .line-link:hover {
+                color: var(--vscode-textLink-activeForeground);
+                text-decoration: underline;
+            }
+            .station-info {
+                font-size: 0.85em;
+                color: var(--vscode-descriptionForeground);
+                flex: 1;
+            }
+            .wgn-station-content {
+                max-height: 1000px;
+                overflow-y: auto;
+                transition: max-height 0.3s ease-out;
+                padding: 12px 16px;
+            }
+            .wgn-station-content.collapsed {
+                max-height: 0;
+                overflow: hidden;
+                padding: 0;
+            }
+            .monthly-data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 0.85em;
+            }
+            .monthly-data-table th {
+                background-color: var(--vscode-editor-background);
+                padding: 8px 6px;
+                text-align: left;
+                border-bottom: 2px solid var(--vscode-panel-border);
+                font-weight: 600;
+                white-space: nowrap;
+                font-size: 0.75em;
+            }
+            .monthly-data-table td {
+                padding: 6px;
+                border-bottom: 1px solid var(--vscode-panel-border);
+            }
+            .monthly-data-table tr:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
             .fk-indicator {
                 margin-left: 4px;
                 font-size: 0.8em;
@@ -1189,6 +1388,22 @@ export class SwatSingleTableViewerPanel {
                 
                 const header = section.querySelector('.classification-header');
                 const content = section.querySelector('.classification-content');
+                
+                if (content.classList.contains('collapsed')) {
+                    content.classList.remove('collapsed');
+                    header.classList.remove('collapsed');
+                } else {
+                    content.classList.add('collapsed');
+                    header.classList.add('collapsed');
+                }
+            }
+
+            function toggleWgnStationSection(station) {
+                const section = document.querySelector('[data-station="' + station + '"]');
+                if (!section) return;
+                
+                const header = section.querySelector('.wgn-station-header');
+                const content = section.querySelector('.wgn-station-content');
                 
                 if (content.classList.contains('collapsed')) {
                     content.classList.remove('collapsed');

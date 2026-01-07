@@ -572,18 +572,55 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
 
         # Build row payload
         row_payload = []
-        for _, row in df.iterrows():
+        for idx, row in df.iterrows():
             # Filter out AutoField columns (same as parsing logic)
             values = {col["name"]: str(row.get(col["name"], "")) for col in table.get("columns", []) if col.get("type") != "AutoField"}
-            row_payload.append(
-                {
-                    "file": str(file_path),
-                    "tableName": table["table_name"],
-                    "lineNumber": int(row["lineNumber"]),
-                    "pkValue": str(row["pkValue"]),
-                    "values": values,
-                }
-            )
+            row_dict = {
+                "file": str(file_path),
+                "tableName": table["table_name"],
+                "lineNumber": int(row["lineNumber"]),
+                "pkValue": str(row["pkValue"]),
+                "values": values,
+            }
+            
+            # Special handling for weather-wgn.cli: capture monthly data child lines
+            if file_name == 'weather-wgn.cli' and child_line_info and idx < len(child_line_info):
+                line_num, child_count = child_line_info[idx]
+                if child_count > 0:
+                    with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
+                        lines = handle.readlines()
+                    
+                    # Skip the header line (first child line) and capture the 12 monthly data lines
+                    child_rows = []
+                    # Monthly data columns based on the weather-wgn.cli documentation
+                    monthly_columns = [
+                        'tmp_max_ave', 'tmp_min_ave', 'tmp_max_sd', 'tmp_min_sd',
+                        'pcp_ave', 'pcp_sd', 'pcp_skew', 'wet_dry', 'wet_wet',
+                        'pcp_days', 'pcp_hhr', 'slr_ave', 'dew_ave', 'wnd_ave'
+                    ]
+                    
+                    # Start from line after main record, skip header, then read 12 months
+                    start_idx = line_num  # line_num is already 1-based
+                    for month_idx in range(12):
+                        # Skip header line (1) + month offset
+                        child_line_idx = start_idx + 1 + month_idx
+                        if child_line_idx < len(lines):
+                            child_line = lines[child_line_idx].strip()
+                            if child_line:
+                                child_values_list = child_line.split()
+                                child_value_map = {}
+                                for col_idx, col_name in enumerate(monthly_columns):
+                                    child_value_map[col_name] = child_values_list[col_idx] if col_idx < len(child_values_list) else ""
+                                child_value_map['month'] = str(month_idx + 1)  # Add month number (1-12)
+                                child_rows.append({
+                                    "lineNumber": child_line_idx + 1,  # Convert to 1-based
+                                    "values": child_value_map
+                                })
+                    
+                    if child_rows:
+                        row_dict["childRows"] = child_rows
+            
+            row_payload.append(row_dict)
 
         tables_payload[table["table_name"]] = row_payload
         
