@@ -215,6 +215,28 @@ export class SwatSingleTableViewerPanel {
         }
     }
 
+    /**
+     * Check if a file can be opened (exists in index)
+     */
+    private canOpenFile(fileName: string): boolean {
+        if (!fileName || fileName === 'null' || !fileName.includes('.')) {
+            return false;
+        }
+        
+        // Check if it maps to a table
+        let tableName = this.indexer.getTableNameFromFile(fileName);
+        
+        // If not found, try deriving table name from file name (remove extension)
+        if (!tableName) {
+            const baseName = path.parse(fileName).name;
+            if (this.indexer.isTableIndexed(baseName)) {
+                tableName = baseName;
+            }
+        }
+        
+        return !!tableName;
+    }
+
     private async openFileInEditor(file: string) {
         try {
             const document = await vscode.workspace.openTextDocument(file);
@@ -422,7 +444,10 @@ export class SwatSingleTableViewerPanel {
                 
                 // Special handling for file.cio file_name column - make it a clickable file link
                 if (this.tableName === 'file_cio' && col === 'file_name' && value && value !== 'null' && value.includes('.')) {
-                    tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByName('${this._escapeJs(value)}'); return false;" class="file-link" title="Click to open ${this._escapeHtml(value)}">${this._escapeHtml(value)}</a></td>`;
+                    const canOpen = this.canOpenFile(value);
+                    const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
+                    const title = canOpen ? `Click to open ${this._escapeHtml(value)}` : `${this._escapeHtml(value)} - Not indexed (may not exist in dataset)`;
+                    tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByName('${this._escapeJs(value)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
                 } else if (fkInfo && value) {
                     // Try to resolve FK
                     const targetRow = this.indexer.resolveFKTarget(fkInfo.references.table, value);
@@ -530,7 +555,11 @@ export class SwatSingleTableViewerPanel {
                 if (isNull) {
                     html += `<span class="file-item null-value">${this._escapeHtml(fileName)}</span>`;
                 } else {
-                    html += `<span class="file-item"><a href="#" onclick="openFileByName('${this._escapeJs(fileName)}'); return false;" class="file-link" title="Click to open ${this._escapeHtml(fileName)}">${this._escapeHtml(fileName)}</a></span>`;
+                    // Check if file can be opened (is indexed)
+                    const canOpen = this.canOpenFile(fileName);
+                    const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
+                    const title = canOpen ? `Click to open ${this._escapeHtml(fileName)}` : `${this._escapeHtml(fileName)} - Not indexed (may not exist in dataset)`;
+                    html += `<span class="file-item"><a href="#" onclick="openFileByName('${this._escapeJs(fileName)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(fileName)}</a></span>`;
                 }
             }
 
@@ -744,6 +773,12 @@ export class SwatSingleTableViewerPanel {
             .file-link:hover {
                 text-decoration: underline;
                 color: var(--vscode-textLink-activeForeground);
+            }
+            .broken-link {
+                color: #f48771 !important;
+            }
+            .broken-link:hover {
+                color: #f14c28 !important;
             }
             /* Classification-based sub-table view for file.cio */
             .file-cio-subtables {
