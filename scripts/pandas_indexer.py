@@ -551,6 +551,11 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
         if not file_path.exists():
             continue
         
+        # Skip file.cio - it has a special classification-based format that is handled
+        # separately in the TypeScript parseFileCio() method
+        if file_name == 'file.cio':
+            continue
+        
         # Special handling for decision table files (*.dtl)
         if file_name.endswith('.dtl'):
             row_payload, dtl_fk_refs = process_dtl_file(file_path, table, fk_null_values)
@@ -581,7 +586,10 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
         tables_payload[table["table_name"]] = row_payload
         
         # Build FK references for main records
-        fk_references.extend(build_fk_references(df, table, file_path, fk_null_values, metadata))
+        # Skip FK building for file.cio - it has a special classification-based format
+        # that doesn't match the schema's column structure
+        if file_name != 'file.cio':
+            fk_references.extend(build_fk_references(df, table, file_path, fk_null_values, metadata))
         
         # Special handling for management.sch child lines
         if file_name == 'management.sch' and child_line_info:
