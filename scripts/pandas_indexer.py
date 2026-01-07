@@ -600,10 +600,11 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
                     ]
                     
                     # Start from line after main record, skip header, then read 12 months
-                    start_idx = line_num  # line_num is already 1-based
+                    # line_num is 1-based, but lines array is 0-based
+                    start_idx = line_num - 1  # Convert to 0-based index
                     for month_idx in range(12):
                         # Skip header line (1) + month offset
-                        child_line_idx = start_idx + 1 + month_idx
+                        child_line_idx = start_idx + 1 + month_idx + 1  # +1 for next line, +month_idx for month, +1 for header skip
                         if child_line_idx < len(lines):
                             child_line = lines[child_line_idx].strip()
                             if child_line:
@@ -613,7 +614,7 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
                                     child_value_map[col_name] = child_values_list[col_idx] if col_idx < len(child_values_list) else ""
                                 child_value_map['month'] = str(month_idx + 1)  # Add month number (1-12)
                                 child_rows.append({
-                                    "lineNumber": child_line_idx + 1,  # Convert to 1-based
+                                    "lineNumber": child_line_idx + 1,  # Convert back to 1-based for display
                                     "values": child_value_map
                                 })
                     

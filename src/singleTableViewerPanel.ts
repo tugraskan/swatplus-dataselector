@@ -1399,7 +1399,9 @@ export class SwatSingleTableViewerPanel {
             }
 
             function toggleWgnStationSection(station) {
-                const section = document.querySelector('[data-station="' + station + '"]');
+                // Escape the station name for safe use in CSS selector
+                const escapedStation = station.replace(/"/g, '\\"');
+                const section = document.querySelector('[data-station="' + escapedStation + '"]');
                 if (!section) return;
                 
                 const header = section.querySelector('.wgn-station-header');
