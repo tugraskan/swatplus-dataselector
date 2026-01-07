@@ -253,9 +253,11 @@ export class SwatSingleTableViewerPanel {
                 
                 const document = await vscode.workspace.openTextDocument(filePath);
                 await vscode.window.showTextDocument(document, { preview: false });
+            } else {
+                vscode.window.showErrorMessage(`Could not find file path for table: ${tableName}`);
             }
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to open file for table ${tableName}`);
+            vscode.window.showErrorMessage(`Failed to open file for table ${tableName}: ${error}`);
         }
     }
 
