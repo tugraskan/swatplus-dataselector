@@ -174,10 +174,21 @@ export class SwatTableViewerPanel {
     private async openFileByName(fileName: string) {
         try {
             // Map the file name to a table name using the indexer
-            const tableName = this.indexer.getTableNameFromFile(fileName);
+            let tableName = this.indexer.getTableNameFromFile(fileName);
             
+            // If not found, try deriving table name from file name
             if (!tableName) {
-                vscode.window.showErrorMessage(`Could not find table for file: ${fileName}`);
+                // Replace dots with underscores (e.g., pcp.cli -> pcp_cli)
+                const tableNameFromFile = fileName.replace(/\./g, '_');
+                if (this.indexer.isTableIndexed(tableNameFromFile)) {
+                    tableName = tableNameFromFile;
+                }
+            }
+            
+            // Even if we found a table name in the schema mapping, we need to verify
+            // that the table actually has data in the index
+            if (!tableName || !this.indexer.isTableIndexed(tableName)) {
+                vscode.window.showWarningMessage(`Table for file "${fileName}" is not indexed. This file is listed in file.cio but was not found in your dataset. It may be optional for your SWAT+ configuration.`);
                 return;
             }
             
@@ -195,6 +206,35 @@ export class SwatTableViewerPanel {
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to open file ${file}`);
         }
+    }
+
+    /**
+     * Check if a file can be opened (exists in index)
+     */
+    private canOpenFile(fileName: string): boolean {
+        if (!fileName || fileName === 'null' || !fileName.includes('.')) {
+            return false;
+        }
+        
+        // Check if it maps to a table
+        let tableName = this.indexer.getTableNameFromFile(fileName);
+        
+        // If not found, try deriving table name from file name
+        if (!tableName) {
+            // Replace dots with underscores (e.g., pcp.cli -> pcp_cli)
+            const tableNameFromFile = fileName.replace(/\./g, '_');
+            if (this.indexer.isTableIndexed(tableNameFromFile)) {
+                tableName = tableNameFromFile;
+            }
+        }
+        
+        // Even if we found a table name in the schema mapping, we need to verify
+        // that the table actually has data in the index
+        if (tableName) {
+            return this.indexer.isTableIndexed(tableName);
+        }
+        
+        return false;
     }
 
     public refresh() {
@@ -378,7 +418,10 @@ export class SwatTableViewerPanel {
                 
                 // Special handling for file.cio file_name column - make it a clickable file link
                 if (tableName === 'file_cio' && col === 'file_name' && value && value !== 'null' && value.includes('.')) {
-                    tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByName('${this._escapeJs(value)}'); return false;" class="file-link" title="Click to open ${this._escapeHtml(value)}">${this._escapeHtml(value)}</a></td>`;
+                    const canOpen = this.canOpenFile(value);
+                    const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
+                    const title = canOpen ? `Click to open ${this._escapeHtml(value)}` : `${this._escapeHtml(value)} - Not indexed (may not exist in dataset)`;
+                    tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByName('${this._escapeJs(value)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
                 } else if (fkInfo && value) {
                     // Try to resolve FK
                     const targetRow = this.indexer.resolveFKTarget(fkInfo.references.table, value);
@@ -654,6 +697,12 @@ export class SwatTableViewerPanel {
             .file-link:hover {
                 text-decoration: underline;
                 color: var(--vscode-textLink-activeForeground);
+            }
+            .broken-link {
+                color: #f48771 !important;
+            }
+            .broken-link:hover {
+                color: #f14c28 !important;
             }
             .fk-indicator {
                 margin-left: 4px;
