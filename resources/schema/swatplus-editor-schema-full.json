@@ -22341,11 +22341,172 @@
       ],
       "foreign_keys": [],
       "notes": "Auto-generated schema for Wind Speed weather data files"
+    },
+    "pcp.cli": {
+      "file_name": "pcp.cli",
+      "table_name": "pcp_cli",
+      "model_class": "climate.Pcp_cli",
+      "source_file": "climate.py",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "filename",
+          "db_column": "filename",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Simple list file containing filenames - added for compatibility"
+    },
+    "tmp.cli": {
+      "file_name": "tmp.cli",
+      "table_name": "tmp_cli",
+      "model_class": "climate.Tmp_cli",
+      "source_file": "climate.py",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "filename",
+          "db_column": "filename",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Simple list file containing filenames - added for compatibility"
+    },
+    "slr.cli": {
+      "file_name": "slr.cli",
+      "table_name": "slr_cli",
+      "model_class": "climate.Slr_cli",
+      "source_file": "climate.py",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "filename",
+          "db_column": "filename",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Simple list file containing filenames - added for compatibility"
+    },
+    "hmd.cli": {
+      "file_name": "hmd.cli",
+      "table_name": "hmd_cli",
+      "model_class": "climate.Hmd_cli",
+      "source_file": "climate.py",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "filename",
+          "db_column": "filename",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Simple list file containing filenames - added for compatibility"
+    },
+    "wnd.cli": {
+      "file_name": "wnd.cli",
+      "table_name": "wnd_cli",
+      "model_class": "climate.Wnd_cli",
+      "source_file": "climate.py",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "filename",
+          "db_column": "filename",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Simple list file containing filenames - added for compatibility"
     }
   },
   "statistics": {
     "files_scanned": 55,
     "models_found": 256,
-    "tables_mapped": 213
+    "tables_mapped": 213,
+    "table_count": 223
   }
 }
