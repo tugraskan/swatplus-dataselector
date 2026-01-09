@@ -12543,8 +12543,8 @@
       ],
       "notes": "Auto-generated via dynamic scan"
     },
-    "soil-plant.ini": {
-      "file_name": "soil-plant.ini",
+    "soil_plant.ini": {
+      "file_name": "soil_plant.ini",
       "table_name": "soil_plant_ini",
       "model_class": "project.init.Soil_plant_ini",
       "source_file": "project/init.py",
