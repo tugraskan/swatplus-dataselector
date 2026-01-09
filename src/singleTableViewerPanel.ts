@@ -7,6 +7,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
 
 export class SwatSingleTableViewerPanel {
@@ -224,6 +225,15 @@ export class SwatSingleTableViewerPanel {
             return false;
         }
         
+        // Check if the file actually exists on disk
+        const txtInOutPath = this.indexer.getTxtInOutPath();
+        if (txtInOutPath) {
+            const filePath = path.join(txtInOutPath, fileName);
+            if (!fs.existsSync(filePath)) {
+                return false;
+            }
+        }
+        
         // Check if it maps to a table
         let tableName = this.indexer.getTableNameFromFile(fileName);
         
@@ -256,32 +266,24 @@ export class SwatSingleTableViewerPanel {
                 return;
             }
             
-            // Get the first row to find the file path
-            const indexData = this.indexer.getIndexData();
-            const tableData = indexData.get(tableName);
-            
-            // Check if we have data
-            const hasData = tableData && tableData.size > 0;
-            const firstRow = hasData ? Array.from(tableData.values())[0] : null;
-            
-            if (firstRow && firstRow.file) {
-                // Resolve the file path if it's relative
-                let filePath = firstRow.file;
-                if (!path.isAbsolute(filePath)) {
-                    const workspaceFolders = vscode.workspace.workspaceFolders;
-                    if (workspaceFolders && workspaceFolders.length > 0) {
-                        filePath = path.join(workspaceFolders[0].uri.fsPath, filePath);
-                    }
-                }
-                
-                const document = await vscode.workspace.openTextDocument(filePath);
-                await vscode.window.showTextDocument(document, { preview: false });
-            } else if (!hasData) {
-                // Empty table - can't determine file path without data
-                vscode.window.showInformationMessage(`Table ${tableName} has no data to locate the source file.`);
-            } else {
-                vscode.window.showErrorMessage(`Could not find file path for table: ${tableName}`);
+            // Construct file path using txtInOutPath
+            const txtInOutPath = this.indexer.getTxtInOutPath();
+            if (!txtInOutPath) {
+                vscode.window.showErrorMessage(`Could not determine TxtInOut directory for table: ${tableName}`);
+                return;
             }
+            
+            const filePath = path.join(txtInOutPath, fileName);
+            
+            // Check if file exists
+            if (!fs.existsSync(filePath)) {
+                vscode.window.showErrorMessage(`File does not exist: ${fileName}`);
+                return;
+            }
+            
+            // Open the file
+            const document = await vscode.workspace.openTextDocument(filePath);
+            await vscode.window.showTextDocument(document, { preview: false });
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to open file for table ${tableName}: ${error}`);
         }
