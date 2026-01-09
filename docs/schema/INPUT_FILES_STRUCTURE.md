@@ -391,7 +391,7 @@ Some files have a multi-row or multi-part structure that differs from the standa
 
 | Column Order | Field | Description | Type | Unit | Default | Range | PK | FK | Pointer | Points To | Referenced By |
 |--------------|-------|-------------|------|------|---------|-------|----|----|---------|-----------|---------------|
-| 1 | id | Unique ID of the aquifer | integer | n/a | n/a | n/a |  |  |  |  |  |
+| 1 | id | Unique ID of the aquifer | integer | n/a | n/a | n/a | ✓ |  |  |  |  |
 | 2 | name | Name of the aquifer | string | n/a | n/a | n/a |  |  |  |  |  |
 | 3 | gis_id | Aquifer number in GIS | integer | n/a | n/a | n/a |  |  |  |  |  |
 | 4 | area | Area of the aquifer | real | ha | n/a | n/a |  |  |  |  |  |
@@ -416,7 +416,7 @@ Some files have a multi-row or multi-part structure that differs from the standa
 
 | Column Order | Field | Description | Type | Unit | Default | Range | PK | FK | Pointer | Points To | Referenced By |
 |--------------|-------|-------------|------|------|---------|-------|----|----|---------|-----------|---------------|
-| 1 | id | Unique ID of the channel | integer | n/a | n/a | n/a |  |  |  |  |  |
+| 1 | id | Unique ID of the channel | integer | n/a | n/a | n/a | ✓ |  |  |  |  |
 | 2 | name | Name of the channel | string | n/a | n/a | n/a |  |  |  |  |  |
 | 3 | gis_id | Channel number in GIS | integer | n/a | n/a | n/a |  |  |  |  |  |
 | 4 | area | Area of the channel | real | ha | n/a | n/a |  |  |  |  |  |
@@ -466,7 +466,7 @@ Some files have a multi-row or multi-part structure that differs from the standa
 
 | Column Order | Field | Description | Type | Unit | Default | Range | PK | FK | Pointer | Points To | Referenced By |
 |--------------|-------|-------------|------|------|---------|-------|----|----|---------|-----------|---------------|
-| 1 | id | Unique ID of the recall | integer | n/a | n/a | n/a |  |  |  |  |  |
+| 1 | id | Unique ID of the recall | integer | n/a | n/a | n/a | ✓ |  |  |  |  |
 | 2 | name | Name of the recall | string | n/a | n/a | n/a |  |  |  |  |  |
 | 3 | gis_id | Recall number in GIS | integer | n/a | n/a | n/a |  |  |  |  |  |
 | 4 | area | Area of the recall | real | ha | n/a | n/a |  |  |  |  |  |
@@ -491,7 +491,7 @@ Some files have a multi-row or multi-part structure that differs from the standa
 
 | Column Order | Field | Description | Type | Unit | Default | Range | PK | FK | Pointer | Points To | Referenced By |
 |--------------|-------|-------------|------|------|---------|-------|----|----|---------|-----------|---------------|
-| 1 | id | Unique ID of the reservoir | integer | n/a | n/a | n/a |  |  |  |  |  |
+| 1 | id | Unique ID of the reservoir | integer | n/a | n/a | n/a | ✓ |  |  |  |  |
 | 2 | name | Name of the reservoir | string | n/a | n/a | n/a |  |  |  |  |  |
 | 3 | gis_id | Reservoir number in GIS | integer | n/a | n/a | n/a |  |  |  |  |  |
 | 4 | area | Area of the reservoir | real | ha | n/a | n/a |  |  |  |  |  |
@@ -516,7 +516,7 @@ Some files have a multi-row or multi-part structure that differs from the standa
 
 | Column Order | Field | Description | Type | Unit | Default | Range | PK | FK | Pointer | Points To | Referenced By |
 |--------------|-------|-------------|------|------|---------|-------|----|----|---------|-----------|---------------|
-| 1 | id | Unique ID of the routing unit | integer | n/a | n/a | n/a |  |  |  |  |  |
+| 1 | id | Unique ID of the routing unit | integer | n/a | n/a | n/a | ✓ |  |  |  |  |
 | 2 | name | Name of the routing unit | string | n/a | n/a | n/a |  |  |  |  |  |
 | 3 | gis_id | Routing unit number in GIS | integer | n/a | n/a | n/a |  |  |  |  |  |
 | 4 | area | Area of the routing unit | real | ha | n/a | n/a |  |  |  |  |  |

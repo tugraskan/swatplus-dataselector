@@ -22342,11 +22342,11 @@
       "foreign_keys": [],
       "notes": "Auto-generated schema for Wind Speed weather data files"
     },
-    "pcp.cli": {
-      "file_name": "pcp.cli",
-      "table_name": "pcp_cli",
-      "model_class": "climate.Pcp_cli",
-      "source_file": "climate.py",
+    "hru.con": {
+      "file_name": "hru.con",
+      "table_name": "hru_con",
+      "model_class": "project.connect.Hru_con",
+      "source_file": "project/connect.py",
       "has_metadata_line": true,
       "has_header_line": true,
       "data_starts_after": 2,
@@ -22354,16 +22354,140 @@
         {
           "name": "id",
           "db_column": "id",
-          "type": "AutoField",
+          "type": "IntegerField",
           "nullable": false,
           "is_primary_key": true,
           "is_foreign_key": false
         },
         {
-          "name": "filename",
-          "db_column": "filename",
+          "name": "name",
+          "db_column": "name",
           "type": "CharField",
           "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "gis_id",
+          "db_column": "gis_id",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "area",
+          "db_column": "area",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lat",
+          "db_column": "lat",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lon",
+          "db_column": "lon",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elev",
+          "db_column": "elev",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "hru",
+          "db_column": "hru",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true
+        },
+        {
+          "name": "wst",
+          "db_column": "wst",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "weather_sta_cli",
+            "column": "name"
+          }
+        },
+        {
+          "name": "cst",
+          "db_column": "cst",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "ovfl",
+          "db_column": "ovfl",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "rule",
+          "db_column": "rule",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "out_tot",
+          "db_column": "out_tot",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "obj_typ",
+          "db_column": "obj_typ",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "obj_id",
+          "db_column": "obj_id",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true
+        },
+        {
+          "name": "hyd_typ",
+          "db_column": "hyd_typ",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac",
+          "db_column": "frac",
+          "type": "DecimalField",
+          "nullable": true,
           "is_primary_key": false,
           "is_foreign_key": false
         }
@@ -22371,14 +22495,23 @@
       "primary_keys": [
         "id"
       ],
-      "foreign_keys": [],
-      "notes": "Simple list file containing filenames - added for compatibility"
+      "foreign_keys": [
+        {
+          "column": "wst",
+          "db_column": "wst",
+          "references": {
+            "table": "weather_sta_cli",
+            "column": "name"
+          }
+        }
+      ],
+      "notes": "Auto-generated for HRU connectivity"
     },
-    "tmp.cli": {
-      "file_name": "tmp.cli",
-      "table_name": "tmp_cli",
-      "model_class": "climate.Tmp_cli",
-      "source_file": "climate.py",
+    "rout_unit.con": {
+      "file_name": "rout_unit.con",
+      "table_name": "rout_unit_con",
+      "model_class": "project.connect.Rout_unit_con",
+      "source_file": "project/connect.py",
       "has_metadata_line": true,
       "has_header_line": true,
       "data_starts_after": 2,
@@ -22386,16 +22519,140 @@
         {
           "name": "id",
           "db_column": "id",
-          "type": "AutoField",
+          "type": "IntegerField",
           "nullable": false,
           "is_primary_key": true,
           "is_foreign_key": false
         },
         {
-          "name": "filename",
-          "db_column": "filename",
+          "name": "name",
+          "db_column": "name",
           "type": "CharField",
           "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "gis_id",
+          "db_column": "gis_id",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "area",
+          "db_column": "area",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lat",
+          "db_column": "lat",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lon",
+          "db_column": "lon",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elev",
+          "db_column": "elev",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "ru",
+          "db_column": "ru",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true
+        },
+        {
+          "name": "wst",
+          "db_column": "wst",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "weather_sta_cli",
+            "column": "name"
+          }
+        },
+        {
+          "name": "cst",
+          "db_column": "cst",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "ovfl",
+          "db_column": "ovfl",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "rule",
+          "db_column": "rule",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "out_tot",
+          "db_column": "out_tot",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "obj_typ",
+          "db_column": "obj_typ",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "obj_id",
+          "db_column": "obj_id",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true
+        },
+        {
+          "name": "hyd_typ",
+          "db_column": "hyd_typ",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac",
+          "db_column": "frac",
+          "type": "DecimalField",
+          "nullable": true,
           "is_primary_key": false,
           "is_foreign_key": false
         }
@@ -22403,14 +22660,23 @@
       "primary_keys": [
         "id"
       ],
-      "foreign_keys": [],
-      "notes": "Simple list file containing filenames - added for compatibility"
+      "foreign_keys": [
+        {
+          "column": "wst",
+          "db_column": "wst",
+          "references": {
+            "table": "weather_sta_cli",
+            "column": "name"
+          }
+        }
+      ],
+      "notes": "Auto-generated for routing unit connectivity"
     },
-    "slr.cli": {
-      "file_name": "slr.cli",
-      "table_name": "slr_cli",
-      "model_class": "climate.Slr_cli",
-      "source_file": "climate.py",
+    "aquifer.con": {
+      "file_name": "aquifer.con",
+      "table_name": "aquifer_con",
+      "model_class": "project.connect.Aquifer_con",
+      "source_file": "project/connect.py",
       "has_metadata_line": true,
       "has_header_line": true,
       "data_starts_after": 2,
@@ -22418,16 +22684,140 @@
         {
           "name": "id",
           "db_column": "id",
-          "type": "AutoField",
+          "type": "IntegerField",
           "nullable": false,
           "is_primary_key": true,
           "is_foreign_key": false
         },
         {
-          "name": "filename",
-          "db_column": "filename",
+          "name": "name",
+          "db_column": "name",
           "type": "CharField",
           "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "gis_id",
+          "db_column": "gis_id",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "area",
+          "db_column": "area",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lat",
+          "db_column": "lat",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lon",
+          "db_column": "lon",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elev",
+          "db_column": "elev",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "aqu",
+          "db_column": "aqu",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true
+        },
+        {
+          "name": "wst",
+          "db_column": "wst",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "weather_sta_cli",
+            "column": "name"
+          }
+        },
+        {
+          "name": "cst",
+          "db_column": "cst",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "ovfl",
+          "db_column": "ovfl",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "rule",
+          "db_column": "rule",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "out_tot",
+          "db_column": "out_tot",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "obj_typ",
+          "db_column": "obj_typ",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "obj_id",
+          "db_column": "obj_id",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true
+        },
+        {
+          "name": "hyd_typ",
+          "db_column": "hyd_typ",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac",
+          "db_column": "frac",
+          "type": "DecimalField",
+          "nullable": true,
           "is_primary_key": false,
           "is_foreign_key": false
         }
@@ -22435,14 +22825,23 @@
       "primary_keys": [
         "id"
       ],
-      "foreign_keys": [],
-      "notes": "Simple list file containing filenames - added for compatibility"
+      "foreign_keys": [
+        {
+          "column": "wst",
+          "db_column": "wst",
+          "references": {
+            "table": "weather_sta_cli",
+            "column": "name"
+          }
+        }
+      ],
+      "notes": "Auto-generated for aquifer connectivity"
     },
-    "hmd.cli": {
-      "file_name": "hmd.cli",
-      "table_name": "hmd_cli",
-      "model_class": "climate.Hmd_cli",
-      "source_file": "climate.py",
+    "chandeg.con": {
+      "file_name": "chandeg.con",
+      "table_name": "chandeg_con",
+      "model_class": "project.connect.Chandeg_con",
+      "source_file": "project/connect.py",
       "has_metadata_line": true,
       "has_header_line": true,
       "data_starts_after": 2,
@@ -22450,16 +22849,140 @@
         {
           "name": "id",
           "db_column": "id",
-          "type": "AutoField",
+          "type": "IntegerField",
           "nullable": false,
           "is_primary_key": true,
           "is_foreign_key": false
         },
         {
-          "name": "filename",
-          "db_column": "filename",
+          "name": "name",
+          "db_column": "name",
           "type": "CharField",
           "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "gis_id",
+          "db_column": "gis_id",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "area",
+          "db_column": "area",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lat",
+          "db_column": "lat",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lon",
+          "db_column": "lon",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elev",
+          "db_column": "elev",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lcha",
+          "db_column": "lcha",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true
+        },
+        {
+          "name": "wst",
+          "db_column": "wst",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "weather_sta_cli",
+            "column": "name"
+          }
+        },
+        {
+          "name": "cst",
+          "db_column": "cst",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "ovfl",
+          "db_column": "ovfl",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "rule",
+          "db_column": "rule",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "out_tot",
+          "db_column": "out_tot",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "obj_typ",
+          "db_column": "obj_typ",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "obj_id",
+          "db_column": "obj_id",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true
+        },
+        {
+          "name": "hyd_typ",
+          "db_column": "hyd_typ",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac",
+          "db_column": "frac",
+          "type": "DecimalField",
+          "nullable": true,
           "is_primary_key": false,
           "is_foreign_key": false
         }
@@ -22467,14 +22990,23 @@
       "primary_keys": [
         "id"
       ],
-      "foreign_keys": [],
-      "notes": "Simple list file containing filenames - added for compatibility"
+      "foreign_keys": [
+        {
+          "column": "wst",
+          "db_column": "wst",
+          "references": {
+            "table": "weather_sta_cli",
+            "column": "name"
+          }
+        }
+      ],
+      "notes": "Auto-generated for channel connectivity"
     },
-    "wnd.cli": {
-      "file_name": "wnd.cli",
-      "table_name": "wnd_cli",
-      "model_class": "climate.Wnd_cli",
-      "source_file": "climate.py",
+    "reservoir.con": {
+      "file_name": "reservoir.con",
+      "table_name": "reservoir_con",
+      "model_class": "project.connect.Reservoir_con",
+      "source_file": "project/connect.py",
       "has_metadata_line": true,
       "has_header_line": true,
       "data_starts_after": 2,
@@ -22482,16 +23014,140 @@
         {
           "name": "id",
           "db_column": "id",
-          "type": "AutoField",
+          "type": "IntegerField",
           "nullable": false,
           "is_primary_key": true,
           "is_foreign_key": false
         },
         {
-          "name": "filename",
-          "db_column": "filename",
+          "name": "name",
+          "db_column": "name",
           "type": "CharField",
           "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "gis_id",
+          "db_column": "gis_id",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "area",
+          "db_column": "area",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lat",
+          "db_column": "lat",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lon",
+          "db_column": "lon",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elev",
+          "db_column": "elev",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "res",
+          "db_column": "res",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true
+        },
+        {
+          "name": "wst",
+          "db_column": "wst",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "weather_sta_cli",
+            "column": "name"
+          }
+        },
+        {
+          "name": "cst",
+          "db_column": "cst",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "ovfl",
+          "db_column": "ovfl",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "rule",
+          "db_column": "rule",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "out_tot",
+          "db_column": "out_tot",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "obj_typ",
+          "db_column": "obj_typ",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "obj_id",
+          "db_column": "obj_id",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true
+        },
+        {
+          "name": "hyd_typ",
+          "db_column": "hyd_typ",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac",
+          "db_column": "frac",
+          "type": "DecimalField",
+          "nullable": true,
           "is_primary_key": false,
           "is_foreign_key": false
         }
@@ -22499,8 +23155,182 @@
       "primary_keys": [
         "id"
       ],
-      "foreign_keys": [],
-      "notes": "Simple list file containing filenames - added for compatibility"
+      "foreign_keys": [
+        {
+          "column": "wst",
+          "db_column": "wst",
+          "references": {
+            "table": "weather_sta_cli",
+            "column": "name"
+          }
+        }
+      ],
+      "notes": "Auto-generated for reservoir connectivity"
+    },
+    "recall.con": {
+      "file_name": "recall.con",
+      "table_name": "recall_con",
+      "model_class": "project.connect.Recall_con",
+      "source_file": "project/connect.py",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "IntegerField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "gis_id",
+          "db_column": "gis_id",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "area",
+          "db_column": "area",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lat",
+          "db_column": "lat",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lon",
+          "db_column": "lon",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elev",
+          "db_column": "elev",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "rec",
+          "db_column": "rec",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true
+        },
+        {
+          "name": "wst",
+          "db_column": "wst",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "weather_sta_cli",
+            "column": "name"
+          }
+        },
+        {
+          "name": "cst",
+          "db_column": "cst",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "ovfl",
+          "db_column": "ovfl",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "rule",
+          "db_column": "rule",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "out_tot",
+          "db_column": "out_tot",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "obj_typ",
+          "db_column": "obj_typ",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "obj_id",
+          "db_column": "obj_id",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true
+        },
+        {
+          "name": "hyd_typ",
+          "db_column": "hyd_typ",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac",
+          "db_column": "frac",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "wst",
+          "db_column": "wst",
+          "references": {
+            "table": "weather_sta_cli",
+            "column": "name"
+          }
+        }
+      ],
+      "notes": "Auto-generated for recall connectivity"
     }
   },
   "statistics": {
