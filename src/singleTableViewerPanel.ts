@@ -590,7 +590,8 @@ export class SwatSingleTableViewerPanel {
                         const canOpen = this.canOpenFile(lookupFile);
                         const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
                         const title = canOpen ? `Click to open ${this._escapeHtml(lookupFile)}` : `${this._escapeHtml(lookupFile)} - Not indexed (may not exist in dataset)`;
-                        const highlightValue = lookupFile === 'atmo.cli' ? row.values.name : undefined;
+                        const highlightColumn = typeof pointerConfig === 'object' ? pointerConfig.highlight_column : undefined;
+                        const highlightValue = highlightColumn ? row.values[highlightColumn] : (lookupFile === 'atmo.cli' ? row.values.name : undefined);
                         if (highlightValue) {
                             tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByNameWithHighlight('${this._escapeJs(lookupFile)}', '${this._escapeJs(highlightValue)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
                         } else {

@@ -539,7 +539,11 @@
       "description": "File pointer columns for hru-data.hru",
       "topo": "Pointer to the topography file",
       "hydro": "Pointer to the hydrology file",
-      "soil": "Pointer to the soil file",
+      "soil": {
+        "description": "Pointer to the soil file",
+        "target_file": "soils.sol",
+        "highlight_column": "soil"
+      },
       "lu_mgt": "Pointer to the land use and management file",
       "soil_plant_init": "Points to soil_plant_init file",
       "surf_stor": "Pointer to the wetland file",
