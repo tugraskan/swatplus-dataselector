@@ -3654,7 +3654,7 @@
           "is_foreign_key": true,
           "fk_target": {
             "table": "pcp_cli",
-            "column": "id"
+            "column": "filename"
           }
         },
         {
@@ -3666,7 +3666,7 @@
           "is_foreign_key": true,
           "fk_target": {
             "table": "tmp_cli",
-            "column": "id"
+            "column": "filename"
           }
         },
         {
@@ -3678,7 +3678,7 @@
           "is_foreign_key": true,
           "fk_target": {
             "table": "slr_cli",
-            "column": "id"
+            "column": "filename"
           }
         },
         {
@@ -3690,7 +3690,7 @@
           "is_foreign_key": true,
           "fk_target": {
             "table": "hmd_cli",
-            "column": "id"
+            "column": "filename"
           }
         },
         {
@@ -3702,7 +3702,7 @@
           "is_foreign_key": true,
           "fk_target": {
             "table": "wnd_cli",
-            "column": "id"
+            "column": "filename"
           }
         },
         {
