@@ -351,23 +351,37 @@ export class SwatSingleTableViewerPanel {
 
     private _getTableHtml(tableData: Map<string, any>, schemaTable: any): string {
         const rows = Array.from(tableData.values());
-        if (rows.length === 0) {
-            return '<p class="empty-message">No data</p>';
-        }
-
+        
         // Special rendering for file.cio - use classification-based sub-table view
         if (this.tableName === 'file_cio') {
+            if (rows.length === 0) {
+                return '<p class="empty-message">No data</p>';
+            }
             return this._getFileCioSubTableHtml(rows);
         }
 
         // Special rendering for weather-wgn.cli - use station-based sub-table view with monthly data
         if (this.tableName === 'weather_wgn_cli') {
+            if (rows.length === 0) {
+                return '<p class="empty-message">No data</p>';
+            }
             return this._getWeatherWgnSubTableHtml(rows);
         }
 
         // Special rendering for atmo.cli - use station-based sub-table view with deposition data
         if (this.tableName === 'atmo_cli') {
+            if (rows.length === 0) {
+                return '<p class="empty-message">No data</p>';
+            }
             return this._getAtmoCliSubTableHtml(rows);
+        }
+
+        // For empty tables, show table structure with headers from schema
+        if (rows.length === 0) {
+            if (schemaTable && schemaTable.columns) {
+                return this._getEmptyTableHtml(schemaTable);
+            }
+            return '<p class="empty-message">No data</p>';
         }
 
         // Get columns from actual indexed data (not schema)
@@ -943,6 +957,44 @@ export class SwatSingleTableViewerPanel {
         return html;
     }
 
+    private _getEmptyTableHtml(schemaTable: any): string {
+        const metadata = this.indexer.getMetadata();
+        const fileMetadata = metadata?.file_metadata?.[schemaTable.file_name];
+        
+        let html = '';
+        
+        // Add file description if available
+        if (fileMetadata && fileMetadata.description) {
+            html += `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
+        }
+
+        html += `<div class="empty-table-message">
+            <p class="info-message">This file exists but contains no data rows (only headers).</p>
+        </div>`;
+
+        // Show table structure with headers from schema
+        html += `<table class="data-table">`;
+        html += `<thead><tr>`;
+        
+        // Add headers from schema
+        if (schemaTable.columns) {
+            for (const column of schemaTable.columns) {
+                if (column.name !== 'id') {  // Skip auto-generated ID column
+                    const displayName = column.name;
+                    html += `<th>${this._escapeHtml(displayName)}</th>`;
+                }
+            }
+        }
+        
+        html += `</tr></thead>`;
+        html += `<tbody>`;
+        html += `<tr><td colspan="${schemaTable.columns.length - 1}" class="empty-cell">No data</td></tr>`;
+        html += `</tbody>`;
+        html += `</table>`;
+        
+        return html;
+    }
+
     private _escapeHtml(text: string): string {
         return text
             .replace(/&/g, '&amp;')
@@ -1457,6 +1509,24 @@ export class SwatSingleTableViewerPanel {
                 text-align: center;
                 color: var(--vscode-descriptionForeground);
                 font-style: italic;
+            }
+            .empty-table-message {
+                padding: 16px;
+                margin-bottom: 16px;
+                background-color: var(--vscode-textBlockQuote-background);
+                border-left: 4px solid var(--vscode-editorInfo-foreground);
+                border-radius: 4px;
+            }
+            .info-message {
+                margin: 0;
+                color: var(--vscode-foreground);
+                font-size: 0.95em;
+            }
+            .empty-cell {
+                text-align: center;
+                color: var(--vscode-descriptionForeground);
+                font-style: italic;
+                padding: 20px;
             }
             .no-index {
                 display: flex;
