@@ -90,6 +90,10 @@ def get_child_line_count(value_map: Dict[str, str], config: dict, file_name: str
         
         return total_count
     
+    # Handle plant.ini alternate count field name
+    if file_name == "plant.ini" and count_field not in value_map and "plt_cnt" in value_map:
+        count_field = "plt_cnt"
+
     # Handle single field case with optional multiplier
     if count_field in value_map:
         try:
@@ -183,7 +187,12 @@ def parse_lines_to_dataframe(
                 header_columns = [col.strip() for col in header_line.split()]
                 if header_columns:
                     if file_name == "plant.ini":
-                        columns = [col.lower() for col in header_columns]
+                        plant_header_map = {
+                            "pcom_name": "name",
+                            "plt_cnt": "plnt_cnt",
+                            "plt_name": "plnt_name"
+                        }
+                        columns = [plant_header_map.get(col.lower(), col.lower()) for col in header_columns]
                     elif all(col in schema_columns_all for col in header_columns):
                         columns = header_columns
                     else:
@@ -217,6 +226,13 @@ def parse_lines_to_dataframe(
             else:
                 # No explicit count - use heuristic detection
                 is_main_record = is_main_record_line(value_map, file_name, values)
+                if file_name == "plant.ini" and is_main_record and len(values) > 1:
+                    try:
+                        skip_count = int(values[1])
+                        if skip_count > 0:
+                            child_line_info.append((i + 1, skip_count))
+                    except ValueError:
+                        skip_count = 0
                 if not is_main_record:
                     # This is a child line - skip it
                     i += 1

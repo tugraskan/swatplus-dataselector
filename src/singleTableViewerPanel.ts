@@ -1224,7 +1224,7 @@ export class SwatSingleTableViewerPanel {
 
         for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
             const communityName = row.values.name || 'Unknown Community';
-            const plantCount = row.values.plnt_cnt || 'N/A';
+            const plantCount = row.values.plnt_cnt || row.values.plt_cnt || 'N/A';
             const rotationYear = row.values.rot_yr_ini || 'N/A';
             const lineNumber = row.lineNumber || 0;
             const file = row.file || 'plant.ini';
