@@ -1274,12 +1274,12 @@ export class SwatSingleTableViewerPanel {
                         if (col.key === 'plnt_name' && value) {
                             const linkClass = canOpenPlants ? 'fk-link' : 'fk-link broken-link';
                             const title = canOpenPlants
-                                ? `Open ${plantFileName} for ${this._escapeHtml(value)}`
+                                ? `Peek plant row from ${plantFileName}`
                                 : `${plantFileName} - Not indexed (may not exist in dataset)`;
                             if (canOpenPlants) {
-                                html += `<td><a href="#" onclick="openFileByNameWithHighlight('${this._escapeJs(plantFileName)}', '${this._escapeJs(value)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                                html += `<td class="fk-cell" data-fk-table="plants_plt" data-fk-value="${this._escapeHtml(value)}"><a href="#" onclick="toggleFKPeek(this, 'plants_plt', '${this._escapeJs(value)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
                             } else {
-                                html += `<td><span class="${linkClass}" title="${title}">${this._escapeHtml(value)}</span></td>`;
+                                html += `<td class="fk-cell unresolved" data-fk-table="plants_plt" data-fk-value="${this._escapeHtml(value)}"><span class="${linkClass}" title="${title}">${this._escapeHtml(value)}</span></td>`;
                             }
                         } else {
                             html += `<td>${this._escapeHtml(value)}</td>`;
