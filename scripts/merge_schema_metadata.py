@@ -102,17 +102,28 @@ def merge_file_metadata(existing: Dict, enhanced: Dict) -> Dict:
     """
     Merge file metadata from enhanced schema, preserving existing metadata.
     """
-    # Start with existing file metadata
-    merged = existing.get('file_metadata', {}).copy()
+    # Start with deep copy of existing file metadata
+    import copy
+    merged = copy.deepcopy(existing.get('file_metadata', {}))
     
     # Add or update enhanced file metadata
     for file_name, metadata in enhanced.get('file_metadata', {}).items():
-        merged[file_name] = {
-            "description": metadata.get('description', ''),
-            "metadata_structure": metadata.get('metadata_structure', ''),
-            "special_structure": metadata.get('special_structure', False),
-            "primary_keys": metadata.get('primary_keys', [])
-        }
+        if file_name in merged:
+            # Update existing entry, preserving fields not in enhanced schema
+            merged[file_name].update({
+                "description": metadata.get('description', ''),
+                "metadata_structure": metadata.get('metadata_structure', ''),
+                "special_structure": metadata.get('special_structure', False),
+                "primary_keys": metadata.get('primary_keys', [])
+            })
+        else:
+            # New entry from enhanced schema
+            merged[file_name] = {
+                "description": metadata.get('description', ''),
+                "metadata_structure": metadata.get('metadata_structure', ''),
+                "special_structure": metadata.get('special_structure', False),
+                "primary_keys": metadata.get('primary_keys', [])
+            }
     
     return merged
 
