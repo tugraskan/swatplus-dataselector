@@ -910,27 +910,6 @@
     }
   },
   "file_metadata": {
-    "file.cio": {
-      "description": "Master configuration file listing all input files by classification category",
-      "metadata_structure": "non-standard",
-      "special_structure": true,
-      "format": {
-        "type": "classification-based",
-        "description": "Each line represents a classification with multiple file references",
-        "line_format": "classification_name  file1  file2  file3  ...",
-        "notes": [
-          "Column 0 is the classification name (primary key)",
-          "Columns 1+ are filenames (or 'null' if not used)",
-          "No standard header line",
-          "Line 1 is metadata/title",
-          "Data starts at line 2"
-        ]
-      },
-      "primary_keys": ["classification"],
-      "foreign_keys": [],
-      "skip_fk_validation": true,
-      "indexing_strategy": "Use classification as primary key, store array of file references per classification"
-    },
     "aquifer.aqu": {
       "description": "This file contains the general physical and chemical aquifer properties.",
       "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
@@ -1018,13 +997,17 @@
       "description": "This file defines the aquifer connectivity.",
       "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
       "special_structure": false,
-      "primary_keys": []
+      "primary_keys": [
+        "id"
+      ]
     },
     "chandeg.con": {
       "description": "This file defines the channel connectivity.",
       "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
       "special_structure": false,
-      "primary_keys": []
+      "primary_keys": [
+        "id"
+      ]
     },
     "hru.con": {
       "description": "This file defines the connectivity of spatial objects.",
@@ -1038,19 +1021,25 @@
       "description": "This file defines the recall connectivity.",
       "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
       "special_structure": false,
-      "primary_keys": []
+      "primary_keys": [
+        "id"
+      ]
     },
     "reservoir.con": {
       "description": "This file defines the reservoir connectivity.",
       "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
       "special_structure": false,
-      "primary_keys": []
+      "primary_keys": [
+        "id"
+      ]
     },
     "rout_unit.con": {
       "description": "This file defines the routing unit connectivity.",
       "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
       "special_structure": false,
-      "primary_keys": []
+      "primary_keys": [
+        "id"
+      ]
     },
     "om_water.ini": {
       "description": "",
