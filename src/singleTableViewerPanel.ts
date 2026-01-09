@@ -74,6 +74,11 @@ export class SwatSingleTableViewerPanel {
                             this.openFileForTable(message.tableName);
                         }
                         break;
+                    case 'openFilePointer':
+                        if (message.fileName) {
+                            this.openFilePointer(message.fileName);
+                        }
+                        break;
                 }
             },
             null,
@@ -171,6 +176,8 @@ export class SwatSingleTableViewerPanel {
             // Get schema for the target table to get column names
             const fileName = this.indexer.getFileNameForTable(tableName);
             const schemaTable = fileName && schema.tables[fileName] ? schema.tables[fileName] : undefined;
+            const metadata = this.indexer.getMetadata();
+            const filePointers = metadata?.file_pointer_columns?.[fileName || ''] || {};
             
             // Get columns from actual indexed data (not schema)
             let columns: string[] = [];
@@ -184,7 +191,8 @@ export class SwatSingleTableViewerPanel {
                 fileName: fileName || tableName,
                 columns: columns,
                 rowData: targetRow.values,
-                lineNumber: targetRow.lineNumber
+                lineNumber: targetRow.lineNumber,
+                filePointers: filePointers
             });
         } catch (error) {
             console.error('Failed to get FK row data', error);
@@ -221,6 +229,25 @@ export class SwatSingleTableViewerPanel {
             SwatSingleTableViewerPanel.createOrShow(this.indexer, tableName, highlightValue);
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to open table for ${fileName}: ${error}`);
+        }
+    }
+
+    private async openFilePointer(fileName: string) {
+        try {
+            const filePath = this.resolveFilePointerPath(fileName);
+            if (!filePath) {
+                vscode.window.showErrorMessage(`Could not resolve file pointer: ${fileName}`);
+                return;
+            }
+
+            if (!fs.existsSync(filePath)) {
+                vscode.window.showErrorMessage(`File does not exist: ${fileName}`);
+                return;
+            }
+
+            await this.openFileInEditor(filePath);
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to open file pointer ${fileName}: ${error}`);
         }
     }
 
@@ -1761,6 +1788,13 @@ export class SwatSingleTableViewerPanel {
                 });
             }
 
+            function openFilePointer(fileName) {
+                vscode.postMessage({
+                    command: 'openFilePointer',
+                    fileName: fileName
+                });
+            }
+
             function openInputFile(file) {
                 vscode.postMessage({
                     command: 'openInputFile',
@@ -1922,11 +1956,11 @@ export class SwatSingleTableViewerPanel {
             window.addEventListener('message', event => {
                 const message = event.data;
                 if (message.command === 'showFKRowData') {
-                    displayFKPeek(message.tableName, message.fkValue, message.fileName, message.columns, message.rowData, message.lineNumber);
+                    displayFKPeek(message.tableName, message.fkValue, message.fileName, message.columns, message.rowData, message.lineNumber, message.filePointers);
                 }
             });
 
-            function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber) {
+            function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber, filePointers) {
                 // Find the specific FK cell that matches both table name AND FK value
                 const fkCells = document.querySelectorAll(\`td.fk-cell[data-fk-table="\${tableName}"][data-fk-value="\${fkValue}"]\`);
                 
@@ -1998,7 +2032,22 @@ export class SwatSingleTableViewerPanel {
                     const dataRow = document.createElement('tr');
                     columns.forEach(col => {
                         const td = document.createElement('td');
-                        td.textContent = rowData[col] || '';
+                        const value = rowData[col] || '';
+                        if (filePointers && Object.prototype.hasOwnProperty.call(filePointers, col) && value && value !== 'null') {
+                            const link = document.createElement('a');
+                            link.href = '#';
+                            link.className = 'file-link';
+                            link.textContent = value;
+                            link.title = `Click to open ${value}`;
+                            link.addEventListener('click', (event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                openFilePointer(value);
+                            });
+                            td.appendChild(link);
+                        } else {
+                            td.textContent = value;
+                        }
                         dataRow.appendChild(td);
                     });
                     tbody.appendChild(dataRow);
