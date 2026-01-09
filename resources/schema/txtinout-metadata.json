@@ -415,7 +415,8 @@
       },
       "atmo_dep": {
         "description": "Atmospheric deposition data file name",
-        "file_pattern": "*.atmo"
+        "file_pattern": "*.atmo",
+        "target_file": "atmo.cli"
       },
       "wgn": "Name of the weather generator station"
     },

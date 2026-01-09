@@ -49,6 +49,11 @@ export class SwatSingleTableViewerPanel {
                             this.openFileByName(message.fileName);
                         }
                         break;
+                    case 'openFileWithHighlight':
+                        if (message.fileName) {
+                            this.openFileByName(message.fileName, message.highlightValue);
+                        }
+                        break;
                     case 'getFKRowData':
                         if (message.tableName && message.fkValue) {
                             this.sendFKRowData(message.tableName, message.fkValue);
@@ -67,6 +72,11 @@ export class SwatSingleTableViewerPanel {
                     case 'openFileForTable':
                         if (message.tableName) {
                             this.openFileForTable(message.tableName);
+                        }
+                        break;
+                    case 'openFilePointer':
+                        if (message.fileName) {
+                            this.openFilePointer(message.fileName);
                         }
                         break;
                 }
@@ -166,6 +176,8 @@ export class SwatSingleTableViewerPanel {
             // Get schema for the target table to get column names
             const fileName = this.indexer.getFileNameForTable(tableName);
             const schemaTable = fileName && schema.tables[fileName] ? schema.tables[fileName] : undefined;
+            const metadata = this.indexer.getMetadata();
+            const filePointers = metadata?.file_pointer_columns?.[fileName || ''] || {};
             
             // Get columns from actual indexed data (not schema)
             let columns: string[] = [];
@@ -179,7 +191,8 @@ export class SwatSingleTableViewerPanel {
                 fileName: fileName || tableName,
                 columns: columns,
                 rowData: targetRow.values,
-                lineNumber: targetRow.lineNumber
+                lineNumber: targetRow.lineNumber,
+                filePointers: filePointers
             });
         } catch (error) {
             console.error('Failed to get FK row data', error);
@@ -191,7 +204,7 @@ export class SwatSingleTableViewerPanel {
         SwatSingleTableViewerPanel.createOrShow(this.indexer, tableName, fkValue);
     }
 
-    private async openFileByName(fileName: string) {
+    private async openFileByName(fileName: string, highlightValue?: string) {
         try {
             // Map the file name to a table name using the indexer
             let tableName = this.indexer.getTableNameFromFile(fileName);
@@ -213,9 +226,28 @@ export class SwatSingleTableViewerPanel {
             }
             
             // Open the table in a new viewer panel
-            SwatSingleTableViewerPanel.createOrShow(this.indexer, tableName);
+            SwatSingleTableViewerPanel.createOrShow(this.indexer, tableName, highlightValue);
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to open table for ${fileName}: ${error}`);
+        }
+    }
+
+    private async openFilePointer(fileName: string) {
+        try {
+            const filePath = this.resolveFilePointerPath(fileName);
+            if (!filePath) {
+                vscode.window.showErrorMessage(`Could not resolve file pointer: ${fileName}`);
+                return;
+            }
+
+            if (!fs.existsSync(filePath)) {
+                vscode.window.showErrorMessage(`File does not exist: ${fileName}`);
+                return;
+            }
+
+            await this.openFileInEditor(filePath);
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to open file pointer ${fileName}: ${error}`);
         }
     }
 
@@ -503,6 +535,7 @@ export class SwatSingleTableViewerPanel {
             for (const col of columns) {
                 const value = row.values[col] || '';
                 const fkInfo = fkColumns.get(col);
+                const pointerConfig = typeof filePointers === 'object' ? filePointers[col] : undefined;
                 const isFilePointer = typeof filePointers === 'object' && col in filePointers;
                 
                 // Special handling for file.cio file_name column - make it a clickable file link
@@ -539,6 +572,31 @@ export class SwatSingleTableViewerPanel {
                         tableHtml += `<td class="fk-cell" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" onclick="toggleFKPeek(this, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" oncontextmenu="showFKContextMenu(event, '${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber}, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
                     } else {
                         tableHtml += `<td class="fk-cell unresolved" title="Unresolved FK to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</td>`;
+                    }
+                } else if (isFilePointer && value && value !== 'null') {
+                    const targetFile = typeof pointerConfig === 'object' ? pointerConfig.target_file : undefined;
+                    const lookupFile = targetFile || value;
+                    const mappedTableName = this.indexer.getTableNameFromFile(lookupFile);
+                    const canOpenTable = mappedTableName ? this.indexer.isTableIndexed(mappedTableName) : false;
+                    if (canOpenTable) {
+                        const canOpen = this.canOpenFile(lookupFile);
+                        const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
+                        const title = canOpen ? `Click to open ${this._escapeHtml(lookupFile)}` : `${this._escapeHtml(lookupFile)} - Not indexed (may not exist in dataset)`;
+                        const highlightValue = lookupFile === 'atmo.cli' ? row.values.name : undefined;
+                        if (highlightValue) {
+                            tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByNameWithHighlight('${this._escapeJs(lookupFile)}', '${this._escapeJs(highlightValue)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                        } else {
+                            tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByName('${this._escapeJs(lookupFile)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                        }
+                    } else {
+                        const { canOpen, filePath } = this.canOpenFilePointer(lookupFile);
+                        const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
+                        const title = canOpen ? `Click to open ${this._escapeHtml(lookupFile)}` : `${this._escapeHtml(lookupFile)} - File not found in TxtInOut`;
+                        if (canOpen && filePath) {
+                            tableHtml += `<td class="file-link-cell"><a href="#" onclick="openInputFile('${this._escapeJs(filePath)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                        } else {
+                            tableHtml += `<td class="file-link-cell"><span class="${linkClass}" title="${title}">${this._escapeHtml(value)}</span></td>`;
+                        }
                     }
                 } else {
                     tableHtml += `<td>${this._escapeHtml(value)}</td>`;
@@ -953,9 +1011,12 @@ export class SwatSingleTableViewerPanel {
                 const stationName = childRow.values.station_name || 'Unknown Station';
                 const lineNumber = childRow.lineNumber || 0;
                 const file = mainRow.file || 'atmo.cli';
+                const isHighlighted = this.highlightValue && stationName && stationName.toLowerCase() === this.highlightValue.toLowerCase();
+                const highlightClass = isHighlighted ? ' highlighted-station' : '';
+                const highlightId = isHighlighted ? ` id="highlighted-atmo-station"` : '';
 
                 html += `
-                    <div class="atmo-station-section" data-station="${this._escapeHtml(stationName)}">
+                    <div class="atmo-station-section${highlightClass}" data-station="${this._escapeHtml(stationName)}"${highlightId}>
                         <div class="atmo-station-header" onclick="toggleAtmoStationSection('${this._escapeJs(stationName)}')">
                             <span class="toggle-icon">▼</span>
                             <span class="station-name">
@@ -1472,6 +1533,10 @@ export class SwatSingleTableViewerPanel {
                 border-radius: 4px;
                 overflow: hidden;
             }
+            .atmo-station-section.highlighted-station {
+                border: 2px solid var(--vscode-focusBorder);
+                box-shadow: 0 0 8px var(--vscode-focusBorder);
+            }
             .atmo-station-header {
                 padding: 12px 16px;
                 background-color: var(--vscode-editor-background);
@@ -1638,6 +1703,13 @@ export class SwatSingleTableViewerPanel {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
+                gap: 8px;
+            }
+            .fk-peek-header-text {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                white-space: nowrap;
             }
             .fk-peek-close-btn {
                 background: transparent;
@@ -1722,6 +1794,21 @@ export class SwatSingleTableViewerPanel {
             function openFileByName(fileName) {
                 vscode.postMessage({
                     command: 'openFile',
+                    fileName: fileName
+                });
+            }
+
+            function openFileByNameWithHighlight(fileName, highlightValue) {
+                vscode.postMessage({
+                    command: 'openFileWithHighlight',
+                    fileName: fileName,
+                    highlightValue: highlightValue
+                });
+            }
+
+            function openFilePointer(fileName) {
+                vscode.postMessage({
+                    command: 'openFilePointer',
                     fileName: fileName
                 });
             }
@@ -1887,11 +1974,11 @@ export class SwatSingleTableViewerPanel {
             window.addEventListener('message', event => {
                 const message = event.data;
                 if (message.command === 'showFKRowData') {
-                    displayFKPeek(message.tableName, message.fkValue, message.fileName, message.columns, message.rowData, message.lineNumber);
+                    displayFKPeek(message.tableName, message.fkValue, message.fileName, message.columns, message.rowData, message.lineNumber, message.filePointers);
                 }
             });
 
-            function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber) {
+            function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber, filePointers) {
                 // Find the specific FK cell that matches both table name AND FK value
                 const fkCells = document.querySelectorAll(\`td.fk-cell[data-fk-table="\${tableName}"][data-fk-value="\${fkValue}"]\`);
                 
@@ -1910,7 +1997,26 @@ export class SwatSingleTableViewerPanel {
                     
                     const header = document.createElement('div');
                     header.className = 'fk-peek-header';
-                    header.textContent = \`\${tableName} (File: \${fileName}, Line: \${lineNumber})\`;
+                    const headerText = document.createElement('span');
+                    headerText.className = 'fk-peek-header-text';
+                    const headerLabel = document.createElement('span');
+                    headerLabel.textContent = \`\${tableName} (File: \`;
+                    const fileLink = document.createElement('a');
+                    fileLink.href = '#';
+                    fileLink.className = 'file-link';
+                    fileLink.textContent = fileName;
+                    fileLink.title = \`Click to open \${fileName}\`;
+                    fileLink.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        openFileByName(fileName);
+                    });
+                    const headerSuffix = document.createElement('span');
+                    headerSuffix.textContent = \`, Line: \${lineNumber})\`;
+                    headerText.appendChild(headerLabel);
+                    headerText.appendChild(fileLink);
+                    headerText.appendChild(headerSuffix);
+                    header.appendChild(headerText);
                     
                     // Add close button to header
                     const closeBtn = document.createElement('button');
@@ -1944,7 +2050,22 @@ export class SwatSingleTableViewerPanel {
                     const dataRow = document.createElement('tr');
                     columns.forEach(col => {
                         const td = document.createElement('td');
-                        td.textContent = rowData[col] || '';
+                        const value = rowData[col] || '';
+                        if (filePointers && Object.prototype.hasOwnProperty.call(filePointers, col) && value && value !== 'null') {
+                            const link = document.createElement('a');
+                            link.href = '#';
+                            link.className = 'file-link';
+                            link.textContent = value;
+                            link.title = 'Click to open ' + value;
+                            link.addEventListener('click', (event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                openFilePointer(value);
+                            });
+                            td.appendChild(link);
+                        } else {
+                            td.textContent = value;
+                        }
                         dataRow.appendChild(td);
                     });
                     tbody.appendChild(dataRow);
@@ -1978,6 +2099,20 @@ export class SwatSingleTableViewerPanel {
                     // Scroll to the highlighted station
                     setTimeout(function() {
                         highlightedStation.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                }
+
+                const highlightedAtmoStation = document.getElementById('highlighted-atmo-station');
+                if (highlightedAtmoStation) {
+                    const header = highlightedAtmoStation.querySelector('.atmo-station-header');
+                    const content = highlightedAtmoStation.querySelector('.atmo-station-content');
+                    if (header && content && content.classList.contains('collapsed')) {
+                        content.classList.remove('collapsed');
+                        header.classList.remove('collapsed');
+                    }
+
+                    setTimeout(function() {
+                        highlightedAtmoStation.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }, 100);
                 }
             });
