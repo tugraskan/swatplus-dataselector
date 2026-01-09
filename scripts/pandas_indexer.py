@@ -474,10 +474,10 @@ def process_dtl_file(
     while current_line < len(lines) and not lines[current_line].strip():
         current_line += 1
     
-    # Skip the global header line (NAME  CONDS  ALTS  ACTS)
+    # Skip the global header line (NAME / DTBL_NAME  CONDS  ALTS  ACTS)
     if current_line < len(lines):
         possible_header_line = lines[current_line].strip().upper()
-        if possible_header_line.startswith('NAME'):
+        if possible_header_line.startswith('NAME') or possible_header_line.startswith('DTBL_NAME'):
             current_line += 1
     
     # Process each decision table
@@ -530,7 +530,12 @@ def process_dtl_file(
         current_line += 1  # Move past decision table header
         
         # Skip conditions section header line
-        current_line += 1
+        while current_line < len(lines) and not lines[current_line].strip():
+            current_line += 1
+        if current_line < len(lines):
+            possible_cond_header = lines[current_line].strip().upper()
+            if possible_cond_header.startswith('COND_VAR'):
+                current_line += 1
         
         # Skip conditions section data lines
         condition_columns = ["cond_var", "obj", "obj_num", "lim_var", "lim_op", "lim_const"]
@@ -556,7 +561,10 @@ def process_dtl_file(
         # Skip actions section header line
         while current_line < len(lines) and not lines[current_line].strip():
             current_line += 1
-        current_line += 1
+        if current_line < len(lines):
+            possible_act_header = lines[current_line].strip().upper()
+            if possible_act_header.startswith('ACT_TYP'):
+                current_line += 1
         
         # Process actions section data lines
         action_columns = [
@@ -611,11 +619,13 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
 
     tables_payload: Dict[str, List[dict]] = {}
     fk_references: List[dict] = []
+    processed_files = set()
 
     for file_name, table in schema.get("tables", {}).items():
         file_path = dataset_path / file_name
         if not file_path.exists():
             continue
+        processed_files.add(file_name.lower())
         
         # Skip file.cio - it has a special classification-based format that is handled
         # separately in the TypeScript parseFileCio() method
@@ -827,6 +837,17 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
                     file_path, table, lines, line_num, numb_auto, numb_ops, fk_null_values
                 )
                 fk_references.extend(child_refs)
+
+    # Process additional decision table files not covered by the schema
+    for dtl_path in dataset_path.glob("*.dtl"):
+        if dtl_path.name.lower() in processed_files:
+            continue
+        derived_table_name = dtl_path.name.replace(".", "_").replace("-", "_").lower()
+        dtl_table = {"table_name": derived_table_name, "file_name": dtl_path.name}
+        row_payload, dtl_fk_refs = process_dtl_file(dtl_path, dtl_table, fk_null_values)
+        if row_payload:
+            tables_payload[derived_table_name] = row_payload
+            fk_references.extend(dtl_fk_refs)
 
     return {
         "tables": tables_payload,
