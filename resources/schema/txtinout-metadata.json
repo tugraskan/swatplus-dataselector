@@ -415,9 +415,45 @@
       },
       "atmo_dep": {
         "description": "Atmospheric deposition data file name",
-        "file_pattern": "*.atmo"
+        "file_pattern": "*.atmo",
+        "target_file": "atmo.cli"
       },
       "wgn": "Name of the weather generator station"
+    },
+    "pcp.cli": {
+      "description": "File pointer columns for pcp.cli",
+      "filename": {
+        "description": "Precipitation data file name",
+        "file_pattern": "*.pcp"
+      }
+    },
+    "tmp.cli": {
+      "description": "File pointer columns for tmp.cli",
+      "filename": {
+        "description": "Temperature data file name",
+        "file_pattern": "*.tmp"
+      }
+    },
+    "slr.cli": {
+      "description": "File pointer columns for slr.cli",
+      "filename": {
+        "description": "Solar radiation data file name",
+        "file_pattern": "*.slr"
+      }
+    },
+    "hmd.cli": {
+      "description": "File pointer columns for hmd.cli",
+      "filename": {
+        "description": "Humidity data file name",
+        "file_pattern": "*.hmd"
+      }
+    },
+    "wnd.cli": {
+      "description": "File pointer columns for wnd.cli",
+      "filename": {
+        "description": "Wind data file name",
+        "file_pattern": "*.wnd"
+      }
     },
     "aquifer.aqu": {
       "description": "File pointer columns for aquifer.aqu",

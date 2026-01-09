@@ -219,6 +219,32 @@ export class SwatSingleTableViewerPanel {
         }
     }
 
+    private resolveFilePointerPath(fileName: string): string | null {
+        if (!fileName) {
+            return null;
+        }
+
+        if (path.isAbsolute(fileName)) {
+            return fileName;
+        }
+
+        const txtInOutPath = this.indexer.getTxtInOutPath();
+        if (!txtInOutPath) {
+            return null;
+        }
+
+        return path.join(txtInOutPath, fileName);
+    }
+
+    private canOpenFilePointer(fileName: string): { canOpen: boolean; filePath?: string } {
+        const filePath = this.resolveFilePointerPath(fileName);
+        if (!filePath) {
+            return { canOpen: false };
+        }
+
+        return { canOpen: fs.existsSync(filePath), filePath };
+    }
+
     /**
      * Check if a file can be opened (exists in index)
      */
@@ -477,6 +503,8 @@ export class SwatSingleTableViewerPanel {
             for (const col of columns) {
                 const value = row.values[col] || '';
                 const fkInfo = fkColumns.get(col);
+                const pointerConfig = typeof filePointers === 'object' ? filePointers[col] : undefined;
+                const isFilePointer = typeof filePointers === 'object' && col in filePointers;
                 
                 // Special handling for file.cio file_name column - make it a clickable file link
                 if (this.tableName === 'file_cio' && col === 'file_name' && value && value !== 'null' && value.includes('.')) {
@@ -494,6 +522,26 @@ export class SwatSingleTableViewerPanel {
                         tableHtml += `<td class="fk-cell" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" onclick="toggleFKPeek(this, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" oncontextmenu="showFKContextMenu(event, '${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber}, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
                     } else {
                         tableHtml += `<td class="fk-cell unresolved" title="Unresolved FK to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</td>`;
+                    }
+                } else if (isFilePointer && value && value !== 'null') {
+                    const targetFile = typeof pointerConfig === 'object' ? pointerConfig.target_file : undefined;
+                    const lookupFile = targetFile || value;
+                    const mappedTableName = this.indexer.getTableNameFromFile(lookupFile);
+                    const canOpenTable = mappedTableName ? this.indexer.isTableIndexed(mappedTableName) : false;
+                    if (canOpenTable) {
+                        const canOpen = this.canOpenFile(lookupFile);
+                        const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
+                        const title = canOpen ? `Click to open ${this._escapeHtml(lookupFile)}` : `${this._escapeHtml(lookupFile)} - Not indexed (may not exist in dataset)`;
+                        tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByName('${this._escapeJs(lookupFile)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                    } else {
+                        const { canOpen, filePath } = this.canOpenFilePointer(lookupFile);
+                        const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
+                        const title = canOpen ? `Click to open ${this._escapeHtml(lookupFile)}` : `${this._escapeHtml(lookupFile)} - File not found in TxtInOut`;
+                        if (canOpen && filePath) {
+                            tableHtml += `<td class="file-link-cell"><a href="#" onclick="openInputFile('${this._escapeJs(filePath)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                        } else {
+                            tableHtml += `<td class="file-link-cell"><span class="${linkClass}" title="${title}">${this._escapeHtml(value)}</span></td>`;
+                        }
                     }
                 } else {
                     tableHtml += `<td>${this._escapeHtml(value)}</td>`;
@@ -1678,6 +1726,13 @@ export class SwatSingleTableViewerPanel {
                 vscode.postMessage({
                     command: 'openFile',
                     fileName: fileName
+                });
+            }
+
+            function openInputFile(file) {
+                vscode.postMessage({
+                    command: 'openInputFile',
+                    file: file
                 });
             }
 
