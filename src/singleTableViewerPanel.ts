@@ -451,6 +451,14 @@ export class SwatSingleTableViewerPanel {
             return this._getSoilsSolSubTableHtml(rows);
         }
 
+        // Special rendering for plant.ini - use plant community sub-table view with plant member data
+        if (this.tableName === 'plant_ini') {
+            if (rows.length === 0) {
+                return '<p class="empty-message">No data</p>';
+            }
+            return this._getPlantIniSubTableHtml(rows);
+        }
+
         // For empty tables, show table structure with headers from schema
         if (rows.length === 0) {
             if (schemaTable && schemaTable.columns) {
@@ -1191,6 +1199,101 @@ export class SwatSingleTableViewerPanel {
         return html;
     }
 
+    private _getPlantIniSubTableHtml(rows: any[]): string {
+        const metadata = this.indexer.getMetadata();
+        const fileMetadata = metadata?.file_metadata?.['plant.ini'];
+
+        let html = '';
+
+        if (fileMetadata && fileMetadata.description) {
+            html += `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
+        }
+
+        html += `<div class="plant-ini-subtables">`;
+
+        const plantColumns = [
+            { key: 'plnt_name', label: 'Plant Name' },
+            { key: 'lc_status', label: 'LC Status' },
+            { key: 'lai_init', label: 'LAI Init' },
+            { key: 'bm_init', label: 'Biomass Init' },
+            { key: 'phu_init', label: 'PHU Init' },
+            { key: 'plnt_pop', label: 'Plant Pop' },
+            { key: 'yrs_init', label: 'Years Init' },
+            { key: 'rsd_init', label: 'Residue Init' }
+        ];
+
+        for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
+            const communityName = row.values.name || 'Unknown Community';
+            const plantCount = row.values.plnt_cnt || 'N/A';
+            const rotationYear = row.values.rot_yr_ini || 'N/A';
+            const lineNumber = row.lineNumber || 0;
+            const file = row.file || 'plant.ini';
+
+            const isHighlighted = this.highlightValue && communityName && communityName.toLowerCase() === this.highlightValue.toLowerCase();
+            const highlightClass = isHighlighted ? ' highlighted-community' : '';
+            const highlightId = isHighlighted ? ` id="highlighted-community"` : '';
+
+            html += `
+                <div class="plant-community-section${highlightClass}" data-community="${this._escapeHtml(communityName)}"${highlightId}>
+                    <div class="plant-community-header" onclick="togglePlantCommunitySection('${this._escapeJs(communityName)}')">
+                        <span class="toggle-icon">▼</span>
+                        <span class="community-name">
+                            <a href="#" onclick="event.stopPropagation(); navigateToFile('${this._escapeJs(file)}', ${lineNumber}); return false;" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(communityName)}</a>
+                        </span>
+                        <span class="community-info">
+                            Plants: ${this._escapeHtml(plantCount)}, Rotation Start: ${this._escapeHtml(rotationYear)}
+                        </span>
+                    </div>
+                    <div class="plant-community-content">
+                        <div class="plant-meta">
+                            <span><strong>Plant Count:</strong> ${this._escapeHtml(plantCount)}</span>
+                            <span><strong>Rotation Year:</strong> ${this._escapeHtml(rotationYear)}</span>
+                        </div>
+            `;
+
+            if (row.childRows && Array.isArray(row.childRows) && row.childRows.length > 0) {
+                html += `
+                        <div class="table-wrapper">
+                            <table class="plant-detail-table">
+                                <thead>
+                                    <tr>
+                                        <th class="line-col">Line</th>
+                                        ${plantColumns.map(col => `<th title="${this._escapeHtml(col.label)}">${this._escapeHtml(col.label)}</th>`).join('')}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                `;
+
+                row.childRows.forEach((childRow: any) => {
+                    html += `<tr>`;
+                    html += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(file)}', ${childRow.lineNumber})">${childRow.lineNumber}</a></td>`;
+                    plantColumns.forEach((col) => {
+                        const value = childRow.values[col.key] || '';
+                        html += `<td>${this._escapeHtml(value)}</td>`;
+                    });
+                    html += `</tr>`;
+                });
+
+                html += `
+                                </tbody>
+                            </table>
+                        </div>
+                `;
+            } else {
+                html += `<p class="empty-message">No plant data available</p>`;
+            }
+
+            html += `
+                    </div>
+                </div>
+            `;
+        }
+
+        html += `</div>`;
+
+        return html;
+    }
+
     private _getEmptyTableHtml(schemaTable: any): string {
         const metadata = this.indexer.getMetadata();
         const fileMetadata = metadata?.file_metadata?.[schemaTable.file_name];
@@ -1809,6 +1912,95 @@ export class SwatSingleTableViewerPanel {
             .soil-layer-table tr:hover {
                 background-color: var(--vscode-list-hoverBackground);
             }
+            /* plant.ini community-based sub-table view */
+            .plant-ini-subtables {
+                margin: 16px 0;
+            }
+            .plant-community-section {
+                margin-bottom: 12px;
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                overflow: hidden;
+            }
+            .plant-community-section.highlighted-community {
+                border: 2px solid var(--vscode-focusBorder);
+                box-shadow: 0 0 8px var(--vscode-focusBorder);
+            }
+            .plant-community-header {
+                padding: 12px 16px;
+                background-color: var(--vscode-editor-background);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                user-select: none;
+                transition: background-color 0.2s;
+            }
+            .plant-community-header:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            .plant-community-header.collapsed .toggle-icon {
+                transform: rotate(-90deg);
+            }
+            .community-name {
+                font-weight: 600;
+                flex: 0 0 auto;
+            }
+            .community-name .line-link {
+                color: var(--vscode-foreground);
+                text-decoration: none;
+            }
+            .community-name .line-link:hover {
+                color: var(--vscode-textLink-activeForeground);
+                text-decoration: underline;
+            }
+            .community-info {
+                font-size: 0.85em;
+                color: var(--vscode-descriptionForeground);
+                flex: 1;
+            }
+            .plant-community-content {
+                max-height: 2000px;
+                overflow-y: auto;
+                transition: max-height 0.3s ease-out;
+                padding: 12px 16px;
+            }
+            .plant-community-content.collapsed {
+                max-height: 0;
+                overflow: hidden;
+                padding: 0;
+            }
+            .plant-meta {
+                display: flex;
+                gap: 16px;
+                flex-wrap: wrap;
+                margin-bottom: 12px;
+                font-size: 0.9em;
+            }
+            .plant-meta span {
+                color: var(--vscode-descriptionForeground);
+            }
+            .plant-detail-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 0.85em;
+            }
+            .plant-detail-table th {
+                background-color: var(--vscode-editor-background);
+                padding: 8px 6px;
+                text-align: left;
+                border-bottom: 2px solid var(--vscode-panel-border);
+                font-weight: 600;
+                white-space: nowrap;
+                font-size: 0.75em;
+            }
+            .plant-detail-table td {
+                padding: 6px;
+                border-bottom: 1px solid var(--vscode-panel-border);
+            }
+            .plant-detail-table tr:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
             .fk-indicator {
                 margin-left: 4px;
                 font-size: 0.8em;
@@ -2097,6 +2289,23 @@ export class SwatSingleTableViewerPanel {
                 }
             }
 
+            function togglePlantCommunitySection(communityName) {
+                const escapedCommunity = communityName.replace(/"/g, '\\"');
+                const section = document.querySelector('[data-community="' + escapedCommunity + '"]');
+                if (!section) return;
+
+                const header = section.querySelector('.plant-community-header');
+                const content = section.querySelector('.plant-community-content');
+
+                if (content.classList.contains('collapsed')) {
+                    content.classList.remove('collapsed');
+                    header.classList.remove('collapsed');
+                } else {
+                    content.classList.add('collapsed');
+                    header.classList.add('collapsed');
+                }
+            }
+
             function openFileForTable(tableName) {
                 vscode.postMessage({
                     command: 'openFileForTable',
@@ -2352,6 +2561,20 @@ export class SwatSingleTableViewerPanel {
 
                     setTimeout(function() {
                         highlightedSoil.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                }
+
+                const highlightedCommunity = document.getElementById('highlighted-community');
+                if (highlightedCommunity) {
+                    const header = highlightedCommunity.querySelector('.plant-community-header');
+                    const content = highlightedCommunity.querySelector('.plant-community-content');
+                    if (header && content && content.classList.contains('collapsed')) {
+                        content.classList.remove('collapsed');
+                        header.classList.remove('collapsed');
+                    }
+
+                    setTimeout(function() {
+                        highlightedCommunity.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }, 100);
                 }
             });

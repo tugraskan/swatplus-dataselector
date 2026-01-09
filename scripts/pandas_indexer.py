@@ -124,9 +124,15 @@ def is_main_record_line(value_map: Dict[str, str], file_name: str, tokens: List[
             return False
         return tokens[2].isalpha()
     
-    # For plant.ini: Main record has plnt_cnt field
+    # For plant.ini: Main record has numeric plant count as the second token
     if file_name == 'plant.ini':
-        return 'plnt_cnt' in value_map
+        if len(tokens) < 2:
+            return False
+        try:
+            int(tokens[1])
+            return True
+        except ValueError:
+            return False
     
     # For decision tables: More complex, for now treat all as main records
     if file_name.endswith('.dtl'):
@@ -176,7 +182,9 @@ def parse_lines_to_dataframe(
             if header_line:
                 header_columns = [col.strip() for col in header_line.split()]
                 if header_columns:
-                    if all(col in schema_columns_all for col in header_columns):
+                    if file_name == "plant.ini":
+                        columns = [col.lower() for col in header_columns]
+                    elif all(col in schema_columns_all for col in header_columns):
                         columns = header_columns
                     else:
                         header_lower = [col.lower() for col in header_columns]
@@ -604,7 +612,7 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
             continue
 
         lines = None
-        if file_name == 'soils.sol':
+        if file_name in {'soils.sol', 'plant.ini'}:
             with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
                 lines = handle.readlines()
 
@@ -672,6 +680,45 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
                             for col_idx, col_name in enumerate(layer_columns)
                         }
                         child_value_map["layer"] = str(layer_idx + 1)
+                        child_rows.append({
+                            "lineNumber": child_line_idx + 1,
+                            "values": child_value_map
+                        })
+
+                    if child_rows:
+                        row_dict["childRows"] = child_rows
+
+            # Special handling for plant.ini: capture plant community member lines
+            if file_name == 'plant.ini' and lines and child_line_info and idx < len(child_line_info):
+                line_num, child_count = child_line_info[idx]
+                if child_count > 0:
+                    line_idx = line_num - 1
+                    if 0 <= line_idx < len(lines):
+                        main_tokens = lines[line_idx].strip().split()
+                        if len(main_tokens) >= 3:
+                            row_dict["values"].update({
+                                "name": main_tokens[0],
+                                "plnt_cnt": main_tokens[1],
+                                "rot_yr_ini": main_tokens[2],
+                            })
+
+                    plant_columns = [
+                        "plnt_name", "lc_status", "lai_init", "bm_init",
+                        "phu_init", "plnt_pop", "yrs_init", "rsd_init"
+                    ]
+                    child_rows = []
+                    for plant_idx in range(child_count):
+                        child_line_idx = line_idx + 1 + plant_idx
+                        if child_line_idx >= len(lines):
+                            break
+                        child_line = lines[child_line_idx].strip()
+                        if not child_line:
+                            continue
+                        child_tokens = child_line.split()
+                        child_value_map = {
+                            col_name: child_tokens[col_idx] if col_idx < len(child_tokens) else ""
+                            for col_idx, col_name in enumerate(plant_columns)
+                        }
                         child_rows.append({
                             "lineNumber": child_line_idx + 1,
                             "values": child_value_map
