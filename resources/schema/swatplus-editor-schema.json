@@ -22370,7 +22370,7 @@
         {
           "name": "id",
           "db_column": "id",
-          "type": "AutoField",
+          "type": "IntegerField",
           "nullable": false,
           "is_primary_key": true,
           "is_foreign_key": false
@@ -22535,7 +22535,7 @@
         {
           "name": "id",
           "db_column": "id",
-          "type": "AutoField",
+          "type": "IntegerField",
           "nullable": false,
           "is_primary_key": true,
           "is_foreign_key": false
@@ -22700,7 +22700,7 @@
         {
           "name": "id",
           "db_column": "id",
-          "type": "AutoField",
+          "type": "IntegerField",
           "nullable": false,
           "is_primary_key": true,
           "is_foreign_key": false
@@ -22865,7 +22865,7 @@
         {
           "name": "id",
           "db_column": "id",
-          "type": "AutoField",
+          "type": "IntegerField",
           "nullable": false,
           "is_primary_key": true,
           "is_foreign_key": false
@@ -23030,7 +23030,7 @@
         {
           "name": "id",
           "db_column": "id",
-          "type": "AutoField",
+          "type": "IntegerField",
           "nullable": false,
           "is_primary_key": true,
           "is_foreign_key": false
@@ -23195,7 +23195,7 @@
         {
           "name": "id",
           "db_column": "id",
-          "type": "AutoField",
+          "type": "IntegerField",
           "nullable": false,
           "is_primary_key": true,
           "is_foreign_key": false
