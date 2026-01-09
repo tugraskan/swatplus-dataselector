@@ -56,7 +56,7 @@ def get_child_line_count(value_map: Dict[str, str], config: dict, file_name: str
     
     # Check for fixed child line count first (e.g., weather-wgn.cli has 13 fixed lines)
     fixed_count = structure.get("child_line_count_fixed")
-    if fixed_count is not None and fixed_count >= 0:
+    if fixed_count is not None and fixed_count > 0:
         if fixed_count > MAX_CHILD_LINES:
             return MAX_CHILD_LINES
         return fixed_count

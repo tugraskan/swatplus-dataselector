@@ -259,13 +259,11 @@ export class SwatSingleTableViewerPanel {
             // Get the first row to find the file path
             const indexData = this.indexer.getIndexData();
             const tableData = indexData.get(tableName);
-            // Allow opening even if no data - we'll handle empty tables gracefully in rendering
-            if (!tableData || tableData.size === 0) {
-                // For empty tables, we can still show the file structure if schema is available
-                // Continue to show the table view panel
-            }
             
-            const firstRow = tableData && tableData.size > 0 ? Array.from(tableData.values())[0] : null;
+            // Check if we have data
+            const hasData = tableData && tableData.size > 0;
+            const firstRow = hasData ? Array.from(tableData.values())[0] : null;
+            
             if (firstRow && firstRow.file) {
                 // Resolve the file path if it's relative
                 let filePath = firstRow.file;
@@ -278,6 +276,9 @@ export class SwatSingleTableViewerPanel {
                 
                 const document = await vscode.workspace.openTextDocument(filePath);
                 await vscode.window.showTextDocument(document, { preview: false });
+            } else if (!hasData) {
+                // Empty table - can't determine file path without data
+                vscode.window.showInformationMessage(`Table ${tableName} has no data to locate the source file.`);
             } else {
                 vscode.window.showErrorMessage(`Could not find file path for table: ${tableName}`);
             }
