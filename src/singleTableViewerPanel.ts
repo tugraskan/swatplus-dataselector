@@ -1658,6 +1658,13 @@ export class SwatSingleTableViewerPanel {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
+                gap: 8px;
+            }
+            .fk-peek-header-text {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                white-space: nowrap;
             }
             .fk-peek-close-btn {
                 background: transparent;
@@ -1938,6 +1945,8 @@ export class SwatSingleTableViewerPanel {
                     
                     const header = document.createElement('div');
                     header.className = 'fk-peek-header';
+                    const headerText = document.createElement('span');
+                    headerText.className = 'fk-peek-header-text';
                     const headerLabel = document.createElement('span');
                     headerLabel.textContent = \`\${tableName} (File: \`;
                     const fileLink = document.createElement('a');
@@ -1952,9 +1961,10 @@ export class SwatSingleTableViewerPanel {
                     });
                     const headerSuffix = document.createElement('span');
                     headerSuffix.textContent = \`, Line: \${lineNumber})\`;
-                    header.appendChild(headerLabel);
-                    header.appendChild(fileLink);
-                    header.appendChild(headerSuffix);
+                    headerText.appendChild(headerLabel);
+                    headerText.appendChild(fileLink);
+                    headerText.appendChild(headerSuffix);
+                    header.appendChild(headerText);
                     
                     // Add close button to header
                     const closeBtn = document.createElement('button');
