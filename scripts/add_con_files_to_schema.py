@@ -15,7 +15,7 @@ def create_con_table(file_name, config):
         {
             "name": "id",
             "db_column": "id",
-            "type": "AutoField",
+            "type": "IntegerField",
             "nullable": False,
             "is_primary_key": True,
             "is_foreign_key": False
