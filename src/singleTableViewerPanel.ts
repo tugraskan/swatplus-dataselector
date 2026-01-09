@@ -178,6 +178,14 @@ export class SwatSingleTableViewerPanel {
             const schemaTable = fileName && schema.tables[fileName] ? schema.tables[fileName] : undefined;
             const metadata = this.indexer.getMetadata();
             const filePointers = metadata?.file_pointer_columns?.[fileName || ''] || {};
+            const fkColumns: Record<string, { targetTable: string; targetFile: string }> = {};
+            if (schemaTable && schemaTable.foreign_keys) {
+                schemaTable.foreign_keys.forEach((fk: any) => {
+                    const targetTable = fk.references.table;
+                    const targetFile = this.indexer.getFileNameForTable(targetTable) || targetTable;
+                    fkColumns[fk.column] = { targetTable, targetFile };
+                });
+            }
             
             // Get columns from actual indexed data (not schema)
             let columns: string[] = [];
@@ -192,7 +200,8 @@ export class SwatSingleTableViewerPanel {
                 columns: columns,
                 rowData: targetRow.values,
                 lineNumber: targetRow.lineNumber,
-                filePointers: filePointers
+                filePointers: filePointers,
+                fkColumns: fkColumns
             });
         } catch (error) {
             console.error('Failed to get FK row data', error);
@@ -2422,11 +2431,11 @@ export class SwatSingleTableViewerPanel {
             window.addEventListener('message', event => {
                 const message = event.data;
                 if (message.command === 'showFKRowData') {
-                    displayFKPeek(message.tableName, message.fkValue, message.fileName, message.columns, message.rowData, message.lineNumber, message.filePointers);
+                    displayFKPeek(message.tableName, message.fkValue, message.fileName, message.columns, message.rowData, message.lineNumber, message.filePointers, message.fkColumns);
                 }
             });
-
-            function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber, filePointers) {
+            
+            function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber, filePointers, fkColumns) {
                 // Find the specific FK cell that matches both table name AND FK value
                 const fkCells = document.querySelectorAll(\`td.fk-cell[data-fk-table="\${tableName}"][data-fk-value="\${fkValue}"]\`);
                 
@@ -2499,7 +2508,20 @@ export class SwatSingleTableViewerPanel {
                     columns.forEach(col => {
                         const td = document.createElement('td');
                         const value = rowData[col] || '';
-                        if (filePointers && Object.prototype.hasOwnProperty.call(filePointers, col) && value && value !== 'null') {
+                        if (fkColumns && Object.prototype.hasOwnProperty.call(fkColumns, col) && value && value !== 'null') {
+                            const fkInfo = fkColumns[col];
+                            const link = document.createElement('a');
+                            link.href = '#';
+                            link.className = 'fk-link';
+                            link.textContent = value;
+                            link.title = 'Open ' + fkInfo.targetFile + ' for ' + value;
+                            link.addEventListener('click', (event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                openFileByNameWithHighlight(fkInfo.targetFile, value);
+                            });
+                            td.appendChild(link);
+                        } else if (filePointers && Object.prototype.hasOwnProperty.call(filePointers, col) && value && value !== 'null') {
                             const link = document.createElement('a');
                             link.href = '#';
                             link.className = 'file-link';
