@@ -738,7 +738,7 @@ export class SwatSingleTableViewerPanel {
             const file = row.file || 'weather-wgn.cli';
             
             // Check if this station should be highlighted
-            const isHighlighted = this.highlightValue && stationName.toLowerCase() === this.highlightValue.toLowerCase();
+            const isHighlighted = this.highlightValue && stationName && stationName.toLowerCase() === this.highlightValue.toLowerCase();
             const highlightClass = isHighlighted ? ' highlighted-station' : '';
             const highlightId = isHighlighted ? ` id="highlighted-station"` : '';
 
