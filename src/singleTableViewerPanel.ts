@@ -200,7 +200,9 @@ export class SwatSingleTableViewerPanel {
                 }
             }
             
-            if (!tableName) {
+            // Even if we found a table name in the schema mapping, we need to verify
+            // that the table actually has data in the index
+            if (!tableName || !this.indexer.isTableIndexed(tableName)) {
                 vscode.window.showWarningMessage(`Table for file "${fileName}" is not indexed. This file is listed in file.cio but was not found in your dataset. It may be optional for your SWAT+ configuration.`);
                 return;
             }
@@ -232,7 +234,13 @@ export class SwatSingleTableViewerPanel {
             }
         }
         
-        return !!tableName;
+        // Even if we found a table name in the schema mapping, we need to verify
+        // that the table actually has data in the index
+        if (tableName) {
+            return this.indexer.isTableIndexed(tableName);
+        }
+        
+        return false;
     }
 
     private async openFileInEditor(file: string) {
