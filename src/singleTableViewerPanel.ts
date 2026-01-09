@@ -365,6 +365,11 @@ export class SwatSingleTableViewerPanel {
             return this._getWeatherWgnSubTableHtml(rows);
         }
 
+        // Special rendering for atmo.cli - use station-based sub-table view with deposition data
+        if (this.tableName === 'atmo_cli') {
+            return this._getAtmoCliSubTableHtml(rows);
+        }
+
         // Get columns from actual indexed data (not schema)
         // This ensures we only show columns that exist in the actual input files
         let columns: string[] = [];
@@ -828,6 +833,116 @@ export class SwatSingleTableViewerPanel {
         return html;
     }
 
+    private _getAtmoCliSubTableHtml(rows: any[]): string {
+        const metadata = this.indexer.getMetadata();
+        const fileMetadata = metadata?.file_metadata?.['atmo.cli'];
+        
+        let html = '';
+        
+        // Add file description if available
+        if (fileMetadata && fileMetadata.description) {
+            html += `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
+        }
+
+        // atmo.cli typically has only one main record with metadata
+        if (rows.length === 0) {
+            return '<p class="empty-message">No data</p>';
+        }
+
+        const mainRow = rows[0]; // The metadata row
+        const numSta = mainRow.values.num_sta || '0';
+        const timestep = mainRow.values.timestep || 'N/A';
+        const moInit = mainRow.values.mo_init || '0';
+        const yrInit = mainRow.values.yr_init || '0';
+        const numAa = mainRow.values.num_aa || '0';
+
+        html += `
+            <div class="atmo-cli-header">
+                <h3>Atmospheric Deposition Data</h3>
+                <div class="atmo-metadata">
+                    <span><strong>Stations:</strong> ${this._escapeHtml(numSta)}</span>
+                    <span><strong>Timestep:</strong> ${this._escapeHtml(timestep)}</span>
+                    <span><strong>First Month:</strong> ${this._escapeHtml(moInit)}</span>
+                    <span><strong>First Year:</strong> ${this._escapeHtml(yrInit)}</span>
+                    <span><strong>Data Points:</strong> ${this._escapeHtml(numAa)}</span>
+                </div>
+            </div>
+        `;
+
+        html += `<div class="atmo-cli-subtables">`;
+
+        // Deposition types with descriptions
+        const depositionTypes = [
+            { key: 'nh4_wet', label: 'NH₄ Wet Deposition', unit: 'kg/ha' },
+            { key: 'no3_wet', label: 'NO₃ Wet Deposition', unit: 'kg/ha' },
+            { key: 'nh4_dry', label: 'NH₄ Dry Deposition', unit: 'kg/ha' },
+            { key: 'no3_dry', label: 'NO₃ Dry Deposition', unit: 'kg/ha' }
+        ];
+
+        // Render each station as an expandable section
+        if (mainRow.childRows && Array.isArray(mainRow.childRows)) {
+            for (const childRow of mainRow.childRows) {
+                const stationName = childRow.values.station_name || 'Unknown Station';
+                const lineNumber = childRow.lineNumber || 0;
+                const file = mainRow.file || 'atmo.cli';
+
+                html += `
+                    <div class="atmo-station-section" data-station="${this._escapeHtml(stationName)}">
+                        <div class="atmo-station-header" onclick="toggleAtmoStationSection('${this._escapeJs(stationName)}')">
+                            <span class="toggle-icon">▼</span>
+                            <span class="station-name">
+                                <a href="#" onclick="event.stopPropagation(); navigateToFile('${this._escapeJs(file)}', ${lineNumber}); return false;" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(stationName)}</a>
+                            </span>
+                        </div>
+                        <div class="atmo-station-content">
+                `;
+
+                // Display each deposition type
+                for (const depType of depositionTypes) {
+                    const values = childRow.values[depType.key];
+                    const depLineNum = childRow.values[`${depType.key}_line`];
+                    
+                    if (values && Array.isArray(values)) {
+                        html += `
+                            <div class="deposition-type">
+                                <h4>
+                                    ${depType.label} (${depType.unit})
+                                    ${depLineNum ? `<a href="#" onclick="navigateToFile('${this._escapeJs(file)}', ${depLineNum}); return false;" class="line-link" title="Go to line ${depLineNum}">Line ${depLineNum}</a>` : ''}
+                                </h4>
+                                <div class="deposition-values">
+                        `;
+                        
+                        // Display values in groups of 12 for readability
+                        for (let i = 0; i < values.length; i += 12) {
+                            const chunk = values.slice(i, i + 12);
+                            html += `<div class="value-row">`;
+                            chunk.forEach((val, idx) => {
+                                html += `<span class="deposition-value" title="Index ${i + idx + 1}">${this._escapeHtml(val)}</span>`;
+                            });
+                            html += `</div>`;
+                        }
+                        
+                        html += `
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+
+                html += `
+                        </div>
+                    </div>
+                `;
+            }
+        } else {
+            html += `<p class="empty-message">No station data available</p>`;
+        }
+
+        html += `</div>`;
+        
+        return html;
+    }
+
     private _escapeHtml(text: string): string {
         return text
             .replace(/&/g, '&amp;')
@@ -1223,6 +1338,100 @@ export class SwatSingleTableViewerPanel {
             .monthly-data-table tr:hover {
                 background-color: var(--vscode-list-hoverBackground);
             }
+            /* Atmo.cli station-based sub-table view */
+            .atmo-cli-header {
+                margin: 16px 0;
+                padding: 12px 16px;
+                background-color: var(--vscode-editor-background);
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+            }
+            .atmo-cli-header h3 {
+                margin: 0 0 12px 0;
+                font-size: 1.1em;
+            }
+            .atmo-metadata {
+                display: flex;
+                gap: 16px;
+                flex-wrap: wrap;
+                font-size: 0.9em;
+            }
+            .atmo-metadata span {
+                color: var(--vscode-descriptionForeground);
+            }
+            .atmo-cli-subtables {
+                margin: 16px 0;
+            }
+            .atmo-station-section {
+                margin-bottom: 12px;
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                overflow: hidden;
+            }
+            .atmo-station-header {
+                padding: 12px 16px;
+                background-color: var(--vscode-editor-background);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                user-select: none;
+                transition: background-color 0.2s;
+            }
+            .atmo-station-header:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            .atmo-station-header.collapsed .toggle-icon {
+                transform: rotate(-90deg);
+            }
+            .atmo-station-content {
+                max-height: 2000px;
+                overflow-y: auto;
+                transition: max-height 0.3s ease-out;
+                padding: 12px 16px;
+            }
+            .atmo-station-content.collapsed {
+                max-height: 0;
+                overflow: hidden;
+                padding: 0;
+            }
+            .deposition-type {
+                margin-bottom: 16px;
+            }
+            .deposition-type h4 {
+                margin: 0 0 8px 0;
+                font-size: 0.95em;
+                color: var(--vscode-foreground);
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .deposition-type h4 .line-link {
+                font-size: 0.85em;
+                font-weight: normal;
+            }
+            .deposition-values {
+                background-color: var(--vscode-editor-background);
+                padding: 8px;
+                border-radius: 4px;
+                border: 1px solid var(--vscode-panel-border);
+            }
+            .value-row {
+                display: flex;
+                gap: 4px;
+                margin-bottom: 4px;
+                flex-wrap: wrap;
+            }
+            .deposition-value {
+                padding: 4px 8px;
+                background-color: var(--vscode-input-background);
+                border: 1px solid var(--vscode-input-border);
+                border-radius: 3px;
+                font-size: 0.85em;
+                font-family: monospace;
+                min-width: 60px;
+                text-align: right;
+            }
             .fk-indicator {
                 margin-left: 4px;
                 font-size: 0.8em;
@@ -1419,6 +1628,24 @@ export class SwatSingleTableViewerPanel {
                 
                 const header = section.querySelector('.wgn-station-header');
                 const content = section.querySelector('.wgn-station-content');
+                
+                if (content.classList.contains('collapsed')) {
+                    content.classList.remove('collapsed');
+                    header.classList.remove('collapsed');
+                } else {
+                    content.classList.add('collapsed');
+                    header.classList.add('collapsed');
+                }
+            }
+
+            function toggleAtmoStationSection(station) {
+                // Escape the station name for safe use in CSS selector
+                const escapedStation = station.replace(/"/g, '\\"');
+                const section = document.querySelector('[data-station="' + escapedStation + '"]');
+                if (!section) return;
+                
+                const header = section.querySelector('.atmo-station-header');
+                const content = section.querySelector('.atmo-station-content');
                 
                 if (content.classList.contains('collapsed')) {
                     content.classList.remove('collapsed');

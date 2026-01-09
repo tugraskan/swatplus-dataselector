@@ -621,6 +621,51 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
                     if child_rows:
                         row_dict["childRows"] = child_rows
             
+            # Special handling for atmo.cli: capture station deposition data
+            if file_name == 'atmo.cli':
+                with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
+                    lines = handle.readlines()
+                
+                # The main record has num_sta which tells us how many stations
+                num_sta = int(row.get('num_sta', 0)) if 'num_sta' in row.index else 0
+                num_aa = int(row.get('num_aa', 0)) if 'num_aa' in row.index else 0
+                
+                if num_sta > 0 and num_aa > 0:
+                    child_rows = []
+                    # Start after the metadata line (line 3, index 2 in 0-based)
+                    # line_num is the metadata line number (1-based)
+                    current_line_idx = int(row['lineNumber']) - 1  # Convert to 0-based
+                    
+                    deposition_types = ['nh4_wet', 'no3_wet', 'nh4_dry', 'no3_dry']
+                    
+                    for station_idx in range(num_sta):
+                        # Next line is station name
+                        station_line_idx = current_line_idx + 1 + (station_idx * 5)  # 1 name line + 4 data lines per station
+                        if station_line_idx < len(lines):
+                            station_name = lines[station_line_idx].strip()
+                            
+                            # Next 4 lines are deposition data
+                            station_data = {'station_name': station_name}
+                            for dep_idx, dep_type in enumerate(deposition_types):
+                                data_line_idx = station_line_idx + 1 + dep_idx
+                                if data_line_idx < len(lines):
+                                    data_line = lines[data_line_idx].strip()
+                                    # Split the line and take values (last token is the label)
+                                    values = data_line.split()
+                                    # The last value is the label (nh4_wet, etc), rest are data values
+                                    if values:
+                                        station_data[dep_type] = values[:-1] if len(values) > 1 else values
+                                        station_data[f'{dep_type}_line'] = data_line_idx + 1  # Store line number
+                            
+                            if 'station_name' in station_data:
+                                child_rows.append({
+                                    "lineNumber": station_line_idx + 1,  # 1-based line number
+                                    "values": station_data
+                                })
+                    
+                    if child_rows:
+                        row_dict["childRows"] = child_rows
+            
             row_payload.append(row_dict)
 
         tables_payload[table["table_name"]] = row_payload
