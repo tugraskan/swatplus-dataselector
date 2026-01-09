@@ -976,19 +976,21 @@ export class SwatSingleTableViewerPanel {
         html += `<table class="data-table">`;
         html += `<thead><tr>`;
         
-        // Add headers from schema
+        // Count visible columns and add headers from schema
+        let visibleColumnCount = 0;
         if (schemaTable.columns) {
             for (const column of schemaTable.columns) {
                 if (column.name !== 'id') {  // Skip auto-generated ID column
                     const displayName = column.name;
                     html += `<th>${this._escapeHtml(displayName)}</th>`;
+                    visibleColumnCount++;
                 }
             }
         }
         
         html += `</tr></thead>`;
         html += `<tbody>`;
-        html += `<tr><td colspan="${schemaTable.columns.length - 1}" class="empty-cell">No data</td></tr>`;
+        html += `<tr><td colspan="${visibleColumnCount}" class="empty-cell">No data</td></tr>`;
         html += `</tbody>`;
         html += `</table>`;
         
