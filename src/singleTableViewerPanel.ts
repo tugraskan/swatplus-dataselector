@@ -49,6 +49,11 @@ export class SwatSingleTableViewerPanel {
                             this.openFileByName(message.fileName);
                         }
                         break;
+                    case 'openFileWithHighlight':
+                        if (message.fileName) {
+                            this.openFileByName(message.fileName, message.highlightValue);
+                        }
+                        break;
                     case 'getFKRowData':
                         if (message.tableName && message.fkValue) {
                             this.sendFKRowData(message.tableName, message.fkValue);
@@ -191,7 +196,7 @@ export class SwatSingleTableViewerPanel {
         SwatSingleTableViewerPanel.createOrShow(this.indexer, tableName, fkValue);
     }
 
-    private async openFileByName(fileName: string) {
+    private async openFileByName(fileName: string, highlightValue?: string) {
         try {
             // Map the file name to a table name using the indexer
             let tableName = this.indexer.getTableNameFromFile(fileName);
@@ -213,7 +218,7 @@ export class SwatSingleTableViewerPanel {
             }
             
             // Open the table in a new viewer panel
-            SwatSingleTableViewerPanel.createOrShow(this.indexer, tableName);
+            SwatSingleTableViewerPanel.createOrShow(this.indexer, tableName, highlightValue);
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to open table for ${fileName}: ${error}`);
         }
@@ -532,7 +537,12 @@ export class SwatSingleTableViewerPanel {
                         const canOpen = this.canOpenFile(lookupFile);
                         const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
                         const title = canOpen ? `Click to open ${this._escapeHtml(lookupFile)}` : `${this._escapeHtml(lookupFile)} - Not indexed (may not exist in dataset)`;
-                        tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByName('${this._escapeJs(lookupFile)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                        const highlightValue = lookupFile === 'atmo.cli' ? row.values.name : undefined;
+                        if (highlightValue) {
+                            tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByNameWithHighlight('${this._escapeJs(lookupFile)}', '${this._escapeJs(highlightValue)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                        } else {
+                            tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByName('${this._escapeJs(lookupFile)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                        }
                     } else {
                         const { canOpen, filePath } = this.canOpenFilePointer(lookupFile);
                         const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
@@ -956,9 +966,12 @@ export class SwatSingleTableViewerPanel {
                 const stationName = childRow.values.station_name || 'Unknown Station';
                 const lineNumber = childRow.lineNumber || 0;
                 const file = mainRow.file || 'atmo.cli';
+                const isHighlighted = this.highlightValue && stationName && stationName.toLowerCase() === this.highlightValue.toLowerCase();
+                const highlightClass = isHighlighted ? ' highlighted-station' : '';
+                const highlightId = isHighlighted ? ` id="highlighted-atmo-station"` : '';
 
                 html += `
-                    <div class="atmo-station-section" data-station="${this._escapeHtml(stationName)}">
+                    <div class="atmo-station-section${highlightClass}" data-station="${this._escapeHtml(stationName)}"${highlightId}>
                         <div class="atmo-station-header" onclick="toggleAtmoStationSection('${this._escapeJs(stationName)}')">
                             <span class="toggle-icon">▼</span>
                             <span class="station-name">
@@ -1475,6 +1488,10 @@ export class SwatSingleTableViewerPanel {
                 border-radius: 4px;
                 overflow: hidden;
             }
+            .atmo-station-section.highlighted-station {
+                border: 2px solid var(--vscode-focusBorder);
+                box-shadow: 0 0 8px var(--vscode-focusBorder);
+            }
             .atmo-station-header {
                 padding: 12px 16px;
                 background-color: var(--vscode-editor-background);
@@ -1729,6 +1746,14 @@ export class SwatSingleTableViewerPanel {
                 });
             }
 
+            function openFileByNameWithHighlight(fileName, highlightValue) {
+                vscode.postMessage({
+                    command: 'openFileWithHighlight',
+                    fileName: fileName,
+                    highlightValue: highlightValue
+                });
+            }
+
             function openInputFile(file) {
                 vscode.postMessage({
                     command: 'openInputFile',
@@ -1913,7 +1938,23 @@ export class SwatSingleTableViewerPanel {
                     
                     const header = document.createElement('div');
                     header.className = 'fk-peek-header';
-                    header.textContent = \`\${tableName} (File: \${fileName}, Line: \${lineNumber})\`;
+                    const headerLabel = document.createElement('span');
+                    headerLabel.textContent = \`\${tableName} (File: \`;
+                    const fileLink = document.createElement('a');
+                    fileLink.href = '#';
+                    fileLink.className = 'file-link';
+                    fileLink.textContent = fileName;
+                    fileLink.title = \`Click to open \${fileName}\`;
+                    fileLink.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        openFileByName(fileName);
+                    });
+                    const headerSuffix = document.createElement('span');
+                    headerSuffix.textContent = \`, Line: \${lineNumber})\`;
+                    header.appendChild(headerLabel);
+                    header.appendChild(fileLink);
+                    header.appendChild(headerSuffix);
                     
                     // Add close button to header
                     const closeBtn = document.createElement('button');
@@ -1981,6 +2022,20 @@ export class SwatSingleTableViewerPanel {
                     // Scroll to the highlighted station
                     setTimeout(function() {
                         highlightedStation.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                }
+
+                const highlightedAtmoStation = document.getElementById('highlighted-atmo-station');
+                if (highlightedAtmoStation) {
+                    const header = highlightedAtmoStation.querySelector('.atmo-station-header');
+                    const content = highlightedAtmoStation.querySelector('.atmo-station-content');
+                    if (header && content && content.classList.contains('collapsed')) {
+                        content.classList.remove('collapsed');
+                        header.classList.remove('collapsed');
+                    }
+
+                    setTimeout(function() {
+                        highlightedAtmoStation.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }, 100);
                 }
             });
