@@ -111,6 +111,7 @@ export interface IndexedRow {
     lineNumber: number;  // 1-based line number in file
     pkValue: string;     // Primary key value (typically 'id' or 'name')
     values: { [columnName: string]: string };
+    childRows?: Array<{ lineNumber: number; values: { [columnName: string]: string } }>; // For hierarchical files like weather-wgn.cli
 }
 
 export interface FKReference {
