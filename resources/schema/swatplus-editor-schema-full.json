@@ -3653,7 +3653,7 @@
           "is_primary_key": false,
           "is_foreign_key": true,
           "fk_target": {
-            "table": "weather_pcp_pcp",
+            "table": "pcp_cli",
             "column": "id"
           }
         },
@@ -3665,7 +3665,7 @@
           "is_primary_key": false,
           "is_foreign_key": true,
           "fk_target": {
-            "table": "weather_tmp_tmp",
+            "table": "tmp_cli",
             "column": "id"
           }
         },
@@ -3677,7 +3677,7 @@
           "is_primary_key": false,
           "is_foreign_key": true,
           "fk_target": {
-            "table": "weather_slr_slr",
+            "table": "slr_cli",
             "column": "id"
           }
         },
@@ -3689,7 +3689,7 @@
           "is_primary_key": false,
           "is_foreign_key": true,
           "fk_target": {
-            "table": "weather_hmd_hmd",
+            "table": "hmd_cli",
             "column": "id"
           }
         },
@@ -3701,7 +3701,7 @@
           "is_primary_key": false,
           "is_foreign_key": true,
           "fk_target": {
-            "table": "weather_wnd_wnd",
+            "table": "wnd_cli",
             "column": "id"
           }
         },
@@ -3746,7 +3746,7 @@
           "column": "pcp",
           "db_column": "pcp_id",
           "references": {
-            "table": "weather_pcp_pcp",
+            "table": "pcp_cli",
             "column": "id"
           }
         },
@@ -3754,7 +3754,7 @@
           "column": "tmp",
           "db_column": "tmp_id",
           "references": {
-            "table": "weather_tmp_tmp",
+            "table": "tmp_cli",
             "column": "id"
           }
         },
@@ -3762,7 +3762,7 @@
           "column": "slr",
           "db_column": "slr_id",
           "references": {
-            "table": "weather_slr_slr",
+            "table": "slr_cli",
             "column": "id"
           }
         },
@@ -3770,7 +3770,7 @@
           "column": "hmd",
           "db_column": "hmd_id",
           "references": {
-            "table": "weather_hmd_hmd",
+            "table": "hmd_cli",
             "column": "id"
           }
         },
@@ -3778,7 +3778,7 @@
           "column": "wnd",
           "db_column": "wnd_id",
           "references": {
-            "table": "weather_wnd_wnd",
+            "table": "wnd_cli",
             "column": "id"
           }
         }
