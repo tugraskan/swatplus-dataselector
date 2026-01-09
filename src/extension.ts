@@ -1,6 +1,7 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { SwatDatasetWebviewProvider } from './swatWebviewProvider';
 import { SwatIndexer } from './indexer';
 import { SwatFKDefinitionProvider } from './fkDefinitionProvider';
@@ -231,11 +232,20 @@ export function activate(context: vscode.ExtensionContext) {
 	const showTableViewer = vscode.commands.registerCommand('swat-dataset-selector.showTableViewer', (filePath?: string) => {
 		// If a file path is provided, open the single table viewer for that specific file
 		if (filePath && typeof filePath === 'string') {
-			const tableName = indexer.getTableNameFromFile(filePath);
+			const resolvedFileName = filePath.includes('/') || filePath.includes('\\')
+				? path.basename(filePath)
+				: filePath;
+			let tableName = indexer.getTableNameFromFile(resolvedFileName);
+			if (!tableName) {
+				const tableNameFromFile = resolvedFileName.replace(/\./g, '_');
+				if (indexer.isTableIndexed(tableNameFromFile)) {
+					tableName = tableNameFromFile;
+				}
+			}
 			if (tableName) {
 				SwatSingleTableViewerPanel.createOrShow(indexer, tableName);
 			} else {
-				vscode.window.showWarningMessage(`Could not find table for file: ${filePath}`);
+				vscode.window.showWarningMessage(`Could not find table for file: ${resolvedFileName}`);
 			}
 		} else {
 			// Otherwise, show the all-tables viewer

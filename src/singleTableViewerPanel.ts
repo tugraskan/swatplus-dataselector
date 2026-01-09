@@ -215,13 +215,14 @@ export class SwatSingleTableViewerPanel {
 
     private async openFileByName(fileName: string, highlightValue?: string) {
         try {
+            const resolvedFileName = this.normalizeFileName(fileName);
             // Map the file name to a table name using the indexer
-            let tableName = this.indexer.getTableNameFromFile(fileName);
+            let tableName = this.indexer.getTableNameFromFile(resolvedFileName);
             
             // If not found, try deriving table name from file name
             if (!tableName) {
                 // Replace dots with underscores (e.g., pcp.cli -> pcp_cli)
-                const tableNameFromFile = fileName.replace(/\./g, '_');
+                const tableNameFromFile = resolvedFileName.replace(/\./g, '_');
                 if (this.indexer.isTableIndexed(tableNameFromFile)) {
                     tableName = tableNameFromFile;
                 }
@@ -230,7 +231,7 @@ export class SwatSingleTableViewerPanel {
             // Even if we found a table name in the schema mapping, we need to verify
             // that the table actually has data in the index
             if (!tableName || !this.indexer.isTableIndexed(tableName)) {
-                vscode.window.showWarningMessage(`Table for file "${fileName}" is not indexed. This file is listed in file.cio but was not found in your dataset. It may be optional for your SWAT+ configuration.`);
+                vscode.window.showWarningMessage(`Table for file "${resolvedFileName}" is not indexed. This file is listed in file.cio but was not found in your dataset. It may be optional for your SWAT+ configuration.`);
                 return;
             }
             
@@ -293,23 +294,25 @@ export class SwatSingleTableViewerPanel {
         if (!fileName || fileName === 'null' || !fileName.includes('.')) {
             return false;
         }
+
+        const resolvedFileName = this.normalizeFileName(fileName);
         
         // Check if the file actually exists on disk
         const txtInOutPath = this.indexer.getTxtInOutPath();
         if (txtInOutPath) {
-            const filePath = path.join(txtInOutPath, fileName);
+            const filePath = path.join(txtInOutPath, resolvedFileName);
             if (!fs.existsSync(filePath)) {
                 return false;
             }
         }
         
         // Check if it maps to a table
-        let tableName = this.indexer.getTableNameFromFile(fileName);
+        let tableName = this.indexer.getTableNameFromFile(resolvedFileName);
         
         // If not found, try deriving table name from file name
         if (!tableName) {
             // Replace dots with underscores (e.g., pcp.cli -> pcp_cli)
-            const tableNameFromFile = fileName.replace(/\./g, '_');
+            const tableNameFromFile = resolvedFileName.replace(/\./g, '_');
             if (this.indexer.isTableIndexed(tableNameFromFile)) {
                 tableName = tableNameFromFile;
             }
@@ -322,6 +325,18 @@ export class SwatSingleTableViewerPanel {
         }
         
         return false;
+    }
+
+    private normalizeFileName(fileName: string): string {
+        if (!fileName) {
+            return fileName;
+        }
+
+        if (fileName.includes('/') || fileName.includes('\\')) {
+            return path.basename(fileName);
+        }
+
+        return fileName;
     }
 
     private async openFileInEditor(file: string) {
@@ -370,8 +385,8 @@ export class SwatSingleTableViewerPanel {
 
     private _update() {
         const webview = this._panel.webview;
-        const fileName = this.indexer.getFileNameForTable(this.tableName) || this.tableName;
-        this._panel.title = `SWAT+ Table: ${fileName}`;
+        const resolvedFileName = this.indexer.getFileNameForTable(this.tableName) || this.tableName;
+        this._panel.title = `SWAT+ Table: ${resolvedFileName}`;
         this._panel.webview.html = this._getHtmlForWebview(webview);
     }
 
@@ -390,8 +405,8 @@ export class SwatSingleTableViewerPanel {
         const tableData = indexData.get(this.tableName) || new Map<string, any>();
         
         // Allow empty tables to render with their structure
-        const fileName = this.indexer.getFileNameForTable(this.tableName) || this.tableName;
-        const schemaTable = fileName && schema.tables[fileName] ? schema.tables[fileName] : undefined;
+        const resolvedFileName = this.indexer.getFileNameForTable(this.tableName) || this.tableName;
+        const schemaTable = resolvedFileName && schema.tables[resolvedFileName] ? schema.tables[resolvedFileName] : undefined;
         const rowCount = tableData.size;
 
         return `<!DOCTYPE html>
@@ -399,7 +414,7 @@ export class SwatSingleTableViewerPanel {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>SWAT+ Table: ${fileName}</title>
+            <title>SWAT+ Table: ${resolvedFileName}</title>
             <style>
                 ${this._getStyles()}
             </style>
@@ -408,10 +423,10 @@ export class SwatSingleTableViewerPanel {
             <div class="header">
                 <h1>
                     ${this.tableName}
-                    ${this._getGitbookLink(fileName)}
+                    ${this._getGitbookLink(resolvedFileName)}
                 </h1>
                 <div class="stats">
-                    <span class="stat-item">File: <a href="#" onclick="openFileForTable('${this._escapeJs(this.tableName)}'); return false;" class="file-link" title="Click to open file">${fileName}</a></span>
+                    <span class="stat-item">File: <a href="#" onclick="openFileForTable('${this._escapeJs(this.tableName)}'); return false;" class="file-link" title="Click to open file">${resolvedFileName}</a></span>
                     ${this.tableName !== 'file_cio' ? `<span class="stat-item">Rows: ${rowCount}</span>` : ''}
                 </div>
             </div>
@@ -427,6 +442,7 @@ export class SwatSingleTableViewerPanel {
 
     private _getTableHtml(tableData: Map<string, any>, schemaTable: any): string {
         const rows = Array.from(tableData.values());
+        const resolvedFileName = this.indexer.getFileNameForTable(this.tableName) || this.tableName;
         
         // Special rendering for file.cio - use classification-based sub-table view
         if (this.tableName === 'file_cio') {
@@ -466,6 +482,12 @@ export class SwatSingleTableViewerPanel {
                 return '<p class="empty-message">No data</p>';
             }
             return this._getPlantIniSubTableHtml(rows);
+        // Special rendering for decision table files (*.dtl) - use profile-based sub-table view
+        if (resolvedFileName.endsWith('.dtl')) {
+            if (rows.length === 0) {
+                return '<p class="empty-message">No data</p>';
+            }
+            return this._getDecisionTableSubTableHtml(rows, resolvedFileName);
         }
 
         // For empty tables, show table structure with headers from schema
@@ -1211,13 +1233,16 @@ export class SwatSingleTableViewerPanel {
     private _getPlantIniSubTableHtml(rows: any[]): string {
         const metadata = this.indexer.getMetadata();
         const fileMetadata = metadata?.file_metadata?.['plant.ini'];
+    private _getDecisionTableSubTableHtml(rows: any[], fileName: string): string {
+        const metadata = this.indexer.getMetadata();
+        const fileMetadata = metadata?.file_metadata?.[fileName];
 
         let html = '';
 
         if (fileMetadata && fileMetadata.description) {
             html += `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
         }
-
+// needs review
         html += `<div class="plant-ini-subtables">`;
 
         const plantColumns = [
@@ -1268,11 +1293,121 @@ export class SwatSingleTableViewerPanel {
                                     <tr>
                                         <th class="line-col">Line</th>
                                         ${plantColumns.map(col => `<th title="${this._escapeHtml(col.label)}">${this._escapeHtml(col.label)}</th>`).join('')}
+        html += `<div class="dtl-subtables">`;
+
+        for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
+            const tableName = row.values.name || 'Unknown Decision Table';
+            const condCount = row.values.conds || '0';
+            const altCountRaw = row.values.alts || '0';
+            const actCount = row.values.acts || '0';
+            const lineNumber = row.lineNumber || 0;
+            const file = row.file || fileName;
+
+            const parsedAltCount = Number.parseInt(String(altCountRaw), 10);
+            const childRows = Array.isArray(row.childRows) ? row.childRows : [];
+            const conditionRows = childRows.filter((childRow: any) => childRow.values?.section === 'condition');
+            const actionRows = childRows.filter((childRow: any) => childRow.values?.section === 'action');
+
+            const altCount = Number.isFinite(parsedAltCount) && parsedAltCount > 0
+                ? parsedAltCount
+                : Math.max(
+                    conditionRows.reduce((max: number, childRow: any) => {
+                        const altKeys = Object.keys(childRow.values || {}).filter((key) => key.startsWith('alt'));
+                        return Math.max(max, altKeys.length);
+                    }, 0),
+                    actionRows.reduce((max: number, childRow: any) => {
+                        const outKeys = Object.keys(childRow.values || {}).filter((key) => key.startsWith('out'));
+                        return Math.max(max, outKeys.length);
+                    }, 0)
+                );
+
+            const altColumns = Array.from({ length: altCount }, (_, idx) => `alt${idx + 1}`);
+            const outColumns = Array.from({ length: altCount }, (_, idx) => `out${idx + 1}`);
+
+            const isHighlighted = this.highlightValue && tableName && tableName.toLowerCase() === this.highlightValue.toLowerCase();
+            const highlightClass = isHighlighted ? ' highlighted-dtl' : '';
+            const highlightId = isHighlighted ? ` id="highlighted-dtl"` : '';
+
+            html += `
+                <div class="dtl-section${highlightClass}" data-dtl="${this._escapeHtml(tableName)}"${highlightId}>
+                    <div class="dtl-header" onclick="toggleDecisionTableSection('${this._escapeJs(tableName)}')">
+                        <span class="toggle-icon">▼</span>
+                        <span class="dtl-name">
+                            <a href="#" onclick="event.stopPropagation(); navigateToFile('${this._escapeJs(file)}', ${lineNumber}); return false;" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(tableName)}</a>
+                        </span>
+                        <span class="dtl-info">
+                            Conditions: ${this._escapeHtml(condCount)}, Alternatives: ${this._escapeHtml(altCountRaw)}, Actions: ${this._escapeHtml(actCount)}
+                        </span>
+                    </div>
+                    <div class="dtl-content">
+            `;
+
+            if (conditionRows.length > 0) {
+                html += `
+                        <h4 class="dtl-section-title">Conditions</h4>
+                        <div class="table-wrapper">
+                            <table class="dtl-table">
+                                <thead>
+                                    <tr>
+                                        <th class="line-col">Line</th>
+                                        <th>Cond Var</th>
+                                        <th>Obj</th>
+                                        <th>Obj Num</th>
+                                        <th>Lim Var</th>
+                                        <th>Lim Op</th>
+                                        <th>Lim Const</th>
+                                        ${altColumns.map((col) => `<th>${this._escapeHtml(col.toUpperCase())}</th>`).join('')}
                                     </tr>
                                 </thead>
                                 <tbody>
                 `;
 
+                conditionRows.forEach((childRow: any) => {
+                    html += `<tr>`;
+                    html += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(file)}', ${childRow.lineNumber})">${childRow.lineNumber}</a></td>`;
+                    html += `<td>${this._escapeHtml(childRow.values?.cond_var || '')}</td>`;
+                    html += `<td>${this._escapeHtml(childRow.values?.obj || '')}</td>`;
+                    html += `<td>${this._escapeHtml(childRow.values?.obj_num || '')}</td>`;
+                    html += `<td>${this._escapeHtml(childRow.values?.lim_var || '')}</td>`;
+                    html += `<td>${this._escapeHtml(childRow.values?.lim_op || '')}</td>`;
+                    html += `<td>${this._escapeHtml(childRow.values?.lim_const || '')}</td>`;
+                    altColumns.forEach((altKey) => {
+                        html += `<td>${this._escapeHtml(childRow.values?.[altKey] || '')}</td>`;
+                    });
+                    html += `</tr>`;
+                });
+
+                html += `
+                                </tbody>
+                            </table>
+                        </div>
+                `;
+            } else {
+                html += `<p class="empty-message">No condition data available</p>`;
+            }
+
+            if (actionRows.length > 0) {
+                html += `
+                        <h4 class="dtl-section-title">Actions</h4>
+                        <div class="table-wrapper">
+                            <table class="dtl-table">
+                                <thead>
+                                    <tr>
+                                        <th class="line-col">Line</th>
+                                        <th>Act Typ</th>
+                                        <th>Obj</th>
+                                        <th>Obj Num</th>
+                                        <th>Act Name</th>
+                                        <th>Option</th>
+                                        <th>Const</th>
+                                        <th>Const2</th>
+                                        <th>FP</th>
+                                        ${outColumns.map((col) => `<th>${this._escapeHtml(col.toUpperCase())}</th>`).join('')}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                `;
+// needs review
                 const plantFileName = 'plants.plt';
                 const canOpenPlants = this.canOpenFile(plantFileName);
                 row.childRows.forEach((childRow: any) => {
@@ -1293,6 +1428,19 @@ export class SwatSingleTableViewerPanel {
                         } else {
                             html += `<td>${this._escapeHtml(value)}</td>`;
                         }
+                actionRows.forEach((childRow: any) => {
+                    html += `<tr>`;
+                    html += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(file)}', ${childRow.lineNumber})">${childRow.lineNumber}</a></td>`;
+                    html += `<td>${this._escapeHtml(childRow.values?.act_typ || '')}</td>`;
+                    html += `<td>${this._escapeHtml(childRow.values?.obj || '')}</td>`;
+                    html += `<td>${this._escapeHtml(childRow.values?.obj_num || '')}</td>`;
+                    html += `<td>${this._escapeHtml(childRow.values?.act_name || '')}</td>`;
+                    html += `<td>${this._escapeHtml(childRow.values?.act_option || '')}</td>`;
+                    html += `<td>${this._escapeHtml(childRow.values?.const || '')}</td>`;
+                    html += `<td>${this._escapeHtml(childRow.values?.const2 || '')}</td>`;
+                    html += `<td>${this._escapeHtml(childRow.values?.fp || '')}</td>`;
+                    outColumns.forEach((outKey) => {
+                        html += `<td>${this._escapeHtml(childRow.values?.[outKey] || '')}</td>`;
                     });
                     html += `</tr>`;
                 });
@@ -1303,7 +1451,9 @@ export class SwatSingleTableViewerPanel {
                         </div>
                 `;
             } else {
+                                         // needs review
                 html += `<p class="empty-message">No plant data available</p>`;
+                html += `<p class="empty-message">No action data available</p>`;
             }
 
             html += `
@@ -1940,6 +2090,11 @@ export class SwatSingleTableViewerPanel {
                 margin: 16px 0;
             }
             .plant-community-section {
+            /* Decision table profile-based sub-table view */
+            .dtl-subtables {
+                margin: 16px 0;
+            }
+            .dtl-section {
                 margin-bottom: 12px;
                 border: 1px solid var(--vscode-panel-border);
                 border-radius: 4px;
@@ -1950,6 +2105,11 @@ export class SwatSingleTableViewerPanel {
                 box-shadow: 0 0 8px var(--vscode-focusBorder);
             }
             .plant-community-header {
+            .dtl-section.highlighted-dtl {
+                border: 2px solid var(--vscode-focusBorder);
+                box-shadow: 0 0 8px var(--vscode-focusBorder);
+            }
+            .dtl-header {
                 padding: 12px 16px;
                 background-color: var(--vscode-editor-background);
                 cursor: pointer;
@@ -1978,17 +2138,39 @@ export class SwatSingleTableViewerPanel {
                 text-decoration: underline;
             }
             .community-info {
+            .dtl-header:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            .dtl-header.collapsed .toggle-icon {
+                transform: rotate(-90deg);
+            }
+            .dtl-name {
+                font-weight: 600;
+                flex: 0 0 auto;
+            }
+            .dtl-name .line-link {
+                color: var(--vscode-foreground);
+                text-decoration: none;
+            }
+            .dtl-name .line-link:hover {
+                color: var(--vscode-textLink-activeForeground);
+                text-decoration: underline;
+            }
+            .dtl-info {
                 font-size: 0.85em;
                 color: var(--vscode-descriptionForeground);
                 flex: 1;
             }
             .plant-community-content {
                 max-height: 2000px;
+            .dtl-content {
+                max-height: 2500px;
                 overflow-y: auto;
                 transition: max-height 0.3s ease-out;
                 padding: 12px 16px;
             }
             .plant-community-content.collapsed {
+            .dtl-content.collapsed {
                 max-height: 0;
                 overflow: hidden;
                 padding: 0;
@@ -2004,11 +2186,17 @@ export class SwatSingleTableViewerPanel {
                 color: var(--vscode-descriptionForeground);
             }
             .plant-detail-table {
+            .dtl-section-title {
+                margin: 4px 0 8px;
+                font-size: 0.95em;
+            }
+            .dtl-table {
                 width: 100%;
                 border-collapse: collapse;
                 font-size: 0.85em;
             }
             .plant-detail-table th {
+            .dtl-table th {
                 background-color: var(--vscode-editor-background);
                 padding: 8px 6px;
                 text-align: left;
@@ -2022,6 +2210,11 @@ export class SwatSingleTableViewerPanel {
                 border-bottom: 1px solid var(--vscode-panel-border);
             }
             .plant-detail-table tr:hover {
+            .dtl-table td {
+                padding: 6px;
+                border-bottom: 1px solid var(--vscode-panel-border);
+            }
+            .dtl-table tr:hover {
                 background-color: var(--vscode-list-hoverBackground);
             }
             .fk-indicator {
@@ -2327,6 +2520,13 @@ export class SwatSingleTableViewerPanel {
 
                 const header = section.querySelector('.plant-community-header');
                 const content = section.querySelector('.plant-community-content');
+            function toggleDecisionTableSection(tableName) {
+                const escapedTable = tableName.replace(/"/g, '\\"');
+                const section = document.querySelector('[data-dtl="' + escapedTable + '"]');
+                if (!section) return;
+
+                const header = section.querySelector('.dtl-header');
+                const content = section.querySelector('.dtl-content');
 
                 if (content.classList.contains('collapsed')) {
                     content.classList.remove('collapsed');
@@ -2612,6 +2812,10 @@ export class SwatSingleTableViewerPanel {
                 if (highlightedCommunity) {
                     const header = highlightedCommunity.querySelector('.plant-community-header');
                     const content = highlightedCommunity.querySelector('.plant-community-content');
+                const highlightedDecisionTable = document.getElementById('highlighted-dtl');
+                if (highlightedDecisionTable) {
+                    const header = highlightedDecisionTable.querySelector('.dtl-header');
+                    const content = highlightedDecisionTable.querySelector('.dtl-content');
                     if (header && content && content.classList.contains('collapsed')) {
                         content.classList.remove('collapsed');
                         header.classList.remove('collapsed');
@@ -2619,6 +2823,7 @@ export class SwatSingleTableViewerPanel {
 
                     setTimeout(function() {
                         highlightedCommunity.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        highlightedDecisionTable.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }, 100);
                 }
             });

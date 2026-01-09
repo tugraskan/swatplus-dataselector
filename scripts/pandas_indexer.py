@@ -503,10 +503,10 @@ def process_dtl_file(
     while current_line < len(lines) and not lines[current_line].strip():
         current_line += 1
     
-    # Skip the global header line (NAME  CONDS  ALTS  ACTS)
+    # Skip the global header line (NAME / DTBL_NAME  CONDS  ALTS  ACTS)
     if current_line < len(lines):
         possible_header_line = lines[current_line].strip().upper()
-        if possible_header_line.startswith('NAME'):
+        if possible_header_line.startswith('NAME') or possible_header_line.startswith('DTBL_NAME'):
             current_line += 1
     
     # Process each decision table
@@ -539,6 +539,8 @@ def process_dtl_file(
             current_line += 1
             continue
         
+        child_rows: List[dict] = []
+
         # Index the decision table main record
         row_payload.append({
             "file": str(file_path),
@@ -550,27 +552,70 @@ def process_dtl_file(
                 "conds": str(conds),
                 "alts": str(alts),
                 "acts": str(acts)
-            }
+            },
+            "childRows": child_rows
         })
         
         current_line += 1  # Move past decision table header
         
         # Skip conditions section header line
-        current_line += 1
+        while current_line < len(lines) and not lines[current_line].strip():
+            current_line += 1
+        if current_line < len(lines):
+            possible_cond_header = lines[current_line].strip().upper()
+            if possible_cond_header.startswith('COND_VAR'):
+                current_line += 1
         
         # Skip conditions section data lines
-        current_line += conds
+        condition_columns = ["cond_var", "obj", "obj_num", "lim_var", "lim_op", "lim_const"]
+        condition_columns.extend([f"alt{idx + 1}" for idx in range(alts)])
+        for cond_idx in range(conds):
+            while current_line < len(lines) and not lines[current_line].strip():
+                current_line += 1
+            if current_line >= len(lines):
+                break
+            condition_line = lines[current_line].strip()
+            condition_values = condition_line.split()
+            condition_map = {
+                col_name: condition_values[col_idx] if col_idx < len(condition_values) else ""
+                for col_idx, col_name in enumerate(condition_columns)
+            }
+            condition_map["section"] = "condition"
+            child_rows.append({
+                "lineNumber": current_line + 1,
+                "values": condition_map
+            })
+            current_line += 1
         
         # Skip actions section header line
-        current_line += 1
+        while current_line < len(lines) and not lines[current_line].strip():
+            current_line += 1
+        if current_line < len(lines):
+            possible_act_header = lines[current_line].strip().upper()
+            if possible_act_header.startswith('ACT_TYP'):
+                current_line += 1
         
         # Process actions section data lines
+        action_columns = [
+            "act_typ", "obj", "obj_num", "act_name", "act_option",
+            "const", "const2", "fp"
+        ]
+        action_columns.extend([f"out{idx + 1}" for idx in range(alts)])
         for act_idx in range(acts):
             if current_line >= len(lines):
                 break
             action_line = lines[current_line].strip()
             if action_line:
                 action_values = action_line.split()
+                action_map = {
+                    col_name: action_values[col_idx] if col_idx < len(action_values) else ""
+                    for col_idx, col_name in enumerate(action_columns)
+                }
+                action_map["section"] = "action"
+                child_rows.append({
+                    "lineNumber": current_line + 1,
+                    "values": action_map
+                })
                 
                 # Action line structure: act_typ, obj, obj_num, name, option, const, const2, fp, outcome...
                 # fp field is at index DTL_ACTION_FP_INDEX (8th field, 0-based index 7)
@@ -603,11 +648,13 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
 
     tables_payload: Dict[str, List[dict]] = {}
     fk_references: List[dict] = []
+    processed_files = set()
 
     for file_name, table in schema.get("tables", {}).items():
         file_path = dataset_path / file_name
         if not file_path.exists():
             continue
+        processed_files.add(file_name.lower())
         
         # Skip file.cio - it has a special classification-based format that is handled
         # separately in the TypeScript parseFileCio() method
@@ -858,6 +905,17 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
                     file_path, table, lines, line_num, numb_auto, numb_ops, fk_null_values
                 )
                 fk_references.extend(child_refs)
+
+    # Process additional decision table files not covered by the schema
+    for dtl_path in dataset_path.glob("*.dtl"):
+        if dtl_path.name.lower() in processed_files:
+            continue
+        derived_table_name = dtl_path.name.replace(".", "_").replace("-", "_").lower()
+        dtl_table = {"table_name": derived_table_name, "file_name": dtl_path.name}
+        row_payload, dtl_fk_refs = process_dtl_file(dtl_path, dtl_table, fk_null_values)
+        if row_payload:
+            tables_payload[derived_table_name] = row_payload
+            fk_references.extend(dtl_fk_refs)
 
     return {
         "tables": tables_payload,
