@@ -1264,12 +1264,26 @@ export class SwatSingleTableViewerPanel {
                                 <tbody>
                 `;
 
+                const plantFileName = 'plants.plt';
+                const canOpenPlants = this.canOpenFile(plantFileName);
                 row.childRows.forEach((childRow: any) => {
                     html += `<tr>`;
                     html += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(file)}', ${childRow.lineNumber})">${childRow.lineNumber}</a></td>`;
                     plantColumns.forEach((col) => {
                         const value = childRow.values[col.key] || '';
-                        html += `<td>${this._escapeHtml(value)}</td>`;
+                        if (col.key === 'plnt_name' && value) {
+                            const linkClass = canOpenPlants ? 'fk-link' : 'fk-link broken-link';
+                            const title = canOpenPlants
+                                ? `Open ${plantFileName} for ${this._escapeHtml(value)}`
+                                : `${plantFileName} - Not indexed (may not exist in dataset)`;
+                            if (canOpenPlants) {
+                                html += `<td><a href="#" onclick="openFileByNameWithHighlight('${this._escapeJs(plantFileName)}', '${this._escapeJs(value)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                            } else {
+                                html += `<td><span class="${linkClass}" title="${title}">${this._escapeHtml(value)}</span></td>`;
+                            }
+                        } else {
+                            html += `<td>${this._escapeHtml(value)}</td>`;
+                        }
                     });
                     html += `</tr>`;
                 });
