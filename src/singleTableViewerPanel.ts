@@ -219,6 +219,32 @@ export class SwatSingleTableViewerPanel {
         }
     }
 
+    private resolveFilePointerPath(fileName: string): string | null {
+        if (!fileName) {
+            return null;
+        }
+
+        if (path.isAbsolute(fileName)) {
+            return fileName;
+        }
+
+        const txtInOutPath = this.indexer.getTxtInOutPath();
+        if (!txtInOutPath) {
+            return null;
+        }
+
+        return path.join(txtInOutPath, fileName);
+    }
+
+    private canOpenFilePointer(fileName: string): { canOpen: boolean; filePath?: string } {
+        const filePath = this.resolveFilePointerPath(fileName);
+        if (!filePath) {
+            return { canOpen: false };
+        }
+
+        return { canOpen: fs.existsSync(filePath), filePath };
+    }
+
     /**
      * Check if a file can be opened (exists in index)
      */
@@ -477,6 +503,7 @@ export class SwatSingleTableViewerPanel {
             for (const col of columns) {
                 const value = row.values[col] || '';
                 const fkInfo = fkColumns.get(col);
+                const isFilePointer = typeof filePointers === 'object' && col in filePointers;
                 
                 // Special handling for file.cio file_name column - make it a clickable file link
                 if (this.tableName === 'file_cio' && col === 'file_name' && value && value !== 'null' && value.includes('.')) {
@@ -484,6 +511,24 @@ export class SwatSingleTableViewerPanel {
                     const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
                     const title = canOpen ? `Click to open ${this._escapeHtml(value)}` : `${this._escapeHtml(value)} - Not indexed (may not exist in dataset)`;
                     tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByName('${this._escapeJs(value)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                } else if (isFilePointer && value && value !== 'null') {
+                    const mappedTableName = this.indexer.getTableNameFromFile(value);
+                    const canOpenTable = mappedTableName ? this.indexer.isTableIndexed(mappedTableName) : false;
+                    if (canOpenTable) {
+                        const canOpen = this.canOpenFile(value);
+                        const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
+                        const title = canOpen ? `Click to open ${this._escapeHtml(value)}` : `${this._escapeHtml(value)} - Not indexed (may not exist in dataset)`;
+                        tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByName('${this._escapeJs(value)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                    } else {
+                        const { canOpen, filePath } = this.canOpenFilePointer(value);
+                        const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
+                        const title = canOpen ? `Click to open ${this._escapeHtml(value)}` : `${this._escapeHtml(value)} - File not found in TxtInOut`;
+                        if (canOpen && filePath) {
+                            tableHtml += `<td class="file-link-cell"><a href="#" onclick="openInputFile('${this._escapeJs(filePath)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                        } else {
+                            tableHtml += `<td class="file-link-cell"><span class="${linkClass}" title="${title}">${this._escapeHtml(value)}</span></td>`;
+                        }
+                    }
                 } else if (fkInfo && value) {
                     // Try to resolve FK
                     const targetRow = this.indexer.resolveFKTarget(fkInfo.references.table, value);
@@ -1678,6 +1723,13 @@ export class SwatSingleTableViewerPanel {
                 vscode.postMessage({
                     command: 'openFile',
                     fileName: fileName
+                });
+            }
+
+            function openInputFile(file) {
+                vscode.postMessage({
+                    command: 'openInputFile',
+                    file: file
                 });
             }
 
