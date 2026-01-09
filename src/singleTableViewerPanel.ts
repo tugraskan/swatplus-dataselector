@@ -310,12 +310,9 @@ export class SwatSingleTableViewerPanel {
 
         // Get data for this specific table
         const indexData = this.indexer.getIndexData();
-        const tableData = indexData.get(this.tableName);
+        const tableData = indexData.get(this.tableName) || new Map<string, any>();
         
-        if (!tableData || tableData.size === 0) {
-            return this._getNoDataHtml();
-        }
-
+        // Allow empty tables to render with their structure
         const fileName = this.indexer.getFileNameForTable(this.tableName) || this.tableName;
         const schemaTable = fileName && schema.tables[fileName] ? schema.tables[fileName] : undefined;
         const rowCount = tableData.size;
@@ -969,10 +966,6 @@ export class SwatSingleTableViewerPanel {
         if (fileMetadata && fileMetadata.description) {
             html += `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
         }
-
-        html += `<div class="empty-table-message">
-            <p class="info-message">This file exists but contains no data rows (only headers).</p>
-        </div>`;
 
         // Show table structure with headers from schema
         html += `<table class="data-table">`;
