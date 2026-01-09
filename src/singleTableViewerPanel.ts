@@ -14,13 +14,16 @@ export class SwatSingleTableViewerPanel {
     private static readonly MAX_ROWS_TO_DISPLAY = 1000; // Limit rows for performance
     private readonly _panel: vscode.WebviewPanel;
     private _disposables: vscode.Disposable[] = [];
+    private highlightValue?: string; // Optional value to highlight/expand in hierarchical views
 
     private constructor(
         panel: vscode.WebviewPanel,
         private indexer: SwatIndexer,
-        private tableName: string
+        private tableName: string,
+        highlightValue?: string
     ) {
         this._panel = panel;
+        this.highlightValue = highlightValue;
 
         // Set the webview's initial html content
         this._update();
@@ -52,7 +55,7 @@ export class SwatSingleTableViewerPanel {
                         break;
                     case 'openTableInNewTab':
                         if (message.tableName) {
-                            this.openTableInNewTab(message.tableName);
+                            this.openTableInNewTab(message.tableName, message.fkValue);
                         }
                         break;
                     case 'openInputFile':
@@ -72,15 +75,16 @@ export class SwatSingleTableViewerPanel {
         );
     }
 
-    public static createOrShow(indexer: SwatIndexer, tableName: string) {
+    public static createOrShow(indexer: SwatIndexer, tableName: string, highlightValue?: string) {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
 
-        // If we already have a panel for this table, show it
+        // If we already have a panel for this table, show it and update highlight
         if (SwatSingleTableViewerPanel.panels.has(tableName)) {
             const existingPanel = SwatSingleTableViewerPanel.panels.get(tableName)!;
             existingPanel._panel.reveal(column);
+            existingPanel.highlightValue = highlightValue; // Update highlight value
             existingPanel._update();
             return;
         }
@@ -97,7 +101,7 @@ export class SwatSingleTableViewerPanel {
             }
         );
 
-        const newPanel = new SwatSingleTableViewerPanel(panel, indexer, tableName);
+        const newPanel = new SwatSingleTableViewerPanel(panel, indexer, tableName, highlightValue);
         SwatSingleTableViewerPanel.panels.set(tableName, newPanel);
     }
 
@@ -181,9 +185,9 @@ export class SwatSingleTableViewerPanel {
         }
     }
 
-    private openTableInNewTab(tableName: string) {
-        // Create a new table viewer panel for this specific table
-        SwatSingleTableViewerPanel.createOrShow(this.indexer, tableName);
+    private openTableInNewTab(tableName: string, fkValue?: string) {
+        // Create a new table viewer panel for this specific table with optional highlight
+        SwatSingleTableViewerPanel.createOrShow(this.indexer, tableName, fkValue);
     }
 
     private async openFileByName(fileName: string) {
@@ -459,7 +463,7 @@ export class SwatSingleTableViewerPanel {
                         // Embed the FK row data as JSON in data attributes
                         const fkRowDataJson = JSON.stringify(targetRow.values).replace(/"/g, '&quot;');
                         const fileName = this.indexer.getFileNameForTable(fkInfo.references.table) || fkInfo.references.table;
-                        tableHtml += `<td class="fk-cell" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" onclick="toggleFKPeek(this, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" oncontextmenu="showFKContextMenu(event, '${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber}, '${this._escapeJs(fkInfo.references.table)}'); return false;" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
+                        tableHtml += `<td class="fk-cell" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" onclick="toggleFKPeek(this, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" oncontextmenu="showFKContextMenu(event, '${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber}, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
                     } else {
                         tableHtml += `<td class="fk-cell unresolved" title="Unresolved FK to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</td>`;
                     }
@@ -732,9 +736,14 @@ export class SwatSingleTableViewerPanel {
             const rainYrs = row.values.rain_yrs || 'N/A';
             const lineNumber = row.lineNumber || 0;
             const file = row.file || 'weather-wgn.cli';
+            
+            // Check if this station should be highlighted
+            const isHighlighted = this.highlightValue && stationName.toLowerCase() === this.highlightValue.toLowerCase();
+            const highlightClass = isHighlighted ? ' highlighted-station' : '';
+            const highlightId = isHighlighted ? ` id="highlighted-station"` : '';
 
             html += `
-                <div class="wgn-station-section" data-station="${this._escapeHtml(stationName)}">
+                <div class="wgn-station-section${highlightClass}" data-station="${this._escapeHtml(stationName)}"${highlightId}>
                     <div class="wgn-station-header" onclick="toggleWgnStationSection('${this._escapeJs(stationName)}')">
                         <span class="toggle-icon">▼</span>
                         <span class="station-name">
@@ -1145,6 +1154,10 @@ export class SwatSingleTableViewerPanel {
                 border-radius: 4px;
                 overflow: hidden;
             }
+            .wgn-station-section.highlighted-station {
+                border: 2px solid var(--vscode-focusBorder);
+                box-shadow: 0 0 8px var(--vscode-focusBorder);
+            }
             .wgn-station-header {
                 padding: 12px 16px;
                 background-color: var(--vscode-editor-background);
@@ -1442,7 +1455,7 @@ export class SwatSingleTableViewerPanel {
                 }
             }
 
-            function showFKContextMenu(event, file, line, tableName) {
+            function showFKContextMenu(event, file, line, tableName, fkValue) {
                 event.preventDefault();
                 event.stopPropagation();
                 
@@ -1474,7 +1487,8 @@ export class SwatSingleTableViewerPanel {
                         action: () => {
                             vscode.postMessage({
                                 command: 'openTableInNewTab',
-                                tableName: tableName
+                                tableName: tableName,
+                                fkValue: fkValue
                             });
                             menu.remove();
                         }
@@ -1592,6 +1606,25 @@ export class SwatSingleTableViewerPanel {
                     currentRow.after(newRow);
                 });
             }
+            
+            // Auto-expand and scroll to highlighted station for weather-wgn.cli
+            window.addEventListener('load', function() {
+                const highlightedStation = document.getElementById('highlighted-station');
+                if (highlightedStation) {
+                    // Expand the highlighted station
+                    const header = highlightedStation.querySelector('.wgn-station-header');
+                    const content = highlightedStation.querySelector('.wgn-station-content');
+                    if (header && content && content.classList.contains('collapsed')) {
+                        content.classList.remove('collapsed');
+                        header.classList.remove('collapsed');
+                    }
+                    
+                    // Scroll to the highlighted station
+                    setTimeout(function() {
+                        highlightedStation.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                }
+            });
         `;
     }
 }
