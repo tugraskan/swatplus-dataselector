@@ -2229,6 +2229,14 @@ export class SwatSingleTableViewerPanel {
                 });
             }
 
+            function openTableInNewTab(tableName, fkValue) {
+                vscode.postMessage({
+                    command: 'openTableInNewTab',
+                    tableName: tableName,
+                    fkValue: fkValue
+                });
+            }
+
             function openFilePointer(fileName) {
                 vscode.postMessage({
                     command: 'openFilePointer',
@@ -2514,11 +2522,11 @@ export class SwatSingleTableViewerPanel {
                             link.href = '#';
                             link.className = 'fk-link';
                             link.textContent = value;
-                            link.title = 'Open ' + fkInfo.targetFile + ' for ' + value;
+                            link.title = 'Open ' + fkInfo.targetTable + ' for ' + value;
                             link.addEventListener('click', (event) => {
                                 event.preventDefault();
                                 event.stopPropagation();
-                                openFileByNameWithHighlight(fkInfo.targetFile, value);
+                                openTableInNewTab(fkInfo.targetTable, value);
                             });
                             td.appendChild(link);
                         } else if (filePointers && Object.prototype.hasOwnProperty.call(filePointers, col) && value && value !== 'null') {
