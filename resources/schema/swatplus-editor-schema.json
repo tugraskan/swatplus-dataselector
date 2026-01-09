@@ -3653,8 +3653,8 @@
           "is_primary_key": false,
           "is_foreign_key": true,
           "fk_target": {
-            "table": "weather_pcp_pcp",
-            "column": "id"
+            "table": "pcp_cli",
+            "column": "filename"
           }
         },
         {
@@ -3665,8 +3665,8 @@
           "is_primary_key": false,
           "is_foreign_key": true,
           "fk_target": {
-            "table": "weather_tmp_tmp",
-            "column": "id"
+            "table": "tmp_cli",
+            "column": "filename"
           }
         },
         {
@@ -3677,8 +3677,8 @@
           "is_primary_key": false,
           "is_foreign_key": true,
           "fk_target": {
-            "table": "weather_slr_slr",
-            "column": "id"
+            "table": "slr_cli",
+            "column": "filename"
           }
         },
         {
@@ -3689,8 +3689,8 @@
           "is_primary_key": false,
           "is_foreign_key": true,
           "fk_target": {
-            "table": "weather_hmd_hmd",
-            "column": "id"
+            "table": "hmd_cli",
+            "column": "filename"
           }
         },
         {
@@ -3701,21 +3701,13 @@
           "is_primary_key": false,
           "is_foreign_key": true,
           "fk_target": {
-            "table": "weather_wnd_wnd",
-            "column": "id"
+            "table": "wnd_cli",
+            "column": "filename"
           }
         },
         {
           "name": "wnd_dir",
           "db_column": "wnd_dir",
-          "type": "CharField",
-          "nullable": true,
-          "is_primary_key": false,
-          "is_foreign_key": false
-        },
-        {
-          "name": "pet",
-          "db_column": "pet",
           "type": "CharField",
           "nullable": true,
           "is_primary_key": false,
@@ -3730,17 +3722,9 @@
           "is_foreign_key": false
         },
         {
-          "name": "lat",
-          "db_column": "lat",
-          "type": "DoubleField",
-          "nullable": true,
-          "is_primary_key": false,
-          "is_foreign_key": false
-        },
-        {
-          "name": "lon",
-          "db_column": "lon",
-          "type": "DoubleField",
+          "name": "pet",
+          "db_column": "pet",
+          "type": "CharField",
           "nullable": true,
           "is_primary_key": false,
           "is_foreign_key": false
@@ -3755,47 +3739,47 @@
           "db_column": "wgn_id",
           "references": {
             "table": "weather_wgn_cli",
-            "column": "id"
+            "column": "name"
           }
         },
         {
           "column": "pcp",
           "db_column": "pcp_id",
           "references": {
-            "table": "weather_pcp_pcp",
-            "column": "id"
+            "table": "pcp_cli",
+            "column": "filename"
           }
         },
         {
           "column": "tmp",
           "db_column": "tmp_id",
           "references": {
-            "table": "weather_tmp_tmp",
-            "column": "id"
+            "table": "tmp_cli",
+            "column": "filename"
           }
         },
         {
           "column": "slr",
           "db_column": "slr_id",
           "references": {
-            "table": "weather_slr_slr",
-            "column": "id"
+            "table": "slr_cli",
+            "column": "filename"
           }
         },
         {
           "column": "hmd",
           "db_column": "hmd_id",
           "references": {
-            "table": "weather_hmd_hmd",
-            "column": "id"
+            "table": "hmd_cli",
+            "column": "filename"
           }
         },
         {
           "column": "wnd",
           "db_column": "wnd_id",
           "references": {
-            "table": "weather_wnd_wnd",
-            "column": "id"
+            "table": "wnd_cli",
+            "column": "filename"
           }
         }
       ],
@@ -4043,8 +4027,8 @@
           "is_foreign_key": false
         },
         {
-          "name": "filename",
-          "db_column": "filename",
+          "name": "num_sta",
+          "db_column": "num_sta",
           "type": "CharField",
           "nullable": false,
           "is_primary_key": false,
@@ -23352,6 +23336,7 @@
   "statistics": {
     "files_scanned": 55,
     "models_found": 256,
-    "tables_mapped": 213
+    "tables_mapped": 218,
+    "table_count": 223
   }
 }

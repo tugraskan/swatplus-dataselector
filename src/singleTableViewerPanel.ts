@@ -7,6 +7,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
 
 export class SwatSingleTableViewerPanel {
@@ -14,13 +15,16 @@ export class SwatSingleTableViewerPanel {
     private static readonly MAX_ROWS_TO_DISPLAY = 1000; // Limit rows for performance
     private readonly _panel: vscode.WebviewPanel;
     private _disposables: vscode.Disposable[] = [];
+    private highlightValue?: string; // Optional value to highlight/expand in hierarchical views
 
     private constructor(
         panel: vscode.WebviewPanel,
         private indexer: SwatIndexer,
-        private tableName: string
+        private tableName: string,
+        highlightValue?: string
     ) {
         this._panel = panel;
+        this.highlightValue = highlightValue;
 
         // Set the webview's initial html content
         this._update();
@@ -52,7 +56,7 @@ export class SwatSingleTableViewerPanel {
                         break;
                     case 'openTableInNewTab':
                         if (message.tableName) {
-                            this.openTableInNewTab(message.tableName);
+                            this.openTableInNewTab(message.tableName, message.fkValue);
                         }
                         break;
                     case 'openInputFile':
@@ -72,15 +76,16 @@ export class SwatSingleTableViewerPanel {
         );
     }
 
-    public static createOrShow(indexer: SwatIndexer, tableName: string) {
+    public static createOrShow(indexer: SwatIndexer, tableName: string, highlightValue?: string) {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
 
-        // If we already have a panel for this table, show it
+        // If we already have a panel for this table, show it and update highlight
         if (SwatSingleTableViewerPanel.panels.has(tableName)) {
             const existingPanel = SwatSingleTableViewerPanel.panels.get(tableName)!;
             existingPanel._panel.reveal(column);
+            existingPanel.highlightValue = highlightValue; // Update highlight value
             existingPanel._update();
             return;
         }
@@ -97,7 +102,7 @@ export class SwatSingleTableViewerPanel {
             }
         );
 
-        const newPanel = new SwatSingleTableViewerPanel(panel, indexer, tableName);
+        const newPanel = new SwatSingleTableViewerPanel(panel, indexer, tableName, highlightValue);
         SwatSingleTableViewerPanel.panels.set(tableName, newPanel);
     }
 
@@ -181,9 +186,9 @@ export class SwatSingleTableViewerPanel {
         }
     }
 
-    private openTableInNewTab(tableName: string) {
-        // Create a new table viewer panel for this specific table
-        SwatSingleTableViewerPanel.createOrShow(this.indexer, tableName);
+    private openTableInNewTab(tableName: string, fkValue?: string) {
+        // Create a new table viewer panel for this specific table with optional highlight
+        SwatSingleTableViewerPanel.createOrShow(this.indexer, tableName, fkValue);
     }
 
     private async openFileByName(fileName: string) {
@@ -220,6 +225,15 @@ export class SwatSingleTableViewerPanel {
     private canOpenFile(fileName: string): boolean {
         if (!fileName || fileName === 'null' || !fileName.includes('.')) {
             return false;
+        }
+        
+        // Check if the file actually exists on disk
+        const txtInOutPath = this.indexer.getTxtInOutPath();
+        if (txtInOutPath) {
+            const filePath = path.join(txtInOutPath, fileName);
+            if (!fs.existsSync(filePath)) {
+                return false;
+            }
         }
         
         // Check if it maps to a table
@@ -260,30 +274,24 @@ export class SwatSingleTableViewerPanel {
                 return;
             }
             
-            // Get the first row to find the file path
-            const indexData = this.indexer.getIndexData();
-            const tableData = indexData.get(tableName);
-            if (!tableData || tableData.size === 0) {
-                vscode.window.showErrorMessage(`No data found for table: ${tableName}`);
+            // Construct file path using txtInOutPath
+            const txtInOutPath = this.indexer.getTxtInOutPath();
+            if (!txtInOutPath) {
+                vscode.window.showErrorMessage(`Could not determine TxtInOut directory for table: ${tableName}`);
                 return;
             }
             
-            const firstRow = Array.from(tableData.values())[0];
-            if (firstRow && firstRow.file) {
-                // Resolve the file path if it's relative
-                let filePath = firstRow.file;
-                if (!path.isAbsolute(filePath)) {
-                    const workspaceFolders = vscode.workspace.workspaceFolders;
-                    if (workspaceFolders && workspaceFolders.length > 0) {
-                        filePath = path.join(workspaceFolders[0].uri.fsPath, filePath);
-                    }
-                }
-                
-                const document = await vscode.workspace.openTextDocument(filePath);
-                await vscode.window.showTextDocument(document, { preview: false });
-            } else {
-                vscode.window.showErrorMessage(`Could not find file path for table: ${tableName}`);
+            const filePath = path.join(txtInOutPath, fileName);
+            
+            // Check if file exists
+            if (!fs.existsSync(filePath)) {
+                vscode.window.showErrorMessage(`File does not exist: ${fileName}`);
+                return;
             }
+            
+            // Open the file
+            const document = await vscode.workspace.openTextDocument(filePath);
+            await vscode.window.showTextDocument(document, { preview: false });
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to open file for table ${tableName}: ${error}`);
         }
@@ -312,12 +320,9 @@ export class SwatSingleTableViewerPanel {
 
         // Get data for this specific table
         const indexData = this.indexer.getIndexData();
-        const tableData = indexData.get(this.tableName);
+        const tableData = indexData.get(this.tableName) || new Map<string, any>();
         
-        if (!tableData || tableData.size === 0) {
-            return this._getNoDataHtml();
-        }
-
+        // Allow empty tables to render with their structure
         const fileName = this.indexer.getFileNameForTable(this.tableName) || this.tableName;
         const schemaTable = fileName && schema.tables[fileName] ? schema.tables[fileName] : undefined;
         const rowCount = tableData.size;
@@ -355,13 +360,37 @@ export class SwatSingleTableViewerPanel {
 
     private _getTableHtml(tableData: Map<string, any>, schemaTable: any): string {
         const rows = Array.from(tableData.values());
-        if (rows.length === 0) {
-            return '<p class="empty-message">No data</p>';
-        }
-
+        
         // Special rendering for file.cio - use classification-based sub-table view
         if (this.tableName === 'file_cio') {
+            if (rows.length === 0) {
+                return '<p class="empty-message">No data</p>';
+            }
             return this._getFileCioSubTableHtml(rows);
+        }
+
+        // Special rendering for weather-wgn.cli - use station-based sub-table view with monthly data
+        if (this.tableName === 'weather_wgn_cli') {
+            if (rows.length === 0) {
+                return '<p class="empty-message">No data</p>';
+            }
+            return this._getWeatherWgnSubTableHtml(rows);
+        }
+
+        // Special rendering for atmo.cli - use station-based sub-table view with deposition data
+        if (this.tableName === 'atmo_cli') {
+            if (rows.length === 0) {
+                return '<p class="empty-message">No data</p>';
+            }
+            return this._getAtmoCliSubTableHtml(rows);
+        }
+
+        // For empty tables, show table structure with headers from schema
+        if (rows.length === 0) {
+            if (schemaTable && schemaTable.columns) {
+                return this._getEmptyTableHtml(schemaTable);
+            }
+            return '<p class="empty-message">No data</p>';
         }
 
         // Get columns from actual indexed data (not schema)
@@ -462,7 +491,7 @@ export class SwatSingleTableViewerPanel {
                         // Embed the FK row data as JSON in data attributes
                         const fkRowDataJson = JSON.stringify(targetRow.values).replace(/"/g, '&quot;');
                         const fileName = this.indexer.getFileNameForTable(fkInfo.references.table) || fkInfo.references.table;
-                        tableHtml += `<td class="fk-cell" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" onclick="toggleFKPeek(this, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" oncontextmenu="showFKContextMenu(event, '${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber}, '${this._escapeJs(fkInfo.references.table)}'); return false;" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
+                        tableHtml += `<td class="fk-cell" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" onclick="toggleFKPeek(this, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" oncontextmenu="showFKContextMenu(event, '${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber}, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
                     } else {
                         tableHtml += `<td class="fk-cell unresolved" title="Unresolved FK to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</td>`;
                     }
@@ -705,6 +734,270 @@ export class SwatSingleTableViewerPanel {
         }
 
         html += `</div>`;
+        
+        return html;
+    }
+
+    private _getWeatherWgnSubTableHtml(rows: any[]): string {
+        const metadata = this.indexer.getMetadata();
+        const fileMetadata = metadata?.file_metadata?.['weather-wgn.cli'];
+        
+        let html = '';
+        
+        // Add file description if available
+        if (fileMetadata && fileMetadata.description) {
+            html += `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
+        }
+
+        html += `<div class="weather-wgn-subtables">`;
+
+        // Month names for better readability
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                           'July', 'August', 'September', 'October', 'November', 'December'];
+
+        // Render each weather station as an expandable section
+        for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
+            const stationName = row.values.name || 'Unknown Station';
+            const lat = row.values.lat || 'N/A';
+            const lon = row.values.lon || 'N/A';
+            const elev = row.values.elev || 'N/A';
+            const rainYrs = row.values.rain_yrs || 'N/A';
+            const lineNumber = row.lineNumber || 0;
+            const file = row.file || 'weather-wgn.cli';
+            
+            // Check if this station should be highlighted
+            const isHighlighted = this.highlightValue && stationName && stationName.toLowerCase() === this.highlightValue.toLowerCase();
+            const highlightClass = isHighlighted ? ' highlighted-station' : '';
+            const highlightId = isHighlighted ? ` id="highlighted-station"` : '';
+
+            html += `
+                <div class="wgn-station-section${highlightClass}" data-station="${this._escapeHtml(stationName)}"${highlightId}>
+                    <div class="wgn-station-header" onclick="toggleWgnStationSection('${this._escapeJs(stationName)}')">
+                        <span class="toggle-icon">▼</span>
+                        <span class="station-name">
+                            <a href="#" onclick="event.stopPropagation(); navigateToFile('${this._escapeJs(file)}', ${lineNumber}); return false;" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(stationName)}</a>
+                        </span>
+                        <span class="station-info">
+                            Lat: ${this._escapeHtml(lat)}, Lon: ${this._escapeHtml(lon)}, Elev: ${this._escapeHtml(elev)}m, Years: ${this._escapeHtml(rainYrs)}
+                        </span>
+                    </div>
+                    <div class="wgn-station-content">
+            `;
+
+            // Check if we have child rows (monthly data)
+            if (row.childRows && Array.isArray(row.childRows) && row.childRows.length > 0) {
+                // Monthly data columns
+                const monthlyColumns = [
+                    { key: 'month', label: 'Month' },
+                    { key: 'tmp_max_ave', label: 'Tmp Max Avg (°C)' },
+                    { key: 'tmp_min_ave', label: 'Tmp Min Avg (°C)' },
+                    { key: 'tmp_max_sd', label: 'Tmp Max SD (°C)' },
+                    { key: 'tmp_min_sd', label: 'Tmp Min SD (°C)' },
+                    { key: 'pcp_ave', label: 'Pcp Avg (mm)' },
+                    { key: 'pcp_sd', label: 'Pcp SD (mm/day)' },
+                    { key: 'pcp_skew', label: 'Pcp Skew' },
+                    { key: 'wet_dry', label: 'Wet/Dry' },
+                    { key: 'wet_wet', label: 'Wet/Wet' },
+                    { key: 'pcp_days', label: 'Pcp Days' },
+                    { key: 'pcp_hhr', label: 'Pcp 0.5hr (mm)' },
+                    { key: 'slr_ave', label: 'Solar Avg (MJ/m²/day)' },
+                    { key: 'dew_ave', label: 'Dew Avg (°C)' },
+                    { key: 'wnd_ave', label: 'Wind Avg (m/s)' }
+                ];
+
+                html += `
+                        <div class="table-wrapper">
+                            <table class="monthly-data-table">
+                                <thead>
+                                    <tr>
+                                        <th class="line-col">Line</th>
+                                        ${monthlyColumns.map(col => `<th title="${this._escapeHtml(col.label)}">${this._escapeHtml(col.key === 'month' ? 'Month' : col.label)}</th>`).join('')}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                `;
+
+                for (const childRow of row.childRows) {
+                    const monthNum = parseInt(childRow.values.month || '0');
+                    const monthName = monthNum > 0 && monthNum <= 12 ? monthNames[monthNum - 1] : `Month ${monthNum}`;
+                    
+                    html += `<tr>`;
+                    html += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(file)}', ${childRow.lineNumber})">${childRow.lineNumber}</a></td>`;
+                    
+                    for (const col of monthlyColumns) {
+                        let value = childRow.values[col.key] || '';
+                        // Display month name instead of number
+                        if (col.key === 'month') {
+                            value = monthName;
+                        }
+                        html += `<td>${this._escapeHtml(value)}</td>`;
+                    }
+                    
+                    html += `</tr>`;
+                }
+
+                html += `
+                                </tbody>
+                            </table>
+                        </div>
+                `;
+            } else {
+                html += `<p class="empty-message">No monthly data available</p>`;
+            }
+
+            html += `
+                    </div>
+                </div>
+            `;
+        }
+
+        html += `</div>`;
+        
+        return html;
+    }
+
+    private _getAtmoCliSubTableHtml(rows: any[]): string {
+        const metadata = this.indexer.getMetadata();
+        const fileMetadata = metadata?.file_metadata?.['atmo.cli'];
+        
+        let html = '';
+        
+        // Add file description if available
+        if (fileMetadata && fileMetadata.description) {
+            html += `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
+        }
+
+        // atmo.cli typically has only one main record with metadata
+        if (rows.length === 0) {
+            return '<p class="empty-message">No data</p>';
+        }
+
+        const mainRow = rows[0]; // The metadata row
+        const numSta = mainRow.values.num_sta || '0';
+        const timestep = mainRow.values.timestep || 'N/A';
+        const moInit = mainRow.values.mo_init || '0';
+        const yrInit = mainRow.values.yr_init || '0';
+        const numAa = mainRow.values.num_aa || '0';
+
+        html += `
+            <div class="atmo-cli-header">
+                <h3>Atmospheric Deposition Data</h3>
+                <div class="atmo-metadata">
+                    <span><strong>Stations:</strong> ${this._escapeHtml(numSta)}</span>
+                    <span><strong>Timestep:</strong> ${this._escapeHtml(timestep)}</span>
+                    <span><strong>First Month:</strong> ${this._escapeHtml(moInit)}</span>
+                    <span><strong>First Year:</strong> ${this._escapeHtml(yrInit)}</span>
+                    <span><strong>Data Points:</strong> ${this._escapeHtml(numAa)}</span>
+                </div>
+            </div>
+        `;
+
+        html += `<div class="atmo-cli-subtables">`;
+
+        // Deposition types with descriptions
+        const depositionTypes = [
+            { key: 'nh4_wet', label: 'NH₄ Wet Deposition', unit: 'kg/ha' },
+            { key: 'no3_wet', label: 'NO₃ Wet Deposition', unit: 'kg/ha' },
+            { key: 'nh4_dry', label: 'NH₄ Dry Deposition', unit: 'kg/ha' },
+            { key: 'no3_dry', label: 'NO₃ Dry Deposition', unit: 'kg/ha' }
+        ];
+
+        // Render each station as an expandable section
+        if (mainRow.childRows && Array.isArray(mainRow.childRows)) {
+            for (const childRow of mainRow.childRows) {
+                const stationName = childRow.values.station_name || 'Unknown Station';
+                const lineNumber = childRow.lineNumber || 0;
+                const file = mainRow.file || 'atmo.cli';
+
+                html += `
+                    <div class="atmo-station-section" data-station="${this._escapeHtml(stationName)}">
+                        <div class="atmo-station-header" onclick="toggleAtmoStationSection('${this._escapeJs(stationName)}')">
+                            <span class="toggle-icon">▼</span>
+                            <span class="station-name">
+                                <a href="#" onclick="event.stopPropagation(); navigateToFile('${this._escapeJs(file)}', ${lineNumber}); return false;" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(stationName)}</a>
+                            </span>
+                        </div>
+                        <div class="atmo-station-content">
+                `;
+
+                // Display each deposition type
+                for (const depType of depositionTypes) {
+                    const values = childRow.values[depType.key];
+                    const depLineNum = childRow.values[`${depType.key}_line`];
+                    
+                    if (values && Array.isArray(values)) {
+                        html += `
+                            <div class="deposition-type">
+                                <h4>
+                                    ${depType.label} (${depType.unit})
+                                    ${depLineNum ? `<a href="#" onclick="navigateToFile('${this._escapeJs(file)}', ${depLineNum}); return false;" class="line-link" title="Go to line ${depLineNum}">Line ${depLineNum}</a>` : ''}
+                                </h4>
+                                <div class="deposition-values">
+                        `;
+                        
+                        // Display values in groups of 12 for readability
+                        for (let i = 0; i < values.length; i += 12) {
+                            const chunk = values.slice(i, i + 12);
+                            html += `<div class="value-row">`;
+                            chunk.forEach((val, idx) => {
+                                html += `<span class="deposition-value" title="Index ${i + idx + 1}">${this._escapeHtml(val)}</span>`;
+                            });
+                            html += `</div>`;
+                        }
+                        
+                        html += `
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+
+                html += `
+                        </div>
+                    </div>
+                `;
+            }
+        } else {
+            html += `<p class="empty-message">No station data available</p>`;
+        }
+
+        html += `</div>`;
+        
+        return html;
+    }
+
+    private _getEmptyTableHtml(schemaTable: any): string {
+        const metadata = this.indexer.getMetadata();
+        const fileMetadata = metadata?.file_metadata?.[schemaTable.file_name];
+        
+        let html = '';
+        
+        // Add file description if available
+        if (fileMetadata && fileMetadata.description) {
+            html += `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
+        }
+
+        // Show table structure with headers from schema
+        html += `<table class="data-table">`;
+        html += `<thead><tr>`;
+        
+        // Count visible columns and add headers from schema
+        let visibleColumnCount = 0;
+        if (schemaTable.columns) {
+            for (const column of schemaTable.columns) {
+                if (column.name !== 'id') {  // Skip auto-generated ID column
+                    const displayName = column.name;
+                    html += `<th>${this._escapeHtml(displayName)}</th>`;
+                    visibleColumnCount++;
+                }
+            }
+        }
+        
+        html += `</tr></thead>`;
+        html += `<tbody>`;
+        html += `<tr><td colspan="${visibleColumnCount}" class="empty-cell">No data</td></tr>`;
+        html += `</tbody>`;
+        html += `</table>`;
         
         return html;
     }
@@ -1019,6 +1312,185 @@ export class SwatSingleTableViewerPanel {
                 padding: 4px 8px;
                 min-width: 0;
             }
+            .file-null {
+                color: var(--vscode-disabledForeground);
+                font-style: italic;
+                padding: 4px 8px;
+                min-width: 0;
+            }
+            /* Weather-wgn.cli station-based sub-table view */
+            .weather-wgn-subtables {
+                margin: 16px 0;
+            }
+            .wgn-station-section {
+                margin-bottom: 12px;
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                overflow: hidden;
+            }
+            .wgn-station-section.highlighted-station {
+                border: 2px solid var(--vscode-focusBorder);
+                box-shadow: 0 0 8px var(--vscode-focusBorder);
+            }
+            .wgn-station-header {
+                padding: 12px 16px;
+                background-color: var(--vscode-editor-background);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                user-select: none;
+                transition: background-color 0.2s;
+            }
+            .wgn-station-header:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            .wgn-station-header.collapsed .toggle-icon {
+                transform: rotate(-90deg);
+            }
+            .station-name {
+                font-weight: 600;
+                flex: 0 0 auto;
+            }
+            .station-name .line-link {
+                color: var(--vscode-foreground);
+                text-decoration: none;
+            }
+            .station-name .line-link:hover {
+                color: var(--vscode-textLink-activeForeground);
+                text-decoration: underline;
+            }
+            .station-info {
+                font-size: 0.85em;
+                color: var(--vscode-descriptionForeground);
+                flex: 1;
+            }
+            .wgn-station-content {
+                max-height: 1000px;
+                overflow-y: auto;
+                transition: max-height 0.3s ease-out;
+                padding: 12px 16px;
+            }
+            .wgn-station-content.collapsed {
+                max-height: 0;
+                overflow: hidden;
+                padding: 0;
+            }
+            .monthly-data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 0.85em;
+            }
+            .monthly-data-table th {
+                background-color: var(--vscode-editor-background);
+                padding: 8px 6px;
+                text-align: left;
+                border-bottom: 2px solid var(--vscode-panel-border);
+                font-weight: 600;
+                white-space: nowrap;
+                font-size: 0.75em;
+            }
+            .monthly-data-table td {
+                padding: 6px;
+                border-bottom: 1px solid var(--vscode-panel-border);
+            }
+            .monthly-data-table tr:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            /* Atmo.cli station-based sub-table view */
+            .atmo-cli-header {
+                margin: 16px 0;
+                padding: 12px 16px;
+                background-color: var(--vscode-editor-background);
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+            }
+            .atmo-cli-header h3 {
+                margin: 0 0 12px 0;
+                font-size: 1.1em;
+            }
+            .atmo-metadata {
+                display: flex;
+                gap: 16px;
+                flex-wrap: wrap;
+                font-size: 0.9em;
+            }
+            .atmo-metadata span {
+                color: var(--vscode-descriptionForeground);
+            }
+            .atmo-cli-subtables {
+                margin: 16px 0;
+            }
+            .atmo-station-section {
+                margin-bottom: 12px;
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                overflow: hidden;
+            }
+            .atmo-station-header {
+                padding: 12px 16px;
+                background-color: var(--vscode-editor-background);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                user-select: none;
+                transition: background-color 0.2s;
+            }
+            .atmo-station-header:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            .atmo-station-header.collapsed .toggle-icon {
+                transform: rotate(-90deg);
+            }
+            .atmo-station-content {
+                max-height: 2000px;
+                overflow-y: auto;
+                transition: max-height 0.3s ease-out;
+                padding: 12px 16px;
+            }
+            .atmo-station-content.collapsed {
+                max-height: 0;
+                overflow: hidden;
+                padding: 0;
+            }
+            .deposition-type {
+                margin-bottom: 16px;
+            }
+            .deposition-type h4 {
+                margin: 0 0 8px 0;
+                font-size: 0.95em;
+                color: var(--vscode-foreground);
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .deposition-type h4 .line-link {
+                font-size: 0.85em;
+                font-weight: normal;
+            }
+            .deposition-values {
+                background-color: var(--vscode-editor-background);
+                padding: 8px;
+                border-radius: 4px;
+                border: 1px solid var(--vscode-panel-border);
+            }
+            .value-row {
+                display: flex;
+                gap: 4px;
+                margin-bottom: 4px;
+                flex-wrap: wrap;
+            }
+            .deposition-value {
+                padding: 4px 8px;
+                background-color: var(--vscode-input-background);
+                border: 1px solid var(--vscode-input-border);
+                border-radius: 3px;
+                font-size: 0.85em;
+                font-family: monospace;
+                min-width: 60px;
+                text-align: right;
+            }
             .fk-indicator {
                 margin-left: 4px;
                 font-size: 0.8em;
@@ -1044,6 +1516,24 @@ export class SwatSingleTableViewerPanel {
                 text-align: center;
                 color: var(--vscode-descriptionForeground);
                 font-style: italic;
+            }
+            .empty-table-message {
+                padding: 16px;
+                margin-bottom: 16px;
+                background-color: var(--vscode-textBlockQuote-background);
+                border-left: 4px solid var(--vscode-editorInfo-foreground);
+                border-radius: 4px;
+            }
+            .info-message {
+                margin: 0;
+                color: var(--vscode-foreground);
+                font-size: 0.95em;
+            }
+            .empty-cell {
+                text-align: center;
+                color: var(--vscode-descriptionForeground);
+                font-style: italic;
+                padding: 20px;
             }
             .no-index {
                 display: flex;
@@ -1207,6 +1697,42 @@ export class SwatSingleTableViewerPanel {
                 }
             }
 
+            function toggleWgnStationSection(station) {
+                // Escape the station name for safe use in CSS selector
+                const escapedStation = station.replace(/"/g, '\\"');
+                const section = document.querySelector('[data-station="' + escapedStation + '"]');
+                if (!section) return;
+                
+                const header = section.querySelector('.wgn-station-header');
+                const content = section.querySelector('.wgn-station-content');
+                
+                if (content.classList.contains('collapsed')) {
+                    content.classList.remove('collapsed');
+                    header.classList.remove('collapsed');
+                } else {
+                    content.classList.add('collapsed');
+                    header.classList.add('collapsed');
+                }
+            }
+
+            function toggleAtmoStationSection(station) {
+                // Escape the station name for safe use in CSS selector
+                const escapedStation = station.replace(/"/g, '\\"');
+                const section = document.querySelector('[data-station="' + escapedStation + '"]');
+                if (!section) return;
+                
+                const header = section.querySelector('.atmo-station-header');
+                const content = section.querySelector('.atmo-station-content');
+                
+                if (content.classList.contains('collapsed')) {
+                    content.classList.remove('collapsed');
+                    header.classList.remove('collapsed');
+                } else {
+                    content.classList.add('collapsed');
+                    header.classList.add('collapsed');
+                }
+            }
+
             function openFileForTable(tableName) {
                 vscode.postMessage({
                     command: 'openFileForTable',
@@ -1233,7 +1759,7 @@ export class SwatSingleTableViewerPanel {
                 }
             }
 
-            function showFKContextMenu(event, file, line, tableName) {
+            function showFKContextMenu(event, file, line, tableName, fkValue) {
                 event.preventDefault();
                 event.stopPropagation();
                 
@@ -1265,7 +1791,8 @@ export class SwatSingleTableViewerPanel {
                         action: () => {
                             vscode.postMessage({
                                 command: 'openTableInNewTab',
-                                tableName: tableName
+                                tableName: tableName,
+                                fkValue: fkValue
                             });
                             menu.remove();
                         }
@@ -1383,6 +1910,25 @@ export class SwatSingleTableViewerPanel {
                     currentRow.after(newRow);
                 });
             }
+            
+            // Auto-expand and scroll to highlighted station for weather-wgn.cli
+            window.addEventListener('load', function() {
+                const highlightedStation = document.getElementById('highlighted-station');
+                if (highlightedStation) {
+                    // Expand the highlighted station
+                    const header = highlightedStation.querySelector('.wgn-station-header');
+                    const content = highlightedStation.querySelector('.wgn-station-content');
+                    if (header && content && content.classList.contains('collapsed')) {
+                        content.classList.remove('collapsed');
+                        header.classList.remove('collapsed');
+                    }
+                    
+                    // Scroll to the highlighted station
+                    setTimeout(function() {
+                        highlightedStation.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                }
+            });
         `;
     }
 }

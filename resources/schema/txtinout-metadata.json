@@ -372,6 +372,18 @@
         "child_line_count_fixed": 13,
         "indexing_strategy": "Index only the main record line; skip 1 header line + 12 monthly data lines"
       }
+    },
+    "atmo.cli": {
+      "description": "Atmospheric deposition data with main metadata record followed by station-specific deposition data",
+      "structure": {
+        "main_record_format": "Main line contains num_sta, timestep, mo_init, yr_init, and num_aa",
+        "child_line_format": "For each station: 1 line with station name, then 4 lines with deposition data (nh4_wet, no3_wet, nh4_dry, no3_dry), each line containing num_aa values",
+        "main_record_identifier": "First data line (line 3) contains metadata",
+        "child_line_count_field": "num_sta",
+        "child_line_count_fixed": -1,
+        "indexing_strategy": "Index only the main metadata record; skip station name lines and 4 deposition data lines per station",
+        "child_line_count_multiplier": 5
+      }
     }
   },
   "file_pointer_columns": {
@@ -519,17 +531,17 @@
     },
     "initial.res": {
       "description": "File pointer columns for initial.res",
-      "org_min​": "Points to org_min​ file",
-      "pest​": "Points to pest​ file",
-      "salt​": "Points to salt​ file"
+      "org_min\u200b": "Points to org_min\u200b file",
+      "pest\u200b": "Points to pest\u200b file",
+      "salt\u200b": "Points to salt\u200b file"
     },
     "reservoir.res": {
       "description": "File pointer columns for reservoir.res",
-      "init​": "Points to init​ file",
-      "hyd​": "Points to hyd​ file",
-      "rel​": "Points to rel​ file",
-      "sed​": "Points to sed​ file",
-      "nut​": "Points to nut​ file"
+      "init\u200b": "Points to init\u200b file",
+      "hyd\u200b": "Points to hyd\u200b file",
+      "rel\u200b": "Points to rel\u200b file",
+      "sed\u200b": "Points to sed\u200b file",
+      "nut\u200b": "Points to nut\u200b file"
     },
     "untitled": {
       "description": "File pointer columns for untitled",
@@ -543,8 +555,8 @@
     },
     "wetland.wet": {
       "description": "File pointer columns for wetland.wet",
-      "init​": "Points to init​ file",
-      "hyd​": "Points to hyd​ file",
+      "init\u200b": "Points to init\u200b file",
+      "hyd\u200b": "Points to hyd\u200b file",
       "rel": "Pointer to the reservoir and wetland release decision table file",
       "sed": "Pointer to the reservoir and wetland sediment file",
       "nut": "Pointer to the reservoir and wetland nutrient file"

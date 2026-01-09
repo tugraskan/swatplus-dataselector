@@ -56,9 +56,7 @@ def get_child_line_count(value_map: Dict[str, str], config: dict, file_name: str
     
     # Check for fixed child line count first (e.g., weather-wgn.cli has 13 fixed lines)
     fixed_count = structure.get("child_line_count_fixed")
-    if fixed_count is not None:
-        if fixed_count < 0:
-            return 0
+    if fixed_count is not None and fixed_count > 0:
         if fixed_count > MAX_CHILD_LINES:
             return MAX_CHILD_LINES
         return fixed_count
@@ -91,10 +89,14 @@ def get_child_line_count(value_map: Dict[str, str], config: dict, file_name: str
         
         return total_count
     
-    # Handle single field case
+    # Handle single field case with optional multiplier
     if count_field in value_map:
         try:
             count = int(value_map[count_field])
+            
+            # Apply multiplier if specified (e.g., for atmo.cli: num_sta * 5)
+            multiplier = structure.get("child_line_count_multiplier", 1)
+            count = count * multiplier
             
             if count < 0:
                 return 0
@@ -572,18 +574,105 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
 
         # Build row payload
         row_payload = []
-        for _, row in df.iterrows():
+        for idx, row in df.iterrows():
             # Filter out AutoField columns (same as parsing logic)
             values = {col["name"]: str(row.get(col["name"], "")) for col in table.get("columns", []) if col.get("type") != "AutoField"}
-            row_payload.append(
-                {
-                    "file": str(file_path),
-                    "tableName": table["table_name"],
-                    "lineNumber": int(row["lineNumber"]),
-                    "pkValue": str(row["pkValue"]),
-                    "values": values,
-                }
-            )
+            row_dict = {
+                "file": str(file_path),
+                "tableName": table["table_name"],
+                "lineNumber": int(row["lineNumber"]),
+                "pkValue": str(row["pkValue"]),
+                "values": values,
+            }
+            
+            # Special handling for weather-wgn.cli: capture monthly data child lines
+            if file_name == 'weather-wgn.cli' and child_line_info and idx < len(child_line_info):
+                line_num, child_count = child_line_info[idx]
+                if child_count > 0:
+                    with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
+                        lines = handle.readlines()
+                    
+                    # Skip the header line (first child line) and capture the 12 monthly data lines
+                    child_rows = []
+                    # Monthly data columns based on the weather-wgn.cli documentation
+                    monthly_columns = [
+                        'tmp_max_ave', 'tmp_min_ave', 'tmp_max_sd', 'tmp_min_sd',
+                        'pcp_ave', 'pcp_sd', 'pcp_skew', 'wet_dry', 'wet_wet',
+                        'pcp_days', 'pcp_hhr', 'slr_ave', 'dew_ave', 'wnd_ave'
+                    ]
+                    
+                    # Start from line after main record, skip header, then read 12 months
+                    # line_num is 1-based, but lines array is 0-based
+                    start_idx = line_num - 1  # Convert to 0-based index
+                    for month_idx in range(12):
+                        # Skip header line (1) + month offset
+                        child_line_idx = start_idx + 1 + month_idx + 1  # +1 for next line, +month_idx for month, +1 for header skip
+                        if child_line_idx < len(lines):
+                            child_line = lines[child_line_idx].strip()
+                            if child_line:
+                                child_values_list = child_line.split()
+                                child_value_map = {}
+                                for col_idx, col_name in enumerate(monthly_columns):
+                                    child_value_map[col_name] = child_values_list[col_idx] if col_idx < len(child_values_list) else ""
+                                child_value_map['month'] = str(month_idx + 1)  # Add month number (1-12)
+                                child_rows.append({
+                                    "lineNumber": child_line_idx + 1,  # Convert back to 1-based for display
+                                    "values": child_value_map
+                                })
+                    
+                    if child_rows:
+                        row_dict["childRows"] = child_rows
+            
+            # Special handling for atmo.cli: capture station deposition data
+            if file_name == 'atmo.cli':
+                with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
+                    lines = handle.readlines()
+                
+                # The main record has num_sta which tells us how many stations
+                try:
+                    num_sta = int(row.get('num_sta', 0)) if 'num_sta' in row.index else 0
+                    num_aa = int(row.get('num_aa', 0)) if 'num_aa' in row.index else 0
+                except (ValueError, TypeError):
+                    num_sta = 0
+                    num_aa = 0
+                
+                if num_sta > 0 and num_aa > 0:
+                    child_rows = []
+                    # Start after the metadata line (line 3, index 2 in 0-based)
+                    # line_num is the metadata line number (1-based)
+                    current_line_idx = int(row.get('lineNumber', 0)) - 1  # Convert to 0-based
+                    
+                    deposition_types = ['nh4_wet', 'no3_wet', 'nh4_dry', 'no3_dry']
+                    
+                    for station_idx in range(num_sta):
+                        # Next line is station name
+                        station_line_idx = current_line_idx + 1 + (station_idx * 5)  # 1 name line + 4 data lines per station
+                        if station_line_idx < len(lines):
+                            station_name = lines[station_line_idx].strip()
+                            
+                            # Next 4 lines are deposition data
+                            station_data = {'station_name': station_name}
+                            for dep_idx, dep_type in enumerate(deposition_types):
+                                data_line_idx = station_line_idx + 1 + dep_idx
+                                if data_line_idx < len(lines):
+                                    data_line = lines[data_line_idx].strip()
+                                    # Split the line and take values (last token is the label)
+                                    values = data_line.split()
+                                    # The last value is the label (nh4_wet, etc), rest are data values
+                                    if values:
+                                        station_data[dep_type] = values[:-1] if len(values) > 1 else values
+                                        station_data[f'{dep_type}_line'] = data_line_idx + 1  # Store line number
+                            
+                            if 'station_name' in station_data:
+                                child_rows.append({
+                                    "lineNumber": station_line_idx + 1,  # 1-based line number
+                                    "values": station_data
+                                })
+                    
+                    if child_rows:
+                        row_dict["childRows"] = child_rows
+            
+            row_payload.append(row_dict)
 
         tables_payload[table["table_name"]] = row_payload
         

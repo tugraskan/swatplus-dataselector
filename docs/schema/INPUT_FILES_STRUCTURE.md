@@ -357,6 +357,7 @@ Some files have a multi-row or multi-part structure that differs from the standa
 | 7 | wnd | Name of the wind speed station | string | N/A | N/A | N/A |  | ✓ |  | wnd.cli |  |
 | 8 | wnd_dir | Name of the wind direction station (currently not used) | string | N/A | N/A | N/A |  |  |  |  |  |
 | 9 | atmo_dep | Name of the atmospheric deposition station | string | N/A | N/A | N/A |  | ✓ |  |  |  |
+| 10 | pet | Name of the PET station | string | N/A | N/A | N/A |  |  |  |  |  |
 
 ### weather-wgn.cli
 **⚠️ SPECIAL STRUCTURE**
