@@ -178,6 +178,14 @@ export class SwatSingleTableViewerPanel {
             const schemaTable = fileName && schema.tables[fileName] ? schema.tables[fileName] : undefined;
             const metadata = this.indexer.getMetadata();
             const filePointers = metadata?.file_pointer_columns?.[fileName || ''] || {};
+            const fkColumns: Record<string, { targetTable: string; targetFile: string }> = {};
+            if (schemaTable && schemaTable.foreign_keys) {
+                schemaTable.foreign_keys.forEach((fk: any) => {
+                    const targetTable = fk.references.table;
+                    const targetFile = this.indexer.getFileNameForTable(targetTable) || targetTable;
+                    fkColumns[fk.column] = { targetTable, targetFile };
+                });
+            }
             
             // Get columns from actual indexed data (not schema)
             let columns: string[] = [];
@@ -192,7 +200,8 @@ export class SwatSingleTableViewerPanel {
                 columns: columns,
                 rowData: targetRow.values,
                 lineNumber: targetRow.lineNumber,
-                filePointers: filePointers
+                filePointers: filePointers,
+                fkColumns: fkColumns
             });
         } catch (error) {
             console.error('Failed to get FK row data', error);
@@ -467,6 +476,12 @@ export class SwatSingleTableViewerPanel {
             return this._getSoilsSolSubTableHtml(rows);
         }
 
+        // Special rendering for plant.ini - use plant community sub-table view with plant member data
+        if (this.tableName === 'plant_ini') {
+            if (rows.length === 0) {
+                return '<p class="empty-message">No data</p>';
+            }
+            return this._getPlantIniSubTableHtml(rows);
         // Special rendering for decision table files (*.dtl) - use profile-based sub-table view
         if (resolvedFileName.endsWith('.dtl')) {
             if (rows.length === 0) {
@@ -1215,6 +1230,9 @@ export class SwatSingleTableViewerPanel {
         return html;
     }
 
+    private _getPlantIniSubTableHtml(rows: any[]): string {
+        const metadata = this.indexer.getMetadata();
+        const fileMetadata = metadata?.file_metadata?.['plant.ini'];
     private _getDecisionTableSubTableHtml(rows: any[], fileName: string): string {
         const metadata = this.indexer.getMetadata();
         const fileMetadata = metadata?.file_metadata?.[fileName];
@@ -1224,7 +1242,57 @@ export class SwatSingleTableViewerPanel {
         if (fileMetadata && fileMetadata.description) {
             html += `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
         }
+// needs review
+        html += `<div class="plant-ini-subtables">`;
 
+        const plantColumns = [
+            { key: 'plnt_name', label: 'Plant Name' },
+            { key: 'lc_status', label: 'LC Status' },
+            { key: 'lai_init', label: 'LAI Init' },
+            { key: 'bm_init', label: 'Biomass Init' },
+            { key: 'phu_init', label: 'PHU Init' },
+            { key: 'plnt_pop', label: 'Plant Pop' },
+            { key: 'yrs_init', label: 'Years Init' },
+            { key: 'rsd_init', label: 'Residue Init' }
+        ];
+
+        for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
+            const communityName = row.values.name || 'Unknown Community';
+            const plantCount = row.values.plnt_cnt || row.values.plt_cnt || 'N/A';
+            const rotationYear = row.values.rot_yr_ini || 'N/A';
+            const lineNumber = row.lineNumber || 0;
+            const file = row.file || 'plant.ini';
+
+            const isHighlighted = this.highlightValue && communityName && communityName.toLowerCase() === this.highlightValue.toLowerCase();
+            const highlightClass = isHighlighted ? ' highlighted-community' : '';
+            const highlightId = isHighlighted ? ` id="highlighted-community"` : '';
+
+            html += `
+                <div class="plant-community-section${highlightClass}" data-community="${this._escapeHtml(communityName)}"${highlightId}>
+                    <div class="plant-community-header" onclick="togglePlantCommunitySection('${this._escapeJs(communityName)}')">
+                        <span class="toggle-icon">▼</span>
+                        <span class="community-name">
+                            <a href="#" onclick="event.stopPropagation(); navigateToFile('${this._escapeJs(file)}', ${lineNumber}); return false;" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(communityName)}</a>
+                        </span>
+                        <span class="community-info">
+                            Plants: ${this._escapeHtml(plantCount)}, Rotation Start: ${this._escapeHtml(rotationYear)}
+                        </span>
+                    </div>
+                    <div class="plant-community-content">
+                        <div class="plant-meta">
+                            <span><strong>Plant Count:</strong> ${this._escapeHtml(plantCount)}</span>
+                            <span><strong>Rotation Year:</strong> ${this._escapeHtml(rotationYear)}</span>
+                        </div>
+            `;
+
+            if (row.childRows && Array.isArray(row.childRows) && row.childRows.length > 0) {
+                html += `
+                        <div class="table-wrapper">
+                            <table class="plant-detail-table">
+                                <thead>
+                                    <tr>
+                                        <th class="line-col">Line</th>
+                                        ${plantColumns.map(col => `<th title="${this._escapeHtml(col.label)}">${this._escapeHtml(col.label)}</th>`).join('')}
         html += `<div class="dtl-subtables">`;
 
         for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
@@ -1339,7 +1407,27 @@ export class SwatSingleTableViewerPanel {
                                 </thead>
                                 <tbody>
                 `;
-
+// needs review
+                const plantFileName = 'plants.plt';
+                const canOpenPlants = this.canOpenFile(plantFileName);
+                row.childRows.forEach((childRow: any) => {
+                    html += `<tr>`;
+                    html += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(file)}', ${childRow.lineNumber})">${childRow.lineNumber}</a></td>`;
+                    plantColumns.forEach((col) => {
+                        const value = childRow.values[col.key] || '';
+                        if (col.key === 'plnt_name' && value) {
+                            const linkClass = canOpenPlants ? 'fk-link' : 'fk-link broken-link';
+                            const title = canOpenPlants
+                                ? `Peek plant row from ${plantFileName}`
+                                : `${plantFileName} - Not indexed (may not exist in dataset)`;
+                            if (canOpenPlants) {
+                                html += `<td class="fk-cell" data-fk-table="plants_plt" data-fk-value="${this._escapeHtml(value)}"><a href="#" onclick="toggleFKPeek(this, 'plants_plt', '${this._escapeJs(value)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                            } else {
+                                html += `<td class="fk-cell unresolved" data-fk-table="plants_plt" data-fk-value="${this._escapeHtml(value)}"><span class="${linkClass}" title="${title}">${this._escapeHtml(value)}</span></td>`;
+                            }
+                        } else {
+                            html += `<td>${this._escapeHtml(value)}</td>`;
+                        }
                 actionRows.forEach((childRow: any) => {
                     html += `<tr>`;
                     html += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(file)}', ${childRow.lineNumber})">${childRow.lineNumber}</a></td>`;
@@ -1363,6 +1451,8 @@ export class SwatSingleTableViewerPanel {
                         </div>
                 `;
             } else {
+                                         // needs review
+                html += `<p class="empty-message">No plant data available</p>`;
                 html += `<p class="empty-message">No action data available</p>`;
             }
 
@@ -1995,6 +2085,11 @@ export class SwatSingleTableViewerPanel {
             .soil-layer-table tr:hover {
                 background-color: var(--vscode-list-hoverBackground);
             }
+            /* plant.ini community-based sub-table view */
+            .plant-ini-subtables {
+                margin: 16px 0;
+            }
+            .plant-community-section {
             /* Decision table profile-based sub-table view */
             .dtl-subtables {
                 margin: 16px 0;
@@ -2005,6 +2100,11 @@ export class SwatSingleTableViewerPanel {
                 border-radius: 4px;
                 overflow: hidden;
             }
+            .plant-community-section.highlighted-community {
+                border: 2px solid var(--vscode-focusBorder);
+                box-shadow: 0 0 8px var(--vscode-focusBorder);
+            }
+            .plant-community-header {
             .dtl-section.highlighted-dtl {
                 border: 2px solid var(--vscode-focusBorder);
                 box-shadow: 0 0 8px var(--vscode-focusBorder);
@@ -2019,6 +2119,25 @@ export class SwatSingleTableViewerPanel {
                 user-select: none;
                 transition: background-color 0.2s;
             }
+            .plant-community-header:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            .plant-community-header.collapsed .toggle-icon {
+                transform: rotate(-90deg);
+            }
+            .community-name {
+                font-weight: 600;
+                flex: 0 0 auto;
+            }
+            .community-name .line-link {
+                color: var(--vscode-foreground);
+                text-decoration: none;
+            }
+            .community-name .line-link:hover {
+                color: var(--vscode-textLink-activeForeground);
+                text-decoration: underline;
+            }
+            .community-info {
             .dtl-header:hover {
                 background-color: var(--vscode-list-hoverBackground);
             }
@@ -2042,17 +2161,31 @@ export class SwatSingleTableViewerPanel {
                 color: var(--vscode-descriptionForeground);
                 flex: 1;
             }
+            .plant-community-content {
+                max-height: 2000px;
             .dtl-content {
                 max-height: 2500px;
                 overflow-y: auto;
                 transition: max-height 0.3s ease-out;
                 padding: 12px 16px;
             }
+            .plant-community-content.collapsed {
             .dtl-content.collapsed {
                 max-height: 0;
                 overflow: hidden;
                 padding: 0;
             }
+            .plant-meta {
+                display: flex;
+                gap: 16px;
+                flex-wrap: wrap;
+                margin-bottom: 12px;
+                font-size: 0.9em;
+            }
+            .plant-meta span {
+                color: var(--vscode-descriptionForeground);
+            }
+            .plant-detail-table {
             .dtl-section-title {
                 margin: 4px 0 8px;
                 font-size: 0.95em;
@@ -2062,6 +2195,7 @@ export class SwatSingleTableViewerPanel {
                 border-collapse: collapse;
                 font-size: 0.85em;
             }
+            .plant-detail-table th {
             .dtl-table th {
                 background-color: var(--vscode-editor-background);
                 padding: 8px 6px;
@@ -2071,6 +2205,11 @@ export class SwatSingleTableViewerPanel {
                 white-space: nowrap;
                 font-size: 0.75em;
             }
+            .plant-detail-table td {
+                padding: 6px;
+                border-bottom: 1px solid var(--vscode-panel-border);
+            }
+            .plant-detail-table tr:hover {
             .dtl-table td {
                 padding: 6px;
                 border-bottom: 1px solid var(--vscode-panel-border);
@@ -2283,6 +2422,14 @@ export class SwatSingleTableViewerPanel {
                 });
             }
 
+            function openTableInNewTab(tableName, fkValue) {
+                vscode.postMessage({
+                    command: 'openTableInNewTab',
+                    tableName: tableName,
+                    fkValue: fkValue
+                });
+            }
+
             function openFilePointer(fileName) {
                 vscode.postMessage({
                     command: 'openFilePointer',
@@ -2366,6 +2513,13 @@ export class SwatSingleTableViewerPanel {
                 }
             }
 
+            function togglePlantCommunitySection(communityName) {
+                const escapedCommunity = communityName.replace(/"/g, '\\"');
+                const section = document.querySelector('[data-community="' + escapedCommunity + '"]');
+                if (!section) return;
+
+                const header = section.querySelector('.plant-community-header');
+                const content = section.querySelector('.plant-community-content');
             function toggleDecisionTableSection(tableName) {
                 const escapedTable = tableName.replace(/"/g, '\\"');
                 const section = document.querySelector('[data-dtl="' + escapedTable + '"]');
@@ -2485,11 +2639,11 @@ export class SwatSingleTableViewerPanel {
             window.addEventListener('message', event => {
                 const message = event.data;
                 if (message.command === 'showFKRowData') {
-                    displayFKPeek(message.tableName, message.fkValue, message.fileName, message.columns, message.rowData, message.lineNumber, message.filePointers);
+                    displayFKPeek(message.tableName, message.fkValue, message.fileName, message.columns, message.rowData, message.lineNumber, message.filePointers, message.fkColumns);
                 }
             });
-
-            function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber, filePointers) {
+            
+            function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber, filePointers, fkColumns) {
                 // Find the specific FK cell that matches both table name AND FK value
                 const fkCells = document.querySelectorAll(\`td.fk-cell[data-fk-table="\${tableName}"][data-fk-value="\${fkValue}"]\`);
                 
@@ -2562,7 +2716,20 @@ export class SwatSingleTableViewerPanel {
                     columns.forEach(col => {
                         const td = document.createElement('td');
                         const value = rowData[col] || '';
-                        if (filePointers && Object.prototype.hasOwnProperty.call(filePointers, col) && value && value !== 'null') {
+                        if (fkColumns && Object.prototype.hasOwnProperty.call(fkColumns, col) && value && value !== 'null') {
+                            const fkInfo = fkColumns[col];
+                            const link = document.createElement('a');
+                            link.href = '#';
+                            link.className = 'fk-link';
+                            link.textContent = value;
+                            link.title = 'Open ' + fkInfo.targetTable + ' for ' + value;
+                            link.addEventListener('click', (event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                openTableInNewTab(fkInfo.targetTable, value);
+                            });
+                            td.appendChild(link);
+                        } else if (filePointers && Object.prototype.hasOwnProperty.call(filePointers, col) && value && value !== 'null') {
                             const link = document.createElement('a');
                             link.href = '#';
                             link.className = 'file-link';
@@ -2641,6 +2808,10 @@ export class SwatSingleTableViewerPanel {
                     }, 100);
                 }
 
+                const highlightedCommunity = document.getElementById('highlighted-community');
+                if (highlightedCommunity) {
+                    const header = highlightedCommunity.querySelector('.plant-community-header');
+                    const content = highlightedCommunity.querySelector('.plant-community-content');
                 const highlightedDecisionTable = document.getElementById('highlighted-dtl');
                 if (highlightedDecisionTable) {
                     const header = highlightedDecisionTable.querySelector('.dtl-header');
@@ -2651,6 +2822,7 @@ export class SwatSingleTableViewerPanel {
                     }
 
                     setTimeout(function() {
+                        highlightedCommunity.scrollIntoView({ behavior: 'smooth', block: 'start' });
                         highlightedDecisionTable.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }, 100);
                 }
