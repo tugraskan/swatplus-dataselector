@@ -23605,6 +23605,35 @@
       "notes": "Auto-generated for recall connectivity"
     }
   },
+  "composite_views": {
+    "DecisionTableComposite": {
+      "name": "DecisionTableComposite",
+      "description": "Composite view for decision tables (DTL) including conditions, actions, and their alternatives/outcomes.",
+      "main_table": "d_table_dtl",
+      "sections": [
+        {
+          "table": "d_table_dtl_cond",
+          "title": "Conditions",
+          "parent_table": "d_table_dtl"
+        },
+        {
+          "table": "d_table_dtl_cond_alt",
+          "title": "Condition Alternatives",
+          "parent_table": "d_table_dtl_cond"
+        },
+        {
+          "table": "d_table_dtl_act",
+          "title": "Actions",
+          "parent_table": "d_table_dtl"
+        },
+        {
+          "table": "d_table_dtl_act_out",
+          "title": "Action Outcomes",
+          "parent_table": "d_table_dtl_act"
+        }
+      ]
+    }
+  },
   "statistics": {
     "files_scanned": 55,
     "models_found": 256,

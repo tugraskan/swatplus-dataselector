@@ -95,6 +95,19 @@ export interface SchemaTable {
     notes: string;
 }
 
+export interface CompositeViewSection {
+    table: string;
+    title: string;
+    parent_table?: string;
+}
+
+export interface CompositeViewConfig {
+    name: string;
+    description?: string;
+    main_table: string;
+    sections: CompositeViewSection[];
+}
+
 export interface Schema {
     schema_version: string;
     source: {
@@ -103,6 +116,7 @@ export interface Schema {
         generated_on: string;
     };
     tables: { [fileName: string]: SchemaTable };
+    composite_views?: { [name: string]: CompositeViewConfig };
 }
 
 export interface IndexedRow {

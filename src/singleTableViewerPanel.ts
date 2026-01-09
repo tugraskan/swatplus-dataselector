@@ -9,6 +9,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
+import type { CompositeViewConfig, IndexedRow, Schema, SchemaTable } from './indexer';
 
 export class SwatSingleTableViewerPanel {
     private static panels: Map<string, SwatSingleTableViewerPanel> = new Map();
@@ -375,7 +376,7 @@ export class SwatSingleTableViewerPanel {
                 </div>
             </div>
             <div class="content">
-                ${this._getTableHtml(tableData, schemaTable)}
+                ${this._getTableHtml(tableData, schemaTable, schema)}
             </div>
             <script>
                 ${this._getScript()}
@@ -384,8 +385,9 @@ export class SwatSingleTableViewerPanel {
         </html>`;
     }
 
-    private _getTableHtml(tableData: Map<string, any>, schemaTable: any): string {
+    private _getTableHtml(tableData: Map<string, any>, schemaTable: any, schema: Schema): string {
         const rows = Array.from(tableData.values());
+        const fileName = this.indexer.getFileNameForTable(this.tableName) || this.tableName;
         
         // Special rendering for file.cio - use classification-based sub-table view
         if (this.tableName === 'file_cio') {
@@ -409,6 +411,10 @@ export class SwatSingleTableViewerPanel {
                 return '<p class="empty-message">No data</p>';
             }
             return this._getAtmoCliSubTableHtml(rows);
+        }
+
+        if (this._isDecisionTableView(this.tableName, fileName)) {
+            return this._getDecisionTableCompositeHtml(rows, schema, fileName);
         }
 
         // For empty tables, show table structure with headers from schema
@@ -443,7 +449,6 @@ export class SwatSingleTableViewerPanel {
 
         // Get file pointer columns from metadata
         const metadata = this.indexer.getMetadata();
-        const fileName = this.indexer.getFileNameForTable(this.tableName);
         const filePointers = metadata?.file_pointer_columns?.[fileName || ''] || {};
         const fileMetadata = metadata?.file_metadata?.[fileName || ''];
 
@@ -553,6 +558,477 @@ export class SwatSingleTableViewerPanel {
                 <tr>
                     <td colspan="${columns.length + 1}" class="truncated-message">
                         Showing first ${SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY} of ${rows.length} rows
+                    </td>
+                </tr>
+            `;
+        }
+
+        tableHtml += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        return tableHtml;
+    }
+
+    private _isDecisionTableView(tableName: string, fileName: string): boolean {
+        return tableName.toLowerCase().includes('dtl') || fileName.toLowerCase().endsWith('.dtl');
+    }
+
+    private _getDecisionTableCompositeConfig(schema: Schema): CompositeViewConfig {
+        const defaultConfig: CompositeViewConfig = {
+            name: 'DecisionTableComposite',
+            description: 'Composite view for decision tables (DTL) including conditions, actions, and their alternatives/outcomes.',
+            main_table: 'd_table_dtl',
+            sections: [
+                { table: 'd_table_dtl_cond', title: 'Conditions', parent_table: 'd_table_dtl' },
+                { table: 'd_table_dtl_cond_alt', title: 'Condition Alternatives', parent_table: 'd_table_dtl_cond' },
+                { table: 'd_table_dtl_act', title: 'Actions', parent_table: 'd_table_dtl' },
+                { table: 'd_table_dtl_act_out', title: 'Action Outcomes', parent_table: 'd_table_dtl_act' }
+            ]
+        };
+
+        return schema.composite_views?.DecisionTableComposite || defaultConfig;
+    }
+
+    private _getSchemaTableForTable(schema: Schema, tableName: string): SchemaTable | undefined {
+        const fileName = this.indexer.getFileNameForTable(tableName) || tableName;
+        return schema.tables[fileName];
+    }
+
+    private _getJoinInfo(schema: Schema, childTableName: string, parentTableName: string): { childColumn: string; parentColumn: string } | undefined {
+        const childSchema = this._getSchemaTableForTable(schema, childTableName);
+        const fk = childSchema?.foreign_keys?.find((foreignKey) => foreignKey.references.table === parentTableName);
+        if (!fk) {
+            return undefined;
+        }
+
+        return {
+            childColumn: fk.column,
+            parentColumn: fk.references.column || 'id'
+        };
+    }
+
+    private _normalizeKey(value: string | number | undefined | null): string {
+        if (value === undefined || value === null) {
+            return '';
+        }
+        return String(value).toLowerCase();
+    }
+
+    private _getRowKey(row: IndexedRow, columnName?: string): string {
+        if (columnName && row.values && columnName in row.values) {
+            return this._normalizeKey(row.values[columnName]);
+        }
+        return this._normalizeKey(row.pkValue);
+    }
+
+    private _groupRowsByColumn(rows: IndexedRow[], columnName: string): Map<string, IndexedRow[]> {
+        const grouped = new Map<string, IndexedRow[]>();
+
+        for (const row of rows) {
+            const key = this._normalizeKey(row.values?.[columnName]);
+            if (!grouped.has(key)) {
+                grouped.set(key, []);
+            }
+            grouped.get(key)!.push(row);
+        }
+
+        return grouped;
+    }
+
+    private _getDecisionTableCompositeHtml(rows: IndexedRow[], schema: Schema, fileName: string): string {
+        const compositeConfig = this._getDecisionTableCompositeConfig(schema);
+        const indexData = this.indexer.getIndexData();
+        const metadata = this.indexer.getMetadata();
+        const fileMetadata = metadata?.file_metadata?.[fileName];
+
+        const mainTableName = this.tableName;
+        const mainSchemaTable = this._getSchemaTableForTable(schema, mainTableName);
+
+        const sectionsByTable = new Map(compositeConfig.sections.map((section) => [section.table, section]));
+        const conditionsSection = sectionsByTable.get('d_table_dtl_cond');
+        const conditionAltSection = sectionsByTable.get('d_table_dtl_cond_alt');
+        const actionsSection = sectionsByTable.get('d_table_dtl_act');
+        const actionOutSection = sectionsByTable.get('d_table_dtl_act_out');
+
+        const conditionTable = conditionsSection?.table || 'd_table_dtl_cond';
+        const conditionAltTable = conditionAltSection?.table || 'd_table_dtl_cond_alt';
+        const actionTable = actionsSection?.table || 'd_table_dtl_act';
+        const actionOutTable = actionOutSection?.table || 'd_table_dtl_act_out';
+
+        const conditionRows = Array.from(indexData.get(conditionTable)?.values() || []);
+        const conditionAltRows = Array.from(indexData.get(conditionAltTable)?.values() || []);
+        const actionRows = Array.from(indexData.get(actionTable)?.values() || []);
+        const actionOutRows = Array.from(indexData.get(actionOutTable)?.values() || []);
+
+        const conditionJoin = this._getJoinInfo(schema, conditionTable, mainTableName);
+        const conditionAltJoin = this._getJoinInfo(schema, conditionAltTable, conditionTable);
+        const actionJoin = this._getJoinInfo(schema, actionTable, mainTableName);
+        const actionOutJoin = this._getJoinInfo(schema, actionOutTable, actionTable);
+
+        const conditionsByDecision = conditionJoin
+            ? this._groupRowsByColumn(conditionRows, conditionJoin.childColumn)
+            : new Map<string, IndexedRow[]>();
+        const conditionAltsByCondition = conditionAltJoin
+            ? this._groupRowsByColumn(conditionAltRows, conditionAltJoin.childColumn)
+            : new Map<string, IndexedRow[]>();
+        const actionsByDecision = actionJoin
+            ? this._groupRowsByColumn(actionRows, actionJoin.childColumn)
+            : new Map<string, IndexedRow[]>();
+        const actionOutsByAction = actionOutJoin
+            ? this._groupRowsByColumn(actionOutRows, actionOutJoin.childColumn)
+            : new Map<string, IndexedRow[]>();
+
+        let html = '';
+
+        if (fileMetadata?.description) {
+            html += `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
+        }
+
+        html += `<div class="decision-table-view">`;
+
+        if (rows.length === 0) {
+            html += `<p class="empty-message">No decision tables found</p>`;
+        }
+
+        for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
+            const recordId = this._makeSectionId(['decision-table', row.pkValue, row.lineNumber]);
+            const recordName = row.values?.name || row.values?.file_name || row.pkValue || 'Decision Table';
+            const recordFile = row.values?.file_name ? `File: ${row.values.file_name}` : '';
+            const recordDescription = row.values?.description ? `Description: ${row.values.description}` : '';
+            const recordMeta = [recordFile, recordDescription].filter(Boolean).join(' • ');
+
+            const decisionKeyForConditions = conditionJoin ? this._getRowKey(row, conditionJoin.parentColumn) : this._getRowKey(row);
+            const decisionKeyForActions = actionJoin ? this._getRowKey(row, actionJoin.parentColumn) : this._getRowKey(row);
+            const conditionRowsForDecision = conditionJoin ? conditionsByDecision.get(decisionKeyForConditions) || [] : [];
+            const actionRowsForDecision = actionJoin ? actionsByDecision.get(decisionKeyForActions) || [] : [];
+
+            html += `
+                <div class="decision-table-record decision-table-toggle" data-section-id="${this._escapeHtml(recordId)}">
+                    <div class="decision-table-toggle-header decision-table-record-header" onclick="toggleDecisionTableSection('${this._escapeJs(recordId)}')">
+                        <span class="toggle-icon">▼</span>
+                        <span class="decision-table-record-title">
+                            <a href="#" onclick="event.stopPropagation(); navigateToFile('${this._escapeJs(row.file)}', ${row.lineNumber}); return false;" class="line-link" title="Go to line ${row.lineNumber}">
+                                ${this._escapeHtml(recordName)}
+                            </a>
+                        </span>
+                        ${recordMeta ? `<span class="decision-table-record-meta">${this._escapeHtml(recordMeta)}</span>` : ''}
+                    </div>
+                    <div class="decision-table-toggle-content decision-table-record-content">
+                        ${this._renderDataTable([row], mainTableName, mainSchemaTable, { useSchemaOrder: true, maxRows: 1 })}
+                        ${this._renderDecisionTableSection({
+                            sectionId: this._makeSectionId([recordId, 'conditions']),
+                            title: conditionsSection?.title || 'Conditions',
+                            rows: conditionRowsForDecision,
+                            tableName: conditionTable,
+                            schemaTable: this._getSchemaTableForTable(schema, conditionTable),
+                            nestedTitle: conditionAltSection?.title || 'Condition Alternatives',
+                            nestedTableName: conditionAltTable,
+                            nestedSchemaTable: this._getSchemaTableForTable(schema, conditionAltTable),
+                            nestedJoin: conditionAltJoin,
+                            nestedRows: conditionAltsByCondition
+                        })}
+                        ${this._renderDecisionTableSection({
+                            sectionId: this._makeSectionId([recordId, 'actions']),
+                            title: actionsSection?.title || 'Actions',
+                            rows: actionRowsForDecision,
+                            tableName: actionTable,
+                            schemaTable: this._getSchemaTableForTable(schema, actionTable),
+                            nestedTitle: actionOutSection?.title || 'Action Outcomes',
+                            nestedTableName: actionOutTable,
+                            nestedSchemaTable: this._getSchemaTableForTable(schema, actionOutTable),
+                            nestedJoin: actionOutJoin,
+                            nestedRows: actionOutsByAction
+                        })}
+                    </div>
+                </div>
+            `;
+        }
+
+        if (rows.length > SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY) {
+            html += `<p class="truncated-message">Showing first ${SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY} of ${rows.length} decision tables</p>`;
+        }
+
+        html += `</div>`;
+
+        return html;
+    }
+
+    private _renderDecisionTableSection({
+        sectionId,
+        title,
+        rows,
+        tableName,
+        schemaTable,
+        nestedTitle,
+        nestedTableName,
+        nestedSchemaTable,
+        nestedJoin,
+        nestedRows
+    }: {
+        sectionId: string;
+        title: string;
+        rows: IndexedRow[];
+        tableName: string;
+        schemaTable?: SchemaTable;
+        nestedTitle?: string;
+        nestedTableName?: string;
+        nestedSchemaTable?: SchemaTable;
+        nestedJoin?: { childColumn: string; parentColumn: string };
+        nestedRows?: Map<string, IndexedRow[]>;
+    }): string {
+        const rowCountLabel = `${rows.length} row${rows.length === 1 ? '' : 's'}`;
+        let html = `
+            <div class="decision-table-section decision-table-toggle" data-section-id="${this._escapeHtml(sectionId)}">
+                <div class="decision-table-toggle-header decision-table-section-header" onclick="toggleDecisionTableSection('${this._escapeJs(sectionId)}')">
+                    <span class="toggle-icon">▼</span>
+                    <span class="decision-table-section-title">${this._escapeHtml(title)}</span>
+                    <span class="decision-table-section-count">${rowCountLabel}</span>
+                </div>
+                <div class="decision-table-toggle-content decision-table-section-content">
+        `;
+
+        if (rows.length === 0) {
+            html += `<p class="empty-message">No ${this._escapeHtml(title.toLowerCase())}</p>`;
+        } else {
+            for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
+                const rowId = this._makeSectionId([sectionId, row.pkValue, row.lineNumber]);
+                const rowLabel = this._getDecisionTableRowLabel(row, tableName);
+                const nestedRowsForRow = nestedJoin && nestedRows
+                    ? nestedRows.get(this._getRowKey(row, nestedJoin.parentColumn)) || []
+                    : [];
+
+                html += `
+                    <div class="decision-table-row-group decision-table-toggle" data-section-id="${this._escapeHtml(rowId)}">
+                        <div class="decision-table-toggle-header decision-table-row-header" onclick="toggleDecisionTableSection('${this._escapeJs(rowId)}')">
+                            <span class="toggle-icon">▼</span>
+                            <span class="decision-table-row-title">
+                                <a href="#" onclick="event.stopPropagation(); navigateToFile('${this._escapeJs(row.file)}', ${row.lineNumber}); return false;" class="line-link" title="Go to line ${row.lineNumber}">
+                                    ${this._escapeHtml(rowLabel)}
+                                </a>
+                            </span>
+                        </div>
+                        <div class="decision-table-toggle-content decision-table-row-content">
+                            ${this._renderDataTable([row], tableName, schemaTable, { useSchemaOrder: true, maxRows: 1 })}
+                            ${nestedTitle && nestedTableName && nestedSchemaTable
+                                ? this._renderDecisionTableNestedSection({
+                                    sectionId: this._makeSectionId([rowId, 'nested']),
+                                    title: nestedTitle,
+                                    rows: nestedRowsForRow,
+                                    tableName: nestedTableName,
+                                    schemaTable: nestedSchemaTable
+                                })
+                                : ''
+                            }
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (rows.length > SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY) {
+                html += `<p class="truncated-message">Showing first ${SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY} of ${rows.length} rows</p>`;
+            }
+        }
+
+        html += `
+                </div>
+            </div>
+        `;
+
+        return html;
+    }
+
+    private _renderDecisionTableNestedSection({
+        sectionId,
+        title,
+        rows,
+        tableName,
+        schemaTable
+    }: {
+        sectionId: string;
+        title: string;
+        rows: IndexedRow[];
+        tableName: string;
+        schemaTable?: SchemaTable;
+    }): string {
+        return `
+            <div class="decision-table-nested-section decision-table-toggle" data-section-id="${this._escapeHtml(sectionId)}">
+                <div class="decision-table-toggle-header decision-table-nested-header" onclick="toggleDecisionTableSection('${this._escapeJs(sectionId)}')">
+                    <span class="toggle-icon">▼</span>
+                    <span class="decision-table-section-title">${this._escapeHtml(title)}</span>
+                    <span class="decision-table-section-count">${rows.length} row${rows.length === 1 ? '' : 's'}</span>
+                </div>
+                <div class="decision-table-toggle-content decision-table-nested-content">
+                    ${rows.length > 0
+                        ? this._renderDataTable(rows, tableName, schemaTable, { useSchemaOrder: true })
+                        : `<p class="empty-message">No ${this._escapeHtml(title.toLowerCase())}</p>`
+                    }
+                </div>
+            </div>
+        `;
+    }
+
+    private _getDecisionTableRowLabel(row: IndexedRow, tableName: string): string {
+        const labelCandidates = ['name', 'var', 'obj', 'act', 'op', 'decision', 'id'];
+        for (const candidate of labelCandidates) {
+            const value = row.values?.[candidate];
+            if (value) {
+                return `${tableName.replace(/_/g, ' ')}: ${value}`;
+            }
+        }
+        return `${tableName.replace(/_/g, ' ')}: ${row.pkValue}`;
+    }
+
+    private _makeSectionId(parts: Array<string | number | undefined>): string {
+        return parts
+            .filter((part) => part !== undefined && part !== null && part !== '')
+            .join('-')
+            .replace(/[^a-zA-Z0-9_-]/g, '_');
+    }
+
+    private _getOrderedColumns(rows: IndexedRow[], schemaTable?: SchemaTable, useSchemaOrder?: boolean): string[] {
+        if (rows.length === 0) {
+            return [];
+        }
+
+        if (!useSchemaOrder || !schemaTable?.columns) {
+            return Object.keys(rows[0].values || {});
+        }
+
+        const rowValues = rows[0].values || {};
+        const orderedColumns = schemaTable.columns
+            .map((column) => column.name)
+            .filter((columnName) => columnName in rowValues);
+
+        return orderedColumns.length > 0 ? orderedColumns : Object.keys(rowValues);
+    }
+
+    private _renderDataTable(
+        rows: IndexedRow[],
+        tableName: string,
+        schemaTable?: SchemaTable,
+        options?: { useSchemaOrder?: boolean; maxRows?: number }
+    ): string {
+        if (rows.length === 0) {
+            return '<p class="empty-message">No data</p>';
+        }
+
+        const columns = this._getOrderedColumns(rows, schemaTable, options?.useSchemaOrder);
+        const columnMetadata = new Map<string, any>();
+        if (schemaTable?.columns) {
+            schemaTable.columns.forEach((col: any) => {
+                columnMetadata.set(col.name, col);
+            });
+        }
+
+        const fkColumns = new Map<string, any>();
+        if (schemaTable?.foreign_keys && tableName !== 'file_cio') {
+            schemaTable.foreign_keys.forEach((fk: any) => {
+                fkColumns.set(fk.column, fk);
+            });
+        }
+
+        const metadata = this.indexer.getMetadata();
+        const fileName = this.indexer.getFileNameForTable(tableName) || tableName;
+        const filePointers = metadata?.file_pointer_columns?.[fileName || ''] || {};
+        const maxRows = options?.maxRows || SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY;
+
+        let tableHtml = `
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th class="line-col">Line</th>
+                            ${columns.map((col) => {
+                                const colMeta = columnMetadata.get(col);
+                                const fkInfo = fkColumns.get(col);
+                                const isFilePointer = typeof filePointers === 'object' && col in filePointers;
+
+                                let tooltip = col;
+                                if (colMeta) {
+                                    tooltip += `\nType: ${colMeta.type}`;
+                                    if (colMeta.nullable) {
+                                        tooltip += ' (nullable)';
+                                    }
+                                }
+                                if (fkInfo) {
+                                    tooltip += `\nForeign Key → ${fkInfo.references.table}`;
+                                }
+                                if (isFilePointer && typeof filePointers === 'object') {
+                                    const pointerDesc = filePointers[col];
+                                    if (pointerDesc && pointerDesc !== 'description') {
+                                        tooltip += `\n${pointerDesc}`;
+                                    }
+                                }
+
+                                return `
+                                <th class="${fkInfo ? 'fk-col' : ''}" title="${this._escapeHtml(tooltip)}">
+                                    ${col}
+                                    ${fkInfo ? '<span class="fk-indicator" title="Foreign Key">🔗</span>' : ''}
+                                    ${isFilePointer ? '<span class="file-pointer-indicator" title="File Pointer">📄</span>' : ''}
+                                </th>
+                            `;
+                            }).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        for (const row of rows.slice(0, maxRows)) {
+            tableHtml += `<tr>`;
+            tableHtml += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(row.file)}', ${row.lineNumber})">${row.lineNumber}</a></td>`;
+
+            for (const col of columns) {
+                const value = row.values[col] || '';
+                const fkInfo = fkColumns.get(col);
+                const isFilePointer = typeof filePointers === 'object' && col in filePointers;
+
+                if (tableName === 'file_cio' && col === 'file_name' && value && value !== 'null' && value.includes('.')) {
+                    const canOpen = this.canOpenFile(value);
+                    const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
+                    const title = canOpen ? `Click to open ${this._escapeHtml(value)}` : `${this._escapeHtml(value)} - Not indexed (may not exist in dataset)`;
+                    tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByName('${this._escapeJs(value)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                } else if (isFilePointer && value && value !== 'null') {
+                    const mappedTableName = this.indexer.getTableNameFromFile(value);
+                    const canOpenTable = mappedTableName ? this.indexer.isTableIndexed(mappedTableName) : false;
+                    if (canOpenTable) {
+                        const canOpen = this.canOpenFile(value);
+                        const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
+                        const title = canOpen ? `Click to open ${this._escapeHtml(value)}` : `${this._escapeHtml(value)} - Not indexed (may not exist in dataset)`;
+                        tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByName('${this._escapeJs(value)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                    } else {
+                        const { canOpen, filePath } = this.canOpenFilePointer(value);
+                        const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
+                        const title = canOpen ? `Click to open ${this._escapeHtml(value)}` : `${this._escapeHtml(value)} - File not found in TxtInOut`;
+                        if (canOpen && filePath) {
+                            tableHtml += `<td class="file-link-cell"><a href="#" onclick="openInputFile('${this._escapeJs(filePath)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                        } else {
+                            tableHtml += `<td class="file-link-cell"><span class="${linkClass}" title="${title}">${this._escapeHtml(value)}</span></td>`;
+                        }
+                    }
+                } else if (fkInfo && value) {
+                    const targetRow = this.indexer.resolveFKTarget(fkInfo.references.table, value);
+                    if (targetRow) {
+                        const fileNameForFk = this.indexer.getFileNameForTable(fkInfo.references.table) || fkInfo.references.table;
+                        tableHtml += `<td class="fk-cell" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileNameForFk)}"><a href="#" onclick="toggleFKPeek(this, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" oncontextmenu="showFKContextMenu(event, '${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber}, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
+                    } else {
+                        tableHtml += `<td class="fk-cell unresolved" title="Unresolved FK to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</td>`;
+                    }
+                } else {
+                    tableHtml += `<td>${this._escapeHtml(value)}</td>`;
+                }
+            }
+
+            tableHtml += `</tr>`;
+        }
+
+        if (rows.length > maxRows) {
+            tableHtml += `
+                <tr>
+                    <td colspan="${columns.length + 1}" class="truncated-message">
+                        Showing first ${maxRows} of ${rows.length} rows
                     </td>
                 </tr>
             `;
@@ -1252,6 +1728,102 @@ export class SwatSingleTableViewerPanel {
             .broken-link:hover {
                 color: #f14c28 !important;
             }
+            /* Decision table composite view */
+            .decision-table-view {
+                margin: 16px 0;
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+            }
+            .decision-table-record {
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                overflow: hidden;
+            }
+            .decision-table-toggle-header {
+                padding: 12px 16px;
+                background-color: var(--vscode-editor-background);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                user-select: none;
+                transition: background-color 0.2s;
+            }
+            .decision-table-toggle-header:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            .decision-table-toggle-header.collapsed .toggle-icon {
+                transform: rotate(-90deg);
+            }
+            .decision-table-toggle-content {
+                max-height: 2000px;
+                overflow-y: auto;
+                transition: max-height 0.3s ease-out;
+                padding: 12px 16px;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+            .decision-table-toggle-content.collapsed {
+                max-height: 0;
+                overflow: hidden;
+                padding: 0 16px;
+            }
+            .decision-table-record-title {
+                font-weight: 600;
+                flex: 0 0 auto;
+            }
+            .decision-table-record-title .line-link {
+                color: var(--vscode-foreground);
+                text-decoration: none;
+            }
+            .decision-table-record-title .line-link:hover {
+                color: var(--vscode-textLink-activeForeground);
+                text-decoration: underline;
+            }
+            .decision-table-record-meta {
+                font-size: 0.85em;
+                color: var(--vscode-descriptionForeground);
+                flex: 1;
+            }
+            .decision-table-section {
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                overflow: hidden;
+                background-color: var(--vscode-editor-background);
+            }
+            .decision-table-section-title {
+                font-weight: 600;
+                flex: 1;
+            }
+            .decision-table-section-count {
+                font-size: 0.8em;
+                color: var(--vscode-descriptionForeground);
+            }
+            .decision-table-row-group {
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                overflow: hidden;
+                background-color: var(--vscode-editor-background);
+            }
+            .decision-table-row-title {
+                font-weight: 500;
+            }
+            .decision-table-row-title .line-link {
+                color: var(--vscode-foreground);
+                text-decoration: none;
+            }
+            .decision-table-row-title .line-link:hover {
+                color: var(--vscode-textLink-activeForeground);
+                text-decoration: underline;
+            }
+            .decision-table-nested-section {
+                border: 1px dashed var(--vscode-panel-border);
+                border-radius: 4px;
+                overflow: hidden;
+                background-color: var(--vscode-editor-background);
+            }
             /* Classification-based sub-table view for file.cio */
             .file-cio-subtables {
                 margin: 16px 0;
@@ -1776,6 +2348,24 @@ export class SwatSingleTableViewerPanel {
                 const header = section.querySelector('.atmo-station-header');
                 const content = section.querySelector('.atmo-station-content');
                 
+                if (content.classList.contains('collapsed')) {
+                    content.classList.remove('collapsed');
+                    header.classList.remove('collapsed');
+                } else {
+                    content.classList.add('collapsed');
+                    header.classList.add('collapsed');
+                }
+            }
+
+            function toggleDecisionTableSection(sectionId) {
+                const section = document.querySelector('[data-section-id="' + sectionId + '"]');
+                if (!section) return;
+
+                const header = section.querySelector('.decision-table-toggle-header');
+                const content = section.querySelector('.decision-table-toggle-content');
+
+                if (!header || !content) return;
+
                 if (content.classList.contains('collapsed')) {
                     content.classList.remove('collapsed');
                     header.classList.remove('collapsed');
