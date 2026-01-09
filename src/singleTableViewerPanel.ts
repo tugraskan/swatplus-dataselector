@@ -511,7 +511,7 @@ export class SwatSingleTableViewerPanel {
                     const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
                     const title = canOpen ? `Click to open ${this._escapeHtml(value)}` : `${this._escapeHtml(value)} - Not indexed (may not exist in dataset)`;
                     tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByName('${this._escapeJs(value)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
-                } else if (isFilePointer && value && value !== 'null') {
+                } else if (isFilePointer && value && value !== 'null' && value.includes('.')) {
                     const mappedTableName = this.indexer.getTableNameFromFile(value);
                     const canOpenTable = mappedTableName ? this.indexer.isTableIndexed(mappedTableName) : false;
                     if (canOpenTable) {
