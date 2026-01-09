@@ -735,6 +735,13 @@
           "description": "Pointer to the land use and management file"
         },
         {
+          "column": "soil_plant_init",
+          "is_fk": true,
+          "is_pointer": true,
+          "target_file": "soil_plant.ini",
+          "description": "Pointer to the soil and plant initialization file"
+        },
+        {
           "column": "surf_stor",
           "is_fk": true,
           "is_pointer": true,
