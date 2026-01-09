@@ -704,6 +704,10 @@ export class SwatIndexer {
      */
     public getTableNameFromFile(filePath: string): string | undefined {
         const fileName = path.basename(filePath).toLowerCase();
+
+        if (fileName.endsWith('.dtl')) {
+            return 'd_table_dtl';
+        }
         
         // Search through the tableToFileMap to find matching table
         for (const [tableName, mappedFileName] of this.tableToFileMap.entries()) {
