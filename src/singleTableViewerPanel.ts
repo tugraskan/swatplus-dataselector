@@ -362,7 +362,7 @@ export class SwatSingleTableViewerPanel {
     private _update() {
         const webview = this._panel.webview;
         const resolvedFileName = this.indexer.getFileNameForTable(this.tableName) || this.tableName;
-        this._panel.title = `SWAT+ Table: ${fileName}`;
+        this._panel.title = `SWAT+ Table: ${resolvedFileName}`;
         this._panel.webview.html = this._getHtmlForWebview(webview);
     }
 
@@ -382,7 +382,7 @@ export class SwatSingleTableViewerPanel {
         
         // Allow empty tables to render with their structure
         const resolvedFileName = this.indexer.getFileNameForTable(this.tableName) || this.tableName;
-        const schemaTable = fileName && schema.tables[fileName] ? schema.tables[fileName] : undefined;
+        const schemaTable = resolvedFileName && schema.tables[resolvedFileName] ? schema.tables[resolvedFileName] : undefined;
         const rowCount = tableData.size;
 
         return `<!DOCTYPE html>
@@ -390,7 +390,7 @@ export class SwatSingleTableViewerPanel {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>SWAT+ Table: ${fileName}</title>
+            <title>SWAT+ Table: ${resolvedFileName}</title>
             <style>
                 ${this._getStyles()}
             </style>
@@ -399,10 +399,10 @@ export class SwatSingleTableViewerPanel {
             <div class="header">
                 <h1>
                     ${this.tableName}
-                    ${this._getGitbookLink(fileName)}
+                    ${this._getGitbookLink(resolvedFileName)}
                 </h1>
                 <div class="stats">
-                    <span class="stat-item">File: <a href="#" onclick="openFileForTable('${this._escapeJs(this.tableName)}'); return false;" class="file-link" title="Click to open file">${fileName}</a></span>
+                    <span class="stat-item">File: <a href="#" onclick="openFileForTable('${this._escapeJs(this.tableName)}'); return false;" class="file-link" title="Click to open file">${resolvedFileName}</a></span>
                     ${this.tableName !== 'file_cio' ? `<span class="stat-item">Rows: ${rowCount}</span>` : ''}
                 </div>
             </div>
