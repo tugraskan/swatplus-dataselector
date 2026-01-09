@@ -361,7 +361,7 @@ export class SwatSingleTableViewerPanel {
 
     private _update() {
         const webview = this._panel.webview;
-        const fileName = this.indexer.getFileNameForTable(this.tableName) || this.tableName;
+        const resolvedFileName = this.indexer.getFileNameForTable(this.tableName) || this.tableName;
         this._panel.title = `SWAT+ Table: ${fileName}`;
         this._panel.webview.html = this._getHtmlForWebview(webview);
     }
@@ -381,7 +381,7 @@ export class SwatSingleTableViewerPanel {
         const tableData = indexData.get(this.tableName) || new Map<string, any>();
         
         // Allow empty tables to render with their structure
-        const fileName = this.indexer.getFileNameForTable(this.tableName) || this.tableName;
+        const resolvedFileName = this.indexer.getFileNameForTable(this.tableName) || this.tableName;
         const schemaTable = fileName && schema.tables[fileName] ? schema.tables[fileName] : undefined;
         const rowCount = tableData.size;
 
@@ -418,7 +418,7 @@ export class SwatSingleTableViewerPanel {
 
     private _getTableHtml(tableData: Map<string, any>, schemaTable: any): string {
         const rows = Array.from(tableData.values());
-        const fileName = this.indexer.getFileNameForTable(this.tableName) || this.tableName;
+        const resolvedFileName = this.indexer.getFileNameForTable(this.tableName) || this.tableName;
         
         // Special rendering for file.cio - use classification-based sub-table view
         if (this.tableName === 'file_cio') {
@@ -453,11 +453,11 @@ export class SwatSingleTableViewerPanel {
         }
 
         // Special rendering for decision table files (*.dtl) - use profile-based sub-table view
-        if (fileName.endsWith('.dtl')) {
+        if (resolvedFileName.endsWith('.dtl')) {
             if (rows.length === 0) {
                 return '<p class="empty-message">No data</p>';
             }
-            return this._getDecisionTableSubTableHtml(rows, fileName);
+            return this._getDecisionTableSubTableHtml(rows, resolvedFileName);
         }
 
         // For empty tables, show table structure with headers from schema
