@@ -11,6 +11,12 @@ Enhanced to handle:
 - Hierarchical files (soils.sol, plant.ini, management.sch)
 - Decision table files (*.dtl)
 - file.cio parsing
+
+Optimizations:
+- Vectorized pandas operations for efficient FK reference building
+- Single file read per file (eliminates redundant I/O)
+- Simplified helper functions for better maintainability
+- Consolidated FK processing logic
 """
 
 from __future__ import annotations
@@ -37,6 +43,57 @@ def load_json(path: Path) -> dict:
         return json.load(handle)
 
 
+def _normalize_columns(
+    schema_columns: List[str],
+    schema_columns_all: List[str], 
+    table: dict,
+    lines: List[str],
+    start_line: int,
+    file_name: str
+) -> List[str]:
+    """
+    Normalize column names from file header or use schema columns.
+    
+    Returns the list of column names to use for parsing.
+    """
+    # Default to schema columns
+    if not table.get("has_header_line") or not lines:
+        return schema_columns
+    
+    header_index = max(start_line - 1, 0)
+    if header_index >= len(lines):
+        return schema_columns
+    
+    header_line = lines[header_index].strip()
+    if not header_line:
+        return schema_columns
+    
+    header_columns = [col.strip() for col in header_line.split()]
+    if not header_columns:
+        return schema_columns
+    
+    # Handle plant.ini special column name mapping
+    if file_name == "plant.ini":
+        plant_header_map = {
+            "pcom_name": "name",
+            "plt_cnt": "plnt_cnt",
+            "plt_name": "plnt_name"
+        }
+        return [plant_header_map.get(col.lower(), col.lower()) for col in header_columns]
+    
+    # Try exact match first
+    if all(col in schema_columns_all for col in header_columns):
+        return header_columns
+    
+    # Try lowercase match
+    header_lower = [col.lower() for col in header_columns]
+    if all(col in schema_columns_all for col in header_lower):
+        return header_lower
+    
+    # Fall back to schema columns
+    return schema_columns
+
+
 def is_hierarchical_file(file_name: str, metadata: dict) -> bool:
     """Check if a file is hierarchical (multi-line records)."""
     hierarchical_files = metadata.get("hierarchical_files", {})
@@ -52,67 +109,58 @@ def get_hierarchical_config(file_name: str, metadata: dict) -> Optional[dict]:
 
 
 def get_child_line_count(value_map: Dict[str, str], config: dict, file_name: str) -> int:
-    """Determine the number of child lines for a hierarchical record."""
+    """
+    Determine the number of child lines for a hierarchical record.
+    
+    Returns the count capped at MAX_CHILD_LINES for safety.
+    """
     structure = config.get("structure", {})
     
     # Check for fixed child line count first (e.g., weather-wgn.cli has 13 fixed lines)
     fixed_count = structure.get("child_line_count_fixed")
     if fixed_count is not None and fixed_count > 0:
-        if fixed_count > MAX_CHILD_LINES:
-            return MAX_CHILD_LINES
-        return fixed_count
+        return min(fixed_count, MAX_CHILD_LINES)
     
     # Otherwise, check for dynamic child line count from a field
     count_field = structure.get("child_line_count_field")
-    
     if not count_field:
         return 0
-    
-    # Handle special case for multiple fields (e.g., "numb_auto+numb_ops")
-    if '+' in count_field:
-        fields = [f.strip() for f in count_field.split('+')]
-        total_count = 0
-        
-        for field in fields:
-            if field in value_map:
-                try:
-                    count = int(value_map[field])
-                    if count > 0:
-                        total_count += count
-                except ValueError:
-                    pass
-        
-        # Sanity check: prevent excessive line skipping
-        if total_count < 0:
-            return 0
-        if total_count > MAX_CHILD_LINES:
-            return MAX_CHILD_LINES
-        
-        return total_count
     
     # Handle plant.ini alternate count field name
     if file_name == "plant.ini" and count_field not in value_map and "plt_cnt" in value_map:
         count_field = "plt_cnt"
-
-    # Handle single field case with optional multiplier
-    if count_field in value_map:
-        try:
-            count = int(value_map[count_field])
-            
-            # Apply multiplier if specified (e.g., for atmo.cli: num_sta * 5)
-            multiplier = structure.get("child_line_count_multiplier", 1)
-            count = count * multiplier
-            
-            if count < 0:
-                return 0
-            if count > MAX_CHILD_LINES:
-                return MAX_CHILD_LINES
-            
-            return count
-        except ValueError:
-            return 0
     
-    return 0
+    # Handle multiple fields (e.g., "numb_auto+numb_ops")
+    if '+' in count_field:
+        return _parse_multi_field_count(value_map, count_field)
+    
+    # Handle single field case with optional multiplier
+    return _parse_single_field_count(value_map, count_field, structure)
+
+
+def _parse_multi_field_count(value_map: Dict[str, str], count_field: str) -> int:
+    """Parse child count from multiple fields."""
+    fields = [f.strip() for f in count_field.split('+')]
+    total_count = sum(
+        int(value_map[field]) 
+        for field in fields 
+        if field in value_map and value_map[field].isdigit() and int(value_map[field]) > 0
+    )
+    return min(max(0, total_count), MAX_CHILD_LINES)
+
+
+def _parse_single_field_count(value_map: Dict[str, str], count_field: str, structure: dict) -> int:
+    """Parse child count from a single field with optional multiplier."""
+    if count_field not in value_map:
+        return 0
+    
+    try:
+        count = int(value_map[count_field])
+        multiplier = structure.get("child_line_count_multiplier", 1)
+        total = count * multiplier
+        return min(max(0, total), MAX_CHILD_LINES)
+    except ValueError:
+        return 0
 
 
 def is_main_record_line(value_map: Dict[str, str], file_name: str, tokens: List[str]) -> bool:
@@ -178,27 +226,9 @@ def parse_lines_to_dataframe(
     with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
         lines = handle.readlines()
 
-    columns = schema_columns
-    if table.get("has_header_line") and lines:
-        header_index = max(start_line - 1, 0)
-        if header_index < len(lines):
-            header_line = lines[header_index].strip()
-            if header_line:
-                header_columns = [col.strip() for col in header_line.split()]
-                if header_columns:
-                    if file_name == "plant.ini":
-                        plant_header_map = {
-                            "pcom_name": "name",
-                            "plt_cnt": "plnt_cnt",
-                            "plt_name": "plnt_name"
-                        }
-                        columns = [plant_header_map.get(col.lower(), col.lower()) for col in header_columns]
-                    elif all(col in schema_columns_all for col in header_columns):
-                        columns = header_columns
-                    else:
-                        header_lower = [col.lower() for col in header_columns]
-                        if all(col in schema_columns_all for col in header_lower):
-                            columns = header_lower
+    columns = _normalize_columns(
+        schema_columns, schema_columns_all, table, lines, start_line, file_name
+    )
     
     i = start_line
     while i < len(lines):
@@ -275,21 +305,48 @@ def build_fk_references(
     fk_null_values: List[str],
     metadata: dict
 ) -> List[dict]:
+    """
+    Build FK references from a DataFrame.
+    
+    Uses vectorized pandas operations for efficiency.
+    """
     references: List[dict] = []
     null_set = {val.lower() for val in fk_null_values}
     
     # Get the default target column for TxtInOut FK references
     txtinout_target_column = metadata.get("txtinout_fk_behavior", {}).get("default_target_column", "name")
     
-    # Get file pointer columns to skip (these point to files, not FK references)
+    # Get file pointer columns to skip
     file_name = file_path.name
-    file_pointer_config = metadata.get("file_pointer_columns", {}).get(file_name, {})
-    file_pointer_columns = set()
-    if isinstance(file_pointer_config, dict):
-        # Extract column names from the config (exclude the description key if present)
-        file_pointer_columns = {col for col in file_pointer_config.keys() if col != "description"}
+    file_pointer_columns = _get_file_pointer_columns(file_name, metadata)
 
     # Process schema-defined foreign keys
+    _process_schema_fks(df, table, file_path, null_set, file_pointer_columns, txtinout_target_column, references)
+    
+    # Process markdown-derived FK relationships
+    _process_markdown_fks(df, table, file_path, file_name, null_set, metadata, txtinout_target_column, references)
+
+    return references
+
+
+def _get_file_pointer_columns(file_name: str, metadata: dict) -> set:
+    """Extract file pointer columns from metadata."""
+    file_pointer_config = metadata.get("file_pointer_columns", {}).get(file_name, {})
+    if isinstance(file_pointer_config, dict):
+        return {col for col in file_pointer_config.keys() if col != "description"}
+    return set()
+
+
+def _process_schema_fks(
+    df: pd.DataFrame,
+    table: dict,
+    file_path: Path,
+    null_set: set,
+    file_pointer_columns: set,
+    txtinout_target_column: str,
+    references: List[dict]
+) -> None:
+    """Process schema-defined foreign keys using vectorized operations."""
     for fk in table.get("foreign_keys", []):
         column = fk.get("column")
         if not column or column not in df.columns:
@@ -300,81 +357,103 @@ def build_fk_references(
         if column in file_pointer_columns and fk.get("references", {}).get("table") not in WEATHER_FILE_POINTER_FK_TABLES:
             continue
 
+        # Use vectorized operations to filter and build references
         column_values = df[column].astype(str)
         mask = ~column_values.str.lower().isin(null_set)
         filtered = df.loc[mask, ["lineNumber", column]]
 
-        for _, row in filtered.iterrows():
-            references.append(
-                {
-                    "sourceFile": str(file_path),
-                    "sourceTable": table["table_name"],
-                    "sourceLine": int(row["lineNumber"]),
-                    "sourceColumn": column,
-                    "fkValue": str(row[column]),
-                    "targetTable": fk["references"]["table"],
-                    "targetColumn": txtinout_target_column,
-                    "resolved": False,
-                }
-            )
-    
-    # Process markdown-derived FK relationships (enhanced schema)
-    # This provides additional FK information not captured in the database schema
+        # Batch create reference dictionaries
+        references.extend([
+            {
+                "sourceFile": str(file_path),
+                "sourceTable": table["table_name"],
+                "sourceLine": int(row["lineNumber"]),
+                "sourceColumn": column,
+                "fkValue": str(row[column]),
+                "targetTable": fk["references"]["table"],
+                "targetColumn": txtinout_target_column,
+                "resolved": False,
+            }
+            for _, row in filtered.iterrows()
+        ])
+
+
+def _process_markdown_fks(
+    df: pd.DataFrame,
+    table: dict,
+    file_path: Path,
+    file_name: str,
+    null_set: set,
+    metadata: dict,
+    txtinout_target_column: str,
+    references: List[dict]
+) -> None:
+    """Process markdown-derived FK relationships."""
     md_fk_relationships = metadata.get("foreign_key_relationships", {}).get(file_name, {})
-    if isinstance(md_fk_relationships, dict):
-        md_fks = md_fk_relationships.get("relationships", [])
-        for md_fk in md_fks:
-            column = md_fk.get("column")
-            if not column or column not in df.columns:
-                continue
-            
-            # Skip if this column is a file pointer (not an FK to table rows)
-            if md_fk.get("is_pointer") and not md_fk.get("is_fk"):
-                continue
-            
-            # Skip if already processed by schema FK
-            already_processed = any(
-                ref["sourceColumn"] == column for ref in references
-            )
-            if already_processed:
-                continue
-            
-            # Extract target table from target_file
-            target_file = md_fk.get("target_file", "")
-            if not target_file:
-                continue
-            
-            # Try to resolve target file to table name
-            target_table = None
-            for table_name, file_mapping in metadata.get("table_name_to_file_name", {}).items():
-                if file_mapping == target_file:
-                    target_table = table_name
-                    break
-            
-            # If not found in mapping, use file name without extension as table name
-            if not target_table:
-                target_table = target_file.replace(".", "_").replace("-", "_")
-            
-            column_values = df[column].astype(str)
-            mask = ~column_values.str.lower().isin(null_set)
-            filtered = df.loc[mask, ["lineNumber", column]]
+    if not isinstance(md_fk_relationships, dict):
+        return
+    
+    # Track already processed columns for efficiency
+    processed_columns = {ref["sourceColumn"] for ref in references}
+    
+    md_fks = md_fk_relationships.get("relationships", [])
+    for md_fk in md_fks:
+        column = md_fk.get("column")
+        if not column or column not in df.columns:
+            continue
+        
+        # Skip if this column is a file pointer (not an FK to table rows)
+        if md_fk.get("is_pointer") and not md_fk.get("is_fk"):
+            continue
+        
+        # Skip if already processed by schema FK
+        if column in processed_columns:
+            continue
+        
+        # Extract target table from target_file
+        target_file = md_fk.get("target_file", "")
+        if not target_file:
+            continue
+        
+        # Try to resolve target file to table name
+        target_table = _resolve_target_table(target_file, metadata)
+        if not target_table:
+            continue
+        
+        # Use vectorized operations
+        column_values = df[column].astype(str)
+        mask = ~column_values.str.lower().isin(null_set)
+        filtered = df.loc[mask, ["lineNumber", column]]
 
-            for _, row in filtered.iterrows():
-                references.append(
-                    {
-                        "sourceFile": str(file_path),
-                        "sourceTable": table["table_name"],
-                        "sourceLine": int(row["lineNumber"]),
-                        "sourceColumn": column,
-                        "fkValue": str(row[column]),
-                        "targetTable": target_table,
-                        "targetColumn": txtinout_target_column,
-                        "resolved": False,
-                        "from_markdown": True,  # Mark that this came from markdown docs
-                    }
-                )
+        # Batch create reference dictionaries
+        references.extend([
+            {
+                "sourceFile": str(file_path),
+                "sourceTable": table["table_name"],
+                "sourceLine": int(row["lineNumber"]),
+                "sourceColumn": column,
+                "fkValue": str(row[column]),
+                "targetTable": target_table,
+                "targetColumn": txtinout_target_column,
+                "resolved": False,
+                "from_markdown": True,
+            }
+            for _, row in filtered.iterrows()
+        ])
+        
+        # Mark column as processed
+        processed_columns.add(column)
 
-    return references
+
+def _resolve_target_table(target_file: str, metadata: dict) -> Optional[str]:
+    """Resolve target file to table name."""
+    # Try to find in mapping
+    for table_name, file_mapping in metadata.get("table_name_to_file_name", {}).items():
+        if file_mapping == target_file:
+            return table_name
+    
+    # Fall back to file name without extension as table name
+    return target_file.replace(".", "_").replace("-", "_")
 
 
 def process_management_sch_child_lines(
@@ -674,8 +753,9 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
         if df.empty:
             continue
 
+        # Read file lines once if needed for child line processing
         lines = None
-        if file_name in {'soils.sol', 'plant.ini'}:
+        if file_name in {'soils.sol', 'plant.ini', 'weather-wgn.cli', 'atmo.cli'}:
             with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
                 lines = handle.readlines()
 
@@ -791,12 +871,9 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
                         row_dict["childRows"] = child_rows
             
             # Special handling for weather-wgn.cli: capture monthly data child lines
-            if file_name == 'weather-wgn.cli' and child_line_info and idx < len(child_line_info):
+            if file_name == 'weather-wgn.cli' and child_line_info and idx < len(child_line_info) and lines:
                 line_num, child_count = child_line_info[idx]
                 if child_count > 0:
-                    with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
-                        lines = handle.readlines()
-                    
                     # Skip the header line (first child line) and capture the 12 monthly data lines
                     child_rows = []
                     # Monthly data columns based on the weather-wgn.cli documentation
@@ -829,10 +906,7 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
                         row_dict["childRows"] = child_rows
             
             # Special handling for atmo.cli: capture station deposition data
-            if file_name == 'atmo.cli':
-                with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
-                    lines = handle.readlines()
-                
+            if file_name == 'atmo.cli' and lines:
                 # The main record has num_sta which tells us how many stations
                 try:
                     num_sta = int(row.get('num_sta', 0)) if 'num_sta' in row.index else 0

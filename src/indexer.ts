@@ -364,75 +364,100 @@ export class SwatIndexer {
         const metadataPath = path.join(this.context.extensionPath, 'resources', 'schema', 'txtinout-metadata.json');
         const txtInOutPath = this.txtInOutPath ?? datasetPath;
 
-        // Try a list of candidate Python executables so the extension works on Windows/macOS/Linux
+        // Try to find a working Python executable
+        const result = this.findPythonAndRun(scriptPath, txtInOutPath, schemaPath, metadataPath);
+        
+        if (!result.success) {
+            return result;
+        }
+
+        // Parse the JSON payload from pandas indexer
+        return this.parsePandasOutput(result.stdout);
+    }
+
+    /**
+     * Find a working Python executable and run the pandas indexer
+     */
+    private findPythonAndRun(
+        scriptPath: string,
+        txtInOutPath: string,
+        schemaPath: string,
+        metadataPath: string
+    ): { success: boolean; stdout?: string; error?: string; tableCount: number; fkCount: number } {
+        // Try a list of candidate Python executables for cross-platform compatibility
         const candidates: string[] = [];
         if (process.env.SWATPLUS_PYTHON) {
             candidates.push(process.env.SWATPLUS_PYTHON);
         }
-        // Common names on various platforms
         candidates.push('python', 'python3', 'py');
 
         const args = [scriptPath, '--dataset', txtInOutPath, '--schema', schemaPath, '--metadata', metadataPath];
 
         console.log(`[Indexer] Attempting pandas-backed indexing via candidates: ${candidates.join(', ')}`);
 
-        let lastError: string | undefined;
-        let result: import('child_process').SpawnSyncReturns<string> | null = null;
-
         for (const pythonExecutable of candidates) {
-            try {
-                console.log(`[Indexer] Trying python executable: ${pythonExecutable}`);
-                // Increase maxBuffer to handle large JSON payloads emitted by the pandas indexer
-                result = spawnSync(pythonExecutable, args, { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 });
-            } catch (err: any) {
-                lastError = err.message || String(err);
-                console.warn(`[Indexer] Failed to start ${pythonExecutable}: ${lastError}`);
-                result = null;
+            const result = this.tryPythonExecutable(pythonExecutable, args);
+            if (result.success) {
+                console.log(`[Indexer] pandas pipeline succeeded with ${pythonExecutable}`);
+                return result;
             }
+        }
 
-            if (!result) {
-                continue;
-            }
+        return {
+            success: false,
+            tableCount: 0,
+            fkCount: 0,
+            error: `Python not found: tried ${candidates.join(', ')}. Please install Python or set SWATPLUS_PYTHON environment variable.`
+        };
+    }
+
+    /**
+     * Try running the pandas indexer with a specific Python executable
+     */
+    private tryPythonExecutable(
+        pythonExecutable: string,
+        args: string[]
+    ): { success: boolean; stdout?: string; error?: string; tableCount: number; fkCount: number } {
+        try {
+            console.log(`[Indexer] Trying python executable: ${pythonExecutable}`);
+            // Increase maxBuffer to handle large JSON payloads (50MB)
+            const result = spawnSync(pythonExecutable, args, { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 });
 
             if (result.error) {
-                // If executable not found, try next candidate
-                lastError = result.error.message;
-                console.warn(`[Indexer] ${pythonExecutable} start error: ${lastError}`);
-                continue;
+                console.warn(`[Indexer] ${pythonExecutable} start error: ${result.error.message}`);
+                return { success: false, tableCount: 0, fkCount: 0, error: result.error.message };
             }
 
-            if (result.status === 0) {
-                // Success
-                console.log(`[Indexer] pandas pipeline succeeded with ${pythonExecutable}`);
-                break;
-            } else {
-                // Non-zero exit - capture stderr and try next candidate (in case of unexpected executable)
-                lastError = result.stderr || `Exit code ${result.status}`;
-                console.warn(`[Indexer] ${pythonExecutable} exited with code ${result.status}: ${lastError}`);
-                // continue trying other candidates
+            if (result.status !== 0) {
+                const errorMsg = result.stderr || `Exit code ${result.status}`;
+                console.warn(`[Indexer] ${pythonExecutable} exited with code ${result.status}: ${errorMsg}`);
+                return { success: false, tableCount: 0, fkCount: 0, error: errorMsg };
             }
-        }
 
-        if (!result) {
-            return { success: false, tableCount: 0, fkCount: 0, error: `Python not found: tried ${candidates.join(', ')}. Please install Python or set the SWATPLUS_PYTHON environment variable to the Python executable.` };
+            return { success: true, stdout: result.stdout, tableCount: 0, fkCount: 0 };
+        } catch (err: any) {
+            const errorMsg = err.message || String(err);
+            console.warn(`[Indexer] Failed to start ${pythonExecutable}: ${errorMsg}`);
+            return { success: false, tableCount: 0, fkCount: 0, error: errorMsg };
         }
+    }
 
-        if (result.error) {
-            return { success: false, tableCount: 0, fkCount: 0, error: `Python failed to start: ${result.error.message}` };
-        }
-
-        if (result.status !== 0) {
-            const errorMsg = result.stderr || `Exit code ${result.status}, no stderr output`;
-            return { success: false, tableCount: 0, fkCount: 0, error: `Indexer failed: ${errorMsg}` };
+    /**
+     * Parse the JSON output from pandas indexer and populate the index
+     */
+    private parsePandasOutput(stdout?: string): { success: boolean; tableCount: number; fkCount: number; error?: string } {
+        if (!stdout) {
+            return { success: false, tableCount: 0, fkCount: 0, error: 'No output from pandas indexer' };
         }
 
         try {
-            const payload = JSON.parse(result.stdout);
+            const payload = JSON.parse(stdout);
 
             this.index.clear();
             this.fkReferences = [];
             this.reverseIndex.clear();
 
+            // Populate index with table data
             for (const [tableName, rows] of Object.entries(payload.tables || {})) {
                 const tableIndex = new Map<string, IndexedRow>();
                 (rows as IndexedRow[]).forEach((row) => {
@@ -441,6 +466,7 @@ export class SwatIndexer {
                 this.index.set(tableName, tableIndex);
             }
 
+            // Store FK references
             this.fkReferences = (payload.fkReferences || []) as FKReference[];
 
             return {
