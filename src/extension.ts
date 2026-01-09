@@ -231,11 +231,14 @@ export function activate(context: vscode.ExtensionContext) {
 	const showTableViewer = vscode.commands.registerCommand('swat-dataset-selector.showTableViewer', (filePath?: string) => {
 		// If a file path is provided, open the single table viewer for that specific file
 		if (filePath && typeof filePath === 'string') {
-			const tableName = indexer.getTableNameFromFile(filePath);
+			const resolvedFileName = filePath.includes('/') || filePath.includes('\\')
+				? path.basename(filePath)
+				: filePath;
+			const tableName = indexer.getTableNameFromFile(resolvedFileName);
 			if (tableName) {
 				SwatSingleTableViewerPanel.createOrShow(indexer, tableName);
 			} else {
-				vscode.window.showWarningMessage(`Could not find table for file: ${filePath}`);
+				vscode.window.showWarningMessage(`Could not find table for file: ${resolvedFileName}`);
 			}
 		} else {
 			// Otherwise, show the all-tables viewer
