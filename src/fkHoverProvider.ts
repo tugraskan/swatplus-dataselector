@@ -131,7 +131,7 @@ export class SwatFKHoverProvider implements vscode.HoverProvider {
         // Get header line to map column positions
         const headerLineIndex = table.has_metadata_line ? 1 : 0;
         const headerLine = document.lineAt(headerLineIndex).text.trim();
-        const headers = headerLine.split(/\s+/);
+        const headers = this.normalizeHeaders(headerLine.split(/\s+/), table);
 
         // Find which column the cursor is on
         let columnIndex = -1;
@@ -220,5 +220,23 @@ export class SwatFKHoverProvider implements vscode.HoverProvider {
         }
 
         return new vscode.Hover(markdown);
+    }
+
+    private normalizeHeaders(headers: string[], table: any): string[] {
+        if (!table?.columns) {
+            return headers;
+        }
+        const schemaColumns = new Set((table.columns || []).map((col: any) => col.name));
+        const schemaColumnsLower = new Set((table.columns || []).map((col: any) => col.name.toLowerCase()));
+        return headers.map(header => {
+            if (schemaColumns.has(header)) {
+                return header;
+            }
+            const lowerHeader = header.toLowerCase();
+            if (schemaColumnsLower.has(lowerHeader)) {
+                return lowerHeader;
+            }
+            return header;
+        });
     }
 }
