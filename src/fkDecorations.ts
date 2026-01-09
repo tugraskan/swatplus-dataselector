@@ -130,7 +130,7 @@ export class SwatFKDecorationProvider {
         }
 
         const headerLine = editor.document.lineAt(headerLineIndex).text.trim();
-        const headers = headerLine.split(/\s+/);
+        const headers = this.normalizeHeaders(headerLine.split(/\s+/), table);
 
         // Find FK column indices
         const fkColumnIndices: number[] = [];
@@ -307,5 +307,23 @@ export class SwatFKDecorationProvider {
      */
     public refresh(): void {
         this.updateDecorations(vscode.window.activeTextEditor);
+    }
+
+    private normalizeHeaders(headers: string[], table: any): string[] {
+        if (!table?.columns) {
+            return headers;
+        }
+        const schemaColumns = new Set((table.columns || []).map((col: any) => col.name));
+        const schemaColumnsLower = new Set((table.columns || []).map((col: any) => col.name.toLowerCase()));
+        return headers.map(header => {
+            if (schemaColumns.has(header)) {
+                return header;
+            }
+            const lowerHeader = header.toLowerCase();
+            if (schemaColumnsLower.has(lowerHeader)) {
+                return lowerHeader;
+            }
+            return header;
+        });
     }
 }
