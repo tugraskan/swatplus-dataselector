@@ -63,7 +63,11 @@
     "pesticide_pes": "pesticide.pes",
     "tillage_til": "tillage.til",
     "urban_urb": "urban.urb",
-    "septic_sep": "septic.sep"
+    "septic_sep": "septic.sep",
+    "lum_dtl": "lum.dtl",
+    "scen_lu_dtl": "scen_lu.dtl",
+    "res_rel_dtl": "res_rel.dtl",
+    "flo_con_dtl": "flo_con.dtl"
   },
   "txtinout_fk_behavior": {
     "description": "In TxtInOut text files, FK references typically point to the 'name' column in target files, not 'id'",
