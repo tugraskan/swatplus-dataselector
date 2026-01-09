@@ -627,14 +627,18 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
                     lines = handle.readlines()
                 
                 # The main record has num_sta which tells us how many stations
-                num_sta = int(row.get('num_sta', 0)) if 'num_sta' in row.index else 0
-                num_aa = int(row.get('num_aa', 0)) if 'num_aa' in row.index else 0
+                try:
+                    num_sta = int(row.get('num_sta', 0)) if 'num_sta' in row.index else 0
+                    num_aa = int(row.get('num_aa', 0)) if 'num_aa' in row.index else 0
+                except (ValueError, TypeError):
+                    num_sta = 0
+                    num_aa = 0
                 
                 if num_sta > 0 and num_aa > 0:
                     child_rows = []
                     # Start after the metadata line (line 3, index 2 in 0-based)
                     # line_num is the metadata line number (1-based)
-                    current_line_idx = int(row['lineNumber']) - 1  # Convert to 0-based
+                    current_line_idx = int(row.get('lineNumber', 0)) - 1  # Convert to 0-based
                     
                     deposition_types = ['nh4_wet', 'no3_wet', 'nh4_dry', 'no3_dry']
                     
