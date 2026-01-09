@@ -14191,6 +14191,118 @@
       ],
       "notes": "Auto-generated via dynamic scan"
     },
+    "ls_unit.def": {
+      "file_name": "ls_unit.def",
+      "table_name": "ls_unit_def",
+      "model_class": "project.regions.Ls_unit_def",
+      "source_file": "project/regions.py",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem_tot",
+          "db_column": "elem_tot",
+          "type": "IntegerField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elements",
+          "db_column": "elements",
+          "type": "IntegerField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Auto-generated via dynamic scan"
+    },
+    "ls_unit.ele": {
+      "file_name": "ls_unit.ele",
+      "table_name": "ls_unit_ele",
+      "model_class": "project.regions.Ls_unit_ele",
+      "source_file": "project/regions.py",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "obj_typ",
+          "db_column": "obj_typ",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "obj_typ_no",
+          "db_column": "obj_typ_no",
+          "type": "IntegerField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "bsn_frac",
+          "db_column": "bsn_frac",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lsu_frac",
+          "db_column": "lsu_frac",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Auto-generated via dynamic scan"
+    },
     "region.ele": {
       "file_name": "region.ele",
       "table_name": "region_ele",
