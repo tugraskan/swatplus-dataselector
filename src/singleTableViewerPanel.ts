@@ -259,12 +259,13 @@ export class SwatSingleTableViewerPanel {
             // Get the first row to find the file path
             const indexData = this.indexer.getIndexData();
             const tableData = indexData.get(tableName);
+            // Allow opening even if no data - we'll handle empty tables gracefully in rendering
             if (!tableData || tableData.size === 0) {
-                vscode.window.showErrorMessage(`No data found for table: ${tableName}`);
-                return;
+                // For empty tables, we can still show the file structure if schema is available
+                // Continue to show the table view panel
             }
             
-            const firstRow = Array.from(tableData.values())[0];
+            const firstRow = tableData && tableData.size > 0 ? Array.from(tableData.values())[0] : null;
             if (firstRow && firstRow.file) {
                 // Resolve the file path if it's relative
                 let filePath = firstRow.file;

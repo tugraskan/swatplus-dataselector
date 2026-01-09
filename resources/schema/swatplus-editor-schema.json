@@ -4027,8 +4027,8 @@
           "is_foreign_key": false
         },
         {
-          "name": "filename",
-          "db_column": "filename",
+          "name": "num_sta",
+          "db_column": "num_sta",
           "type": "CharField",
           "nullable": false,
           "is_primary_key": false,

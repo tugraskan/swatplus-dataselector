@@ -56,9 +56,7 @@ def get_child_line_count(value_map: Dict[str, str], config: dict, file_name: str
     
     # Check for fixed child line count first (e.g., weather-wgn.cli has 13 fixed lines)
     fixed_count = structure.get("child_line_count_fixed")
-    if fixed_count is not None:
-        if fixed_count < 0:
-            return 0
+    if fixed_count is not None and fixed_count >= 0:
         if fixed_count > MAX_CHILD_LINES:
             return MAX_CHILD_LINES
         return fixed_count
@@ -91,10 +89,14 @@ def get_child_line_count(value_map: Dict[str, str], config: dict, file_name: str
         
         return total_count
     
-    # Handle single field case
+    # Handle single field case with optional multiplier
     if count_field in value_map:
         try:
             count = int(value_map[count_field])
+            
+            # Apply multiplier if specified (e.g., for atmo.cli: num_sta * 5)
+            multiplier = structure.get("child_line_count_multiplier", 1)
+            count = count * multiplier
             
             if count < 0:
                 return 0

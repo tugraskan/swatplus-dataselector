@@ -379,9 +379,10 @@
         "main_record_format": "Main line contains num_sta, timestep, mo_init, yr_init, and num_aa",
         "child_line_format": "For each station: 1 line with station name, then 4 lines with deposition data (nh4_wet, no3_wet, nh4_dry, no3_dry), each line containing num_aa values",
         "main_record_identifier": "First data line (line 3) contains metadata",
-        "child_line_count_field": null,
+        "child_line_count_field": "num_sta",
         "child_line_count_fixed": -1,
-        "indexing_strategy": "Index only the main metadata record; skip station name lines and 4 deposition data lines per station"
+        "indexing_strategy": "Index only the main metadata record; skip station name lines and 4 deposition data lines per station",
+        "child_line_count_multiplier": 5
       }
     }
   },
