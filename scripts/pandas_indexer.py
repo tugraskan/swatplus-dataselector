@@ -132,10 +132,10 @@ def is_main_record_line(value_map: Dict[str, str], file_name: str) -> bool:
 
 
 def parse_lines_to_dataframe(
-    file_path: Path, 
-    table: dict, 
+    file_path: Path,
+    table: dict,
     metadata: dict
-) -> Tuple[pd.DataFrame, List[Tuple[int, int]]]:
+) -> Tuple[pd.DataFrame, List[Tuple[int, int]], List[str]]:
     """
     Parse TxtInOut rows into a DataFrame starting at data_starts_after.
     
@@ -144,8 +144,15 @@ def parse_lines_to_dataframe(
     """
     file_name = file_path.name
     start_line = table.get("data_starts_after", 0)
-    # Filter out AutoField columns (database-only fields like 'id' that don't exist in physical files)
-    columns = [col["name"] for col in table.get("columns", []) if col.get("type") != "AutoField"]
+    file_metadata = metadata.get("file_metadata", {}).get(file_name, {})
+    include_auto_fields = "id" in (file_metadata.get("primary_keys") or [])
+    # Filter out AutoField columns by default (database-only fields like 'id' that don't exist in physical files)
+    schema_columns_all = [col["name"] for col in table.get("columns", [])]
+    schema_columns = [
+        col["name"]
+        for col in table.get("columns", [])
+        if include_auto_fields or col.get("type") != "AutoField"
+    ]
     records: List[Dict[str, str]] = []
     child_line_info: List[Tuple[int, int]] = []  # (line_number, num_children)
     
@@ -155,6 +162,21 @@ def parse_lines_to_dataframe(
     
     with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
         lines = handle.readlines()
+
+    columns = schema_columns
+    if table.get("has_header_line") and lines:
+        header_index = max(start_line - 1, 0)
+        if header_index < len(lines):
+            header_line = lines[header_index].strip()
+            if header_line:
+                header_columns = [col.strip() for col in header_line.split()]
+                if header_columns:
+                    if all(col in schema_columns_all for col in header_columns):
+                        columns = header_columns
+                    else:
+                        header_lower = [col.lower() for col in header_columns]
+                        if all(col in schema_columns_all for col in header_lower):
+                            columns = header_lower
     
     i = start_line
     while i < len(lines):
@@ -198,7 +220,7 @@ def parse_lines_to_dataframe(
     
     df = pd.DataFrame.from_records(records)
     if df.empty:
-        return df, child_line_info
+        return df, child_line_info, columns
     
     # Determine primary key
     pk_candidates = table.get("primary_keys") or []
@@ -214,7 +236,7 @@ def parse_lines_to_dataframe(
     else:
         df["pkValue"] = df.index.astype(str)
     
-    return df, child_line_info
+    return df, child_line_info, columns
 
 
 def build_fk_references(
@@ -572,15 +594,14 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
             continue
 
         # Parse the file with hierarchical support
-        df, child_line_info = parse_lines_to_dataframe(file_path, table, metadata)
+        df, child_line_info, columns = parse_lines_to_dataframe(file_path, table, metadata)
         if df.empty:
             continue
 
         # Build row payload
         row_payload = []
         for idx, row in df.iterrows():
-            # Filter out AutoField columns (same as parsing logic)
-            values = {col["name"]: str(row.get(col["name"], "")) for col in table.get("columns", []) if col.get("type") != "AutoField"}
+            values = {col: str(row.get(col, "")) for col in columns}
             row_dict = {
                 "file": str(file_path),
                 "tableName": table["table_name"],
