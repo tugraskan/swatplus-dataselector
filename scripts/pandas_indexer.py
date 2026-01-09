@@ -111,13 +111,18 @@ def get_child_line_count(value_map: Dict[str, str], config: dict, file_name: str
     return 0
 
 
-def is_main_record_line(value_map: Dict[str, str], file_name: str) -> bool:
+def is_main_record_line(value_map: Dict[str, str], file_name: str, tokens: List[str]) -> bool:
     """Check if a line is a main record (vs child line) in a hierarchical file."""
-    # For soils.sol: Main record lines have a 'name' field that looks like a valid identifier
+    # For soils.sol: Main record lines have an integer layer count and an alpha hydrologic group.
+    # Soil names can be numeric, so avoid rejecting purely numeric identifiers.
     if file_name == 'soils.sol':
-        name_value = value_map.get('name', '')
-        # Main record has a non-empty name that's not purely numeric
-        return len(name_value) > 0 and not NUMERIC_VALUE_PATTERN.match(name_value)
+        if len(tokens) < 3:
+            return False
+        try:
+            int(tokens[1])
+        except ValueError:
+            return False
+        return tokens[2].isalpha()
     
     # For plant.ini: Main record has plnt_cnt field
     if file_name == 'plant.ini':
@@ -203,7 +208,7 @@ def parse_lines_to_dataframe(
                 child_line_info.append((i + 1, skip_count))
             else:
                 # No explicit count - use heuristic detection
-                is_main_record = is_main_record_line(value_map, file_name)
+                is_main_record = is_main_record_line(value_map, file_name, values)
                 if not is_main_record:
                     # This is a child line - skip it
                     i += 1
