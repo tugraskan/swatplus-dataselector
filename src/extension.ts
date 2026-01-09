@@ -235,7 +235,13 @@ export function activate(context: vscode.ExtensionContext) {
 			const resolvedFileName = filePath.includes('/') || filePath.includes('\\')
 				? path.basename(filePath)
 				: filePath;
-			const tableName = indexer.getTableNameFromFile(resolvedFileName);
+			let tableName = indexer.getTableNameFromFile(resolvedFileName);
+			if (!tableName) {
+				const tableNameFromFile = resolvedFileName.replace(/\./g, '_');
+				if (indexer.isTableIndexed(tableNameFromFile)) {
+					tableName = tableNameFromFile;
+				}
+			}
 			if (tableName) {
 				SwatSingleTableViewerPanel.createOrShow(indexer, tableName);
 			} else {
