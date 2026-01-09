@@ -3739,7 +3739,7 @@
           "db_column": "wgn_id",
           "references": {
             "table": "weather_wgn_cli",
-            "column": "id"
+            "column": "name"
           }
         },
         {
@@ -3747,7 +3747,7 @@
           "db_column": "pcp_id",
           "references": {
             "table": "pcp_cli",
-            "column": "id"
+            "column": "filename"
           }
         },
         {
@@ -3755,7 +3755,7 @@
           "db_column": "tmp_id",
           "references": {
             "table": "tmp_cli",
-            "column": "id"
+            "column": "filename"
           }
         },
         {
@@ -3763,7 +3763,7 @@
           "db_column": "slr_id",
           "references": {
             "table": "slr_cli",
-            "column": "id"
+            "column": "filename"
           }
         },
         {
@@ -3771,7 +3771,7 @@
           "db_column": "hmd_id",
           "references": {
             "table": "hmd_cli",
-            "column": "id"
+            "column": "filename"
           }
         },
         {
@@ -3779,7 +3779,7 @@
           "db_column": "wnd_id",
           "references": {
             "table": "wnd_cli",
-            "column": "id"
+            "column": "filename"
           }
         }
       ],
