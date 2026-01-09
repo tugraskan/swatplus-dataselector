@@ -29,6 +29,7 @@ NUMERIC_VALUE_PATTERN = re.compile(r'^\d+(\.\d+)?$')
 MAX_CHILD_LINES = 1000  # Sanity check limit to prevent excessive line skipping
 MANAGEMENT_SCH_OP_DATA1_INDEX = 6  # Position of op_data1 field in management schedule operation lines
 DTL_ACTION_FP_INDEX = 7  # Position of fp field in decision table action lines
+WEATHER_FILE_POINTER_FK_TABLES = {"pcp_cli", "tmp_cli", "slr_cli", "hmd_cli", "wnd_cli"}
 
 
 def load_json(path: Path) -> dict:
@@ -203,11 +204,13 @@ def parse_lines_to_dataframe(
     pk_candidates = table.get("primary_keys") or []
     pk_column = pk_candidates[0] if pk_candidates else None
     
-    # Try schema PK first, but fall back to 'name' if PK not in file headers
+    # Try schema PK first, but fall back to common key columns if PK not in file headers
     if pk_column and pk_column in df.columns:
         df["pkValue"] = df[pk_column].astype(str)
     elif "name" in df.columns:
         df["pkValue"] = df["name"].astype(str)
+    elif "filename" in df.columns:
+        df["pkValue"] = df["filename"].astype(str)
     else:
         df["pkValue"] = df.index.astype(str)
     
@@ -242,7 +245,8 @@ def build_fk_references(
             continue
         
         # Skip file pointer columns (they point to files, not table rows)
-        if column in file_pointer_columns:
+        # Allow weather list files (pcp/tmp/slr/hmd/wnd) to behave as FK targets.
+        if column in file_pointer_columns and fk.get("references", {}).get("table") not in WEATHER_FILE_POINTER_FK_TABLES:
             continue
 
         column_values = df[column].astype(str)
