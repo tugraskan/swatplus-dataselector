@@ -6,6 +6,7 @@ This script combines the information extracted from markdown documentation
 with the existing metadata to create a comprehensive schema.
 """
 
+import copy
 import json
 from pathlib import Path
 from typing import Dict
@@ -103,7 +104,6 @@ def merge_file_metadata(existing: Dict, enhanced: Dict) -> Dict:
     Merge file metadata from enhanced schema, preserving existing metadata.
     """
     # Start with deep copy of existing file metadata
-    import copy
     merged = copy.deepcopy(existing.get('file_metadata', {}))
     
     # Add or update enhanced file metadata
