@@ -100,11 +100,12 @@ def merge_foreign_key_relationships(existing: Dict, enhanced: Dict) -> Dict:
 
 def merge_file_metadata(existing: Dict, enhanced: Dict) -> Dict:
     """
-    Merge file metadata from enhanced schema.
+    Merge file metadata from enhanced schema, preserving existing metadata.
     """
-    merged = {}
+    # Start with existing file metadata
+    merged = existing.get('file_metadata', {}).copy()
     
-    # Add enhanced file metadata
+    # Add or update enhanced file metadata
     for file_name, metadata in enhanced.get('file_metadata', {}).items():
         merged[file_name] = {
             "description": metadata.get('description', ''),
