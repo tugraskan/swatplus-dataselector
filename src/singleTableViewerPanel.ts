@@ -2038,7 +2038,7 @@ export class SwatSingleTableViewerPanel {
                             link.href = '#';
                             link.className = 'file-link';
                             link.textContent = value;
-                            link.title = `Click to open ${value}`;
+                            link.title = 'Click to open ' + value;
                             link.addEventListener('click', (event) => {
                                 event.preventDefault();
                                 event.stopPropagation();
