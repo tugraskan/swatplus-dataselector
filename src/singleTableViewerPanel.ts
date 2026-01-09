@@ -206,13 +206,14 @@ export class SwatSingleTableViewerPanel {
 
     private async openFileByName(fileName: string, highlightValue?: string) {
         try {
+            const resolvedFileName = this.normalizeFileName(fileName);
             // Map the file name to a table name using the indexer
-            let tableName = this.indexer.getTableNameFromFile(fileName);
+            let tableName = this.indexer.getTableNameFromFile(resolvedFileName);
             
             // If not found, try deriving table name from file name
             if (!tableName) {
                 // Replace dots with underscores (e.g., pcp.cli -> pcp_cli)
-                const tableNameFromFile = fileName.replace(/\./g, '_');
+                const tableNameFromFile = resolvedFileName.replace(/\./g, '_');
                 if (this.indexer.isTableIndexed(tableNameFromFile)) {
                     tableName = tableNameFromFile;
                 }
@@ -221,7 +222,7 @@ export class SwatSingleTableViewerPanel {
             // Even if we found a table name in the schema mapping, we need to verify
             // that the table actually has data in the index
             if (!tableName || !this.indexer.isTableIndexed(tableName)) {
-                vscode.window.showWarningMessage(`Table for file "${fileName}" is not indexed. This file is listed in file.cio but was not found in your dataset. It may be optional for your SWAT+ configuration.`);
+                vscode.window.showWarningMessage(`Table for file "${resolvedFileName}" is not indexed. This file is listed in file.cio but was not found in your dataset. It may be optional for your SWAT+ configuration.`);
                 return;
             }
             
@@ -284,23 +285,25 @@ export class SwatSingleTableViewerPanel {
         if (!fileName || fileName === 'null' || !fileName.includes('.')) {
             return false;
         }
+
+        const resolvedFileName = this.normalizeFileName(fileName);
         
         // Check if the file actually exists on disk
         const txtInOutPath = this.indexer.getTxtInOutPath();
         if (txtInOutPath) {
-            const filePath = path.join(txtInOutPath, fileName);
+            const filePath = path.join(txtInOutPath, resolvedFileName);
             if (!fs.existsSync(filePath)) {
                 return false;
             }
         }
         
         // Check if it maps to a table
-        let tableName = this.indexer.getTableNameFromFile(fileName);
+        let tableName = this.indexer.getTableNameFromFile(resolvedFileName);
         
         // If not found, try deriving table name from file name
         if (!tableName) {
             // Replace dots with underscores (e.g., pcp.cli -> pcp_cli)
-            const tableNameFromFile = fileName.replace(/\./g, '_');
+            const tableNameFromFile = resolvedFileName.replace(/\./g, '_');
             if (this.indexer.isTableIndexed(tableNameFromFile)) {
                 tableName = tableNameFromFile;
             }
@@ -313,6 +316,18 @@ export class SwatSingleTableViewerPanel {
         }
         
         return false;
+    }
+
+    private normalizeFileName(fileName: string): string {
+        if (!fileName) {
+            return fileName;
+        }
+
+        if (fileName.includes('/') || fileName.includes('\\')) {
+            return path.basename(fileName);
+        }
+
+        return fileName;
     }
 
     private async openFileInEditor(file: string) {
