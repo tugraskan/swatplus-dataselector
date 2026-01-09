@@ -576,6 +576,11 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
         if df.empty:
             continue
 
+        lines = None
+        if file_name == 'soils.sol':
+            with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
+                lines = handle.readlines()
+
         # Build row payload
         row_payload = []
         for idx, row in df.iterrows():
@@ -588,6 +593,66 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
                 "pkValue": str(row["pkValue"]),
                 "values": values,
             }
+
+            # Special handling for soils.sol: capture layer data lines
+            if file_name == 'soils.sol' and lines:
+                line_num = int(row.get("lineNumber", 0))
+                line_idx = line_num - 1
+                layer_count = 0
+
+                if 0 <= line_idx < len(lines):
+                    main_tokens = lines[line_idx].strip().split()
+                    if main_tokens:
+                        name = main_tokens[0]
+                        try:
+                            layer_count = int(main_tokens[1]) if len(main_tokens) > 1 else 0
+                        except (ValueError, TypeError):
+                            layer_count = 0
+
+                        hyd_grp = main_tokens[2] if len(main_tokens) > 2 else ""
+                        dp_tot = main_tokens[3] if len(main_tokens) > 3 else ""
+                        anion_excl = main_tokens[4] if len(main_tokens) > 4 else ""
+                        perc_crk = main_tokens[5] if len(main_tokens) > 5 else ""
+                        texture = main_tokens[6] if len(main_tokens) > 6 else ""
+                        description = " ".join(main_tokens[7:]) if len(main_tokens) > 7 else ""
+
+                        row_dict["values"].update({
+                            "name": name,
+                            "nly": str(layer_count) if layer_count else "",
+                            "hyd_grp": hyd_grp,
+                            "dp_tot": dp_tot,
+                            "anion_excl": anion_excl,
+                            "perc_crk": perc_crk,
+                            "texture": texture,
+                            "description": description,
+                        })
+
+                if layer_count > 0:
+                    layer_columns = [
+                        "dp", "bd", "awc", "soil_k", "carbon", "clay", "silt", "sand",
+                        "rock", "alb", "usle_k", "ec", "caco3", "ph"
+                    ]
+                    child_rows = []
+                    for layer_idx in range(layer_count):
+                        child_line_idx = line_idx + 1 + layer_idx
+                        if child_line_idx >= len(lines):
+                            break
+                        child_line = lines[child_line_idx].strip()
+                        if not child_line:
+                            continue
+                        child_tokens = child_line.split()
+                        child_value_map = {
+                            col_name: child_tokens[col_idx] if col_idx < len(child_tokens) else ""
+                            for col_idx, col_name in enumerate(layer_columns)
+                        }
+                        child_value_map["layer"] = str(layer_idx + 1)
+                        child_rows.append({
+                            "lineNumber": child_line_idx + 1,
+                            "values": child_value_map
+                        })
+
+                    if child_rows:
+                        row_dict["childRows"] = child_rows
             
             # Special handling for weather-wgn.cli: capture monthly data child lines
             if file_name == 'weather-wgn.cli' and child_line_info and idx < len(child_line_info):

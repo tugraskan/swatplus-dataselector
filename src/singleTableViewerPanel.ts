@@ -443,6 +443,14 @@ export class SwatSingleTableViewerPanel {
             return this._getAtmoCliSubTableHtml(rows);
         }
 
+        // Special rendering for soils.sol - use soil-profile sub-table view with layer data
+        if (this.tableName === 'soils_sol') {
+            if (rows.length === 0) {
+                return '<p class="empty-message">No data</p>';
+            }
+            return this._getSoilsSolSubTableHtml(rows);
+        }
+
         // For empty tables, show table structure with headers from schema
         if (rows.length === 0) {
             if (schemaTable && schemaTable.columns) {
@@ -1072,6 +1080,116 @@ export class SwatSingleTableViewerPanel {
         return html;
     }
 
+    private _getSoilsSolSubTableHtml(rows: any[]): string {
+        const metadata = this.indexer.getMetadata();
+        const fileMetadata = metadata?.file_metadata?.['soils.sol'];
+
+        let html = '';
+
+        if (fileMetadata && fileMetadata.description) {
+            html += `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
+        }
+
+        html += `<div class="soils-sol-subtables">`;
+
+        const layerColumns = [
+            { key: 'layer', label: 'Layer' },
+            { key: 'dp', label: 'Depth (mm)' },
+            { key: 'bd', label: 'Bulk Density' },
+            { key: 'awc', label: 'AWC' },
+            { key: 'soil_k', label: 'Ksat' },
+            { key: 'carbon', label: 'Carbon' },
+            { key: 'clay', label: 'Clay' },
+            { key: 'silt', label: 'Silt' },
+            { key: 'sand', label: 'Sand' },
+            { key: 'rock', label: 'Rock' },
+            { key: 'alb', label: 'Albedo' },
+            { key: 'usle_k', label: 'USLE K' },
+            { key: 'ec', label: 'EC' },
+            { key: 'caco3', label: 'CaCO3' },
+            { key: 'ph', label: 'pH' }
+        ];
+
+        for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
+            const soilName = row.values.name || 'Unknown Soil';
+            const hydGrp = row.values.hyd_grp || 'N/A';
+            const dpTot = row.values.dp_tot || 'N/A';
+            const anionExcl = row.values.anion_excl || 'N/A';
+            const percCrk = row.values.perc_crk || 'N/A';
+            const texture = row.values.texture || 'N/A';
+            const layerCount = row.values.nly || 'N/A';
+            const lineNumber = row.lineNumber || 0;
+            const file = row.file || 'soils.sol';
+
+            const isHighlighted = this.highlightValue && soilName && soilName.toLowerCase() === this.highlightValue.toLowerCase();
+            const highlightClass = isHighlighted ? ' highlighted-soil' : '';
+            const highlightId = isHighlighted ? ` id="highlighted-soil"` : '';
+
+            html += `
+                <div class="soil-section${highlightClass}" data-soil="${this._escapeHtml(soilName)}"${highlightId}>
+                    <div class="soil-header" onclick="toggleSoilSection('${this._escapeJs(soilName)}')">
+                        <span class="toggle-icon">▼</span>
+                        <span class="soil-name">
+                            <a href="#" onclick="event.stopPropagation(); navigateToFile('${this._escapeJs(file)}', ${lineNumber}); return false;" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(soilName)}</a>
+                        </span>
+                        <span class="soil-info">
+                            Layers: ${this._escapeHtml(layerCount)}, HydGrp: ${this._escapeHtml(hydGrp)}, Texture: ${this._escapeHtml(texture)}
+                        </span>
+                    </div>
+                    <div class="soil-content">
+                        <div class="soil-meta">
+                            <span><strong>Rooting Depth:</strong> ${this._escapeHtml(dpTot)}</span>
+                            <span><strong>Anion Excl:</strong> ${this._escapeHtml(anionExcl)}</span>
+                            <span><strong>Crack Vol:</strong> ${this._escapeHtml(percCrk)}</span>
+                        </div>
+            `;
+
+            if (row.childRows && Array.isArray(row.childRows) && row.childRows.length > 0) {
+                html += `
+                        <div class="table-wrapper">
+                            <table class="soil-layer-table">
+                                <thead>
+                                    <tr>
+                                        <th class="line-col">Line</th>
+                                        ${layerColumns.map(col => `<th title="${this._escapeHtml(col.label)}">${this._escapeHtml(col.label)}</th>`).join('')}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                `;
+
+                row.childRows.forEach((childRow: any, index: number) => {
+                    html += `<tr>`;
+                    html += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(file)}', ${childRow.lineNumber})">${childRow.lineNumber}</a></td>`;
+                    layerColumns.forEach((col) => {
+                        let value = childRow.values[col.key] || '';
+                        if (col.key === 'layer' && !value) {
+                            value = String(index + 1);
+                        }
+                        html += `<td>${this._escapeHtml(value)}</td>`;
+                    });
+                    html += `</tr>`;
+                });
+
+                html += `
+                                </tbody>
+                            </table>
+                        </div>
+                `;
+            } else {
+                html += `<p class="empty-message">No layer data available</p>`;
+            }
+
+            html += `
+                    </div>
+                </div>
+            `;
+        }
+
+        html += `</div>`;
+
+        return html;
+    }
+
     private _getEmptyTableHtml(schemaTable: any): string {
         const metadata = this.indexer.getMetadata();
         const fileMetadata = metadata?.file_metadata?.[schemaTable.file_name];
@@ -1601,6 +1719,95 @@ export class SwatSingleTableViewerPanel {
                 min-width: 60px;
                 text-align: right;
             }
+            /* soils.sol profile-based sub-table view */
+            .soils-sol-subtables {
+                margin: 16px 0;
+            }
+            .soil-section {
+                margin-bottom: 12px;
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                overflow: hidden;
+            }
+            .soil-section.highlighted-soil {
+                border: 2px solid var(--vscode-focusBorder);
+                box-shadow: 0 0 8px var(--vscode-focusBorder);
+            }
+            .soil-header {
+                padding: 12px 16px;
+                background-color: var(--vscode-editor-background);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                user-select: none;
+                transition: background-color 0.2s;
+            }
+            .soil-header:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            .soil-header.collapsed .toggle-icon {
+                transform: rotate(-90deg);
+            }
+            .soil-name {
+                font-weight: 600;
+                flex: 0 0 auto;
+            }
+            .soil-name .line-link {
+                color: var(--vscode-foreground);
+                text-decoration: none;
+            }
+            .soil-name .line-link:hover {
+                color: var(--vscode-textLink-activeForeground);
+                text-decoration: underline;
+            }
+            .soil-info {
+                font-size: 0.85em;
+                color: var(--vscode-descriptionForeground);
+                flex: 1;
+            }
+            .soil-content {
+                max-height: 2000px;
+                overflow-y: auto;
+                transition: max-height 0.3s ease-out;
+                padding: 12px 16px;
+            }
+            .soil-content.collapsed {
+                max-height: 0;
+                overflow: hidden;
+                padding: 0;
+            }
+            .soil-meta {
+                display: flex;
+                gap: 16px;
+                flex-wrap: wrap;
+                margin-bottom: 12px;
+                font-size: 0.9em;
+            }
+            .soil-meta span {
+                color: var(--vscode-descriptionForeground);
+            }
+            .soil-layer-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 0.85em;
+            }
+            .soil-layer-table th {
+                background-color: var(--vscode-editor-background);
+                padding: 8px 6px;
+                text-align: left;
+                border-bottom: 2px solid var(--vscode-panel-border);
+                font-weight: 600;
+                white-space: nowrap;
+                font-size: 0.75em;
+            }
+            .soil-layer-table td {
+                padding: 6px;
+                border-bottom: 1px solid var(--vscode-panel-border);
+            }
+            .soil-layer-table tr:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
             .fk-indicator {
                 margin-left: 4px;
                 font-size: 0.8em;
@@ -1872,6 +2079,23 @@ export class SwatSingleTableViewerPanel {
                 }
             }
 
+            function toggleSoilSection(soilName) {
+                const escapedSoil = soilName.replace(/"/g, '\\"');
+                const section = document.querySelector('[data-soil="' + escapedSoil + '"]');
+                if (!section) return;
+
+                const header = section.querySelector('.soil-header');
+                const content = section.querySelector('.soil-content');
+
+                if (content.classList.contains('collapsed')) {
+                    content.classList.remove('collapsed');
+                    header.classList.remove('collapsed');
+                } else {
+                    content.classList.add('collapsed');
+                    header.classList.add('collapsed');
+                }
+            }
+
             function openFileForTable(tableName) {
                 vscode.postMessage({
                     command: 'openFileForTable',
@@ -2113,6 +2337,20 @@ export class SwatSingleTableViewerPanel {
 
                     setTimeout(function() {
                         highlightedAtmoStation.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                }
+
+                const highlightedSoil = document.getElementById('highlighted-soil');
+                if (highlightedSoil) {
+                    const header = highlightedSoil.querySelector('.soil-header');
+                    const content = highlightedSoil.querySelector('.soil-content');
+                    if (header && content && content.classList.contains('collapsed')) {
+                        content.classList.remove('collapsed');
+                        header.classList.remove('collapsed');
+                    }
+
+                    setTimeout(function() {
+                        highlightedSoil.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }, 100);
                 }
             });
