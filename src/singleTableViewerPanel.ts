@@ -482,6 +482,7 @@ export class SwatSingleTableViewerPanel {
                 return '<p class="empty-message">No data</p>';
             }
             return this._getPlantIniSubTableHtml(rows);
+        }
         // Special rendering for decision table files (*.dtl) - use profile-based sub-table view
         if (resolvedFileName.endsWith('.dtl')) {
             if (rows.length === 0) {
