@@ -144,7 +144,7 @@ export class SwatFKReferencesPanel {
                         <span class="badge">${refs.length} references</span>
                         ${unresolvedCount > 0 ? `<span class="badge-warning">${unresolvedCount} unresolved</span>` : ''}
                     </h3>
-                    <div id="${fileName}" class="file-content">
+                    <div id="${this._escapeHtml(fileName)}" class="file-content">
                         <table class="refs-table">
                             <thead>
                                 <tr>
@@ -501,5 +501,14 @@ export class SwatFKReferencesPanel {
     </div>
 </body>
 </html>`;
+    }
+
+    private _escapeHtml(value: string): string {
+        return value
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 }
