@@ -2934,6 +2934,16 @@ export class SwatSingleTableViewerPanel {
                 if (highlightedCommunity) {
                     const header = highlightedCommunity.querySelector('.plant-community-header');
                     const content = highlightedCommunity.querySelector('.plant-community-content');
+                    if (header && content && content.classList.contains('collapsed')) {
+                        content.classList.remove('collapsed');
+                        header.classList.remove('collapsed');
+                    }
+
+                    setTimeout(function() {
+                        highlightedCommunity.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                }
+
                 const highlightedDecisionTable = document.getElementById('highlighted-dtl');
                 if (highlightedDecisionTable) {
                     const header = highlightedDecisionTable.querySelector('.dtl-header');
@@ -2944,7 +2954,6 @@ export class SwatSingleTableViewerPanel {
                     }
 
                     setTimeout(function() {
-                        highlightedCommunity.scrollIntoView({ behavior: 'smooth', block: 'start' });
                         highlightedDecisionTable.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }, 100);
                 }
