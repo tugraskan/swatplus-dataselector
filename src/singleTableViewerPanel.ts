@@ -617,7 +617,7 @@ export class SwatSingleTableViewerPanel {
                         // Embed the FK row data as JSON in data attributes
                         const fkRowDataJson = JSON.stringify(targetRow.values).replace(/"/g, '&quot;');
                         const fileName = this.indexer.getFileNameForTable(fkInfo.references.table) || fkInfo.references.table;
-                        tableHtml += `<td class="fk-cell" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" data-action="toggle-fk" data-fk-context="true" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
+                        tableHtml += `<td class="fk-cell" data-fk-context="true" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" data-action="toggle-fk" data-fk-context="true" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
                     } else {
                         tableHtml += `<td class="fk-cell unresolved" title="Unresolved FK to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</td>`;
                     }
@@ -2354,12 +2354,15 @@ export class SwatSingleTableViewerPanel {
                 justify-content: space-between;
                 align-items: center;
                 gap: 8px;
+                flex-wrap: wrap;
             }
             .fk-peek-header-text {
                 display: flex;
                 align-items: center;
                 gap: 4px;
-                white-space: nowrap;
+                flex: 1;
+                min-width: 0;
+                white-space: normal;
             }
             .fk-peek-close-btn {
                 background: transparent;
@@ -2491,6 +2494,9 @@ export class SwatSingleTableViewerPanel {
             });
 
             document.addEventListener('contextmenu', event => {
+                if (!(event.target instanceof Element)) {
+                    return;
+                }
                 const target = event.target.closest('[data-fk-context]');
                 if (!target) {
                     return;
@@ -2934,6 +2940,16 @@ export class SwatSingleTableViewerPanel {
                 if (highlightedCommunity) {
                     const header = highlightedCommunity.querySelector('.plant-community-header');
                     const content = highlightedCommunity.querySelector('.plant-community-content');
+                    if (header && content && content.classList.contains('collapsed')) {
+                        content.classList.remove('collapsed');
+                        header.classList.remove('collapsed');
+                    }
+
+                    setTimeout(function() {
+                        highlightedCommunity.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                }
+
                 const highlightedDecisionTable = document.getElementById('highlighted-dtl');
                 if (highlightedDecisionTable) {
                     const header = highlightedDecisionTable.querySelector('.dtl-header');
@@ -2944,7 +2960,6 @@ export class SwatSingleTableViewerPanel {
                     }
 
                     setTimeout(function() {
-                        highlightedCommunity.scrollIntoView({ behavior: 'smooth', block: 'start' });
                         highlightedDecisionTable.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }, 100);
                 }
