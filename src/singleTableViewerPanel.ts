@@ -426,7 +426,7 @@ export class SwatSingleTableViewerPanel {
                     ${this._getGitbookLink(resolvedFileName)}
                 </h1>
                 <div class="stats">
-                    <span class="stat-item">File: <a href="#" onclick="openFileForTable('${this._escapeJs(this.tableName)}'); return false;" class="file-link" title="Click to open file">${resolvedFileName}</a></span>
+                    <span class="stat-item">File: <a href="#" data-action="open-file-for-table" data-table-name="${this._escapeHtml(this.tableName)}" class="file-link" title="Click to open file">${resolvedFileName}</a></span>
                     ${this.tableName !== 'file_cio' ? `<span class="stat-item">Rows: ${rowCount}</span>` : ''}
                 </div>
             </div>
@@ -578,7 +578,7 @@ export class SwatSingleTableViewerPanel {
 
         for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
             tableHtml += `<tr>`;
-            tableHtml += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(row.file)}', ${row.lineNumber})">${row.lineNumber}</a></td>`;
+            tableHtml += `<td class="line-col"><a href="#" data-action="navigate" data-file="${this._escapeHtml(row.file)}" data-line="${row.lineNumber}">${row.lineNumber}</a></td>`;
             
             for (const col of columns) {
                 const value = row.values[col] || '';
@@ -591,7 +591,7 @@ export class SwatSingleTableViewerPanel {
                     const canOpen = this.canOpenFile(value);
                     const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
                     const title = canOpen ? `Click to open ${this._escapeHtml(value)}` : `${this._escapeHtml(value)} - Not indexed (may not exist in dataset)`;
-                    tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByName('${this._escapeJs(value)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                    tableHtml += `<td class="file-link-cell"><a href="#" data-action="open-file" data-file="${this._escapeHtml(value)}" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
                 } else if (isFilePointer && value && value !== 'null' && value.includes('.')) {
                     const mappedTableName = this.indexer.getTableNameFromFile(value);
                     const canOpenTable = mappedTableName ? this.indexer.isTableIndexed(mappedTableName) : false;
@@ -599,13 +599,13 @@ export class SwatSingleTableViewerPanel {
                         const canOpen = this.canOpenFile(value);
                         const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
                         const title = canOpen ? `Click to open ${this._escapeHtml(value)}` : `${this._escapeHtml(value)} - Not indexed (may not exist in dataset)`;
-                        tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByName('${this._escapeJs(value)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                        tableHtml += `<td class="file-link-cell"><a href="#" data-action="open-file" data-file="${this._escapeHtml(value)}" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
                     } else {
                         const { canOpen, filePath } = this.canOpenFilePointer(value);
                         const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
                         const title = canOpen ? `Click to open ${this._escapeHtml(value)}` : `${this._escapeHtml(value)} - File not found in TxtInOut`;
                         if (canOpen && filePath) {
-                            tableHtml += `<td class="file-link-cell"><a href="#" onclick="openInputFile('${this._escapeJs(filePath)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                            tableHtml += `<td class="file-link-cell"><a href="#" data-action="open-input-file" data-file="${this._escapeHtml(filePath)}" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
                         } else {
                             tableHtml += `<td class="file-link-cell"><span class="${linkClass}" title="${title}">${this._escapeHtml(value)}</span></td>`;
                         }
@@ -617,7 +617,7 @@ export class SwatSingleTableViewerPanel {
                         // Embed the FK row data as JSON in data attributes
                         const fkRowDataJson = JSON.stringify(targetRow.values).replace(/"/g, '&quot;');
                         const fileName = this.indexer.getFileNameForTable(fkInfo.references.table) || fkInfo.references.table;
-                        tableHtml += `<td class="fk-cell" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" onclick="toggleFKPeek(this, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" oncontextmenu="showFKContextMenu(event, '${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber}, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
+                        tableHtml += `<td class="fk-cell" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" data-action="toggle-fk" data-fk-context="true" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
                     } else {
                         tableHtml += `<td class="fk-cell unresolved" title="Unresolved FK to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</td>`;
                     }
@@ -633,16 +633,16 @@ export class SwatSingleTableViewerPanel {
                         const highlightColumn = typeof pointerConfig === 'object' ? pointerConfig.highlight_column : undefined;
                         const highlightValue = highlightColumn ? row.values[highlightColumn] : (lookupFile === 'atmo.cli' ? row.values.name : undefined);
                         if (highlightValue) {
-                            tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByNameWithHighlight('${this._escapeJs(lookupFile)}', '${this._escapeJs(highlightValue)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                            tableHtml += `<td class="file-link-cell"><a href="#" data-action="open-file-highlight" data-file="${this._escapeHtml(lookupFile)}" data-highlight="${this._escapeHtml(highlightValue)}" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
                         } else {
-                            tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByName('${this._escapeJs(lookupFile)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                            tableHtml += `<td class="file-link-cell"><a href="#" data-action="open-file" data-file="${this._escapeHtml(lookupFile)}" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
                         }
                     } else {
                         const { canOpen, filePath } = this.canOpenFilePointer(lookupFile);
                         const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
                         const title = canOpen ? `Click to open ${this._escapeHtml(lookupFile)}` : `${this._escapeHtml(lookupFile)} - File not found in TxtInOut`;
                         if (canOpen && filePath) {
-                            tableHtml += `<td class="file-link-cell"><a href="#" onclick="openInputFile('${this._escapeJs(filePath)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                            tableHtml += `<td class="file-link-cell"><a href="#" data-action="open-input-file" data-file="${this._escapeHtml(filePath)}" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
                         } else {
                             tableHtml += `<td class="file-link-cell"><span class="${linkClass}" title="${title}">${this._escapeHtml(value)}</span></td>`;
                         }
@@ -840,10 +840,10 @@ export class SwatSingleTableViewerPanel {
 
             html += `
                 <div class="classification-section" data-classification="${this._escapeHtml(classificationKey)}">
-                    <div class="classification-header" onclick="toggleClassificationSection('${this._escapeJs(classificationKey)}')">
+                    <div class="classification-header" data-action="toggle-classification" data-classification="${this._escapeHtml(classificationKey)}">
                         <span class="toggle-icon">▼</span>
                         <span class="classification-name">
-                            <a href="#" onclick="event.stopPropagation(); navigateToFile('${this._escapeJs(file)}', ${lineNumber}); return false;" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(displayName)}</a>
+                            <a href="#" data-action="navigate" data-file="${this._escapeHtml(file)}" data-line="${lineNumber}" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(displayName)}</a>
                         </span>
                         <span class="classification-stats">
                             ${activeCount} of ${totalCount} file${totalCount !== 1 ? 's' : ''} indexed
@@ -873,7 +873,7 @@ export class SwatSingleTableViewerPanel {
                     const canOpen = this.canOpenFile(fileName);
                     const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
                     const title = canOpen ? `Click to open ${this._escapeHtml(fileName)}` : `${this._escapeHtml(fileName)} - Not indexed (may not exist in dataset)`;
-                    html += `<a href="#" onclick="openFileByName('${this._escapeJs(fileName)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(fileName)}</a>`;
+                    html += `<a href="#" data-action="open-file" data-file="${this._escapeHtml(fileName)}" class="${linkClass}" title="${title}">${this._escapeHtml(fileName)}</a>`;
                 }
             }
 
@@ -924,10 +924,10 @@ export class SwatSingleTableViewerPanel {
 
             html += `
                 <div class="wgn-station-section${highlightClass}" data-station="${this._escapeHtml(stationName)}"${highlightId}>
-                    <div class="wgn-station-header" onclick="toggleWgnStationSection('${this._escapeJs(stationName)}')">
+                    <div class="wgn-station-header" data-action="toggle-wgn-station" data-station="${this._escapeHtml(stationName)}">
                         <span class="toggle-icon">▼</span>
                         <span class="station-name">
-                            <a href="#" onclick="event.stopPropagation(); navigateToFile('${this._escapeJs(file)}', ${lineNumber}); return false;" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(stationName)}</a>
+                            <a href="#" data-action="navigate" data-file="${this._escapeHtml(file)}" data-line="${lineNumber}" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(stationName)}</a>
                         </span>
                         <span class="station-info">
                             Lat: ${this._escapeHtml(lat)}, Lon: ${this._escapeHtml(lon)}, Elev: ${this._escapeHtml(elev)}m, Years: ${this._escapeHtml(rainYrs)}
@@ -974,7 +974,7 @@ export class SwatSingleTableViewerPanel {
                     const monthName = monthNum > 0 && monthNum <= 12 ? monthNames[monthNum - 1] : `Month ${monthNum}`;
                     
                     html += `<tr>`;
-                    html += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(file)}', ${childRow.lineNumber})">${childRow.lineNumber}</a></td>`;
+                    html += `<td class="line-col"><a href="#" data-action="navigate" data-file="${this._escapeHtml(file)}" data-line="${childRow.lineNumber}">${childRow.lineNumber}</a></td>`;
                     
                     for (const col of monthlyColumns) {
                         let value = childRow.values[col.key] || '';
@@ -1066,10 +1066,10 @@ export class SwatSingleTableViewerPanel {
 
                 html += `
                     <div class="atmo-station-section${highlightClass}" data-station="${this._escapeHtml(stationName)}"${highlightId}>
-                        <div class="atmo-station-header" onclick="toggleAtmoStationSection('${this._escapeJs(stationName)}')">
+                        <div class="atmo-station-header" data-action="toggle-atmo-station" data-station="${this._escapeHtml(stationName)}">
                             <span class="toggle-icon">▼</span>
                             <span class="station-name">
-                                <a href="#" onclick="event.stopPropagation(); navigateToFile('${this._escapeJs(file)}', ${lineNumber}); return false;" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(stationName)}</a>
+                                <a href="#" data-action="navigate" data-file="${this._escapeHtml(file)}" data-line="${lineNumber}" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(stationName)}</a>
                             </span>
                         </div>
                         <div class="atmo-station-content">
@@ -1085,7 +1085,7 @@ export class SwatSingleTableViewerPanel {
                             <div class="deposition-type">
                                 <h4>
                                     ${depType.label} (${depType.unit})
-                                    ${depLineNum ? `<a href="#" onclick="navigateToFile('${this._escapeJs(file)}', ${depLineNum}); return false;" class="line-link" title="Go to line ${depLineNum}">Line ${depLineNum}</a>` : ''}
+                                    ${depLineNum ? `<a href="#" data-action="navigate" data-file="${this._escapeHtml(file)}" data-line="${depLineNum}" class="line-link" title="Go to line ${depLineNum}">Line ${depLineNum}</a>` : ''}
                                 </h4>
                                 <div class="deposition-values">
                         `;
@@ -1168,10 +1168,10 @@ export class SwatSingleTableViewerPanel {
 
             html += `
                 <div class="soil-section${highlightClass}" data-soil="${this._escapeHtml(soilName)}"${highlightId}>
-                    <div class="soil-header" onclick="toggleSoilSection('${this._escapeJs(soilName)}')">
+                    <div class="soil-header" data-action="toggle-soil" data-soil="${this._escapeHtml(soilName)}">
                         <span class="toggle-icon">▼</span>
                         <span class="soil-name">
-                            <a href="#" onclick="event.stopPropagation(); navigateToFile('${this._escapeJs(file)}', ${lineNumber}); return false;" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(soilName)}</a>
+                            <a href="#" data-action="navigate" data-file="${this._escapeHtml(file)}" data-line="${lineNumber}" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(soilName)}</a>
                         </span>
                         <span class="soil-info">
                             Layers: ${this._escapeHtml(layerCount)}, HydGrp: ${this._escapeHtml(hydGrp)}, Texture: ${this._escapeHtml(texture)}
@@ -1200,7 +1200,7 @@ export class SwatSingleTableViewerPanel {
 
                 row.childRows.forEach((childRow: any, index: number) => {
                     html += `<tr>`;
-                    html += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(file)}', ${childRow.lineNumber})">${childRow.lineNumber}</a></td>`;
+                    html += `<td class="line-col"><a href="#" data-action="navigate" data-file="${this._escapeHtml(file)}" data-line="${childRow.lineNumber}">${childRow.lineNumber}</a></td>`;
                     layerColumns.forEach((col) => {
                         let value = childRow.values[col.key] || '';
                         if (col.key === 'layer' && !value) {
@@ -1266,10 +1266,10 @@ export class SwatSingleTableViewerPanel {
 
             html += `
                 <div class="plant-community-section${highlightClass}" data-community="${this._escapeHtml(communityName)}"${highlightId}>
-                    <div class="plant-community-header" onclick="togglePlantCommunitySection('${this._escapeJs(communityName)}')">
+                    <div class="plant-community-header" data-action="toggle-plant-community" data-community="${this._escapeHtml(communityName)}">
                         <span class="toggle-icon">▼</span>
                         <span class="community-name">
-                            <a href="#" onclick="event.stopPropagation(); navigateToFile('${this._escapeJs(file)}', ${lineNumber}); return false;" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(communityName)}</a>
+                            <a href="#" data-action="navigate" data-file="${this._escapeHtml(file)}" data-line="${lineNumber}" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(communityName)}</a>
                         </span>
                         <span class="community-info">
                             Plants: ${this._escapeHtml(plantCount)}, Rotation Start: ${this._escapeHtml(rotationYear)}
@@ -1300,7 +1300,7 @@ export class SwatSingleTableViewerPanel {
 
                 row.childRows.forEach((childRow: any) => {
                     html += `<tr>`;
-                    html += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(file)}', ${childRow.lineNumber})">${childRow.lineNumber}</a></td>`;
+                    html += `<td class="line-col"><a href="#" data-action="navigate" data-file="${this._escapeHtml(file)}" data-line="${childRow.lineNumber}">${childRow.lineNumber}</a></td>`;
                     plantColumns.forEach((col) => {
                         const value = childRow.values[col.key] || '';
                         if (col.key === 'plnt_name' && value) {
@@ -1309,7 +1309,7 @@ export class SwatSingleTableViewerPanel {
                                 ? `Peek plant row from ${plantFileName}`
                                 : `${plantFileName} - Not indexed (may not exist in dataset)`;
                             if (canOpenPlants) {
-                                html += `<td class="fk-cell" data-fk-table="plants_plt" data-fk-value="${this._escapeHtml(value)}"><a href="#" onclick="toggleFKPeek(this, 'plants_plt', '${this._escapeJs(value)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                                html += `<td class="fk-cell" data-fk-table="plants_plt" data-fk-value="${this._escapeHtml(value)}"><a href="#" data-action="toggle-fk" data-fk-table="plants_plt" data-fk-value="${this._escapeHtml(value)}" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
                             } else {
                                 html += `<td class="fk-cell unresolved" data-fk-table="plants_plt" data-fk-value="${this._escapeHtml(value)}"><span class="${linkClass}" title="${title}">${this._escapeHtml(value)}</span></td>`;
                             }
@@ -1387,10 +1387,10 @@ export class SwatSingleTableViewerPanel {
 
             html += `
                 <div class="dtl-section${highlightClass}" data-dtl="${this._escapeHtml(tableName)}"${highlightId}>
-                    <div class="dtl-header" onclick="toggleDecisionTableSection('${this._escapeJs(tableName)}')">
+                    <div class="dtl-header" data-action="toggle-decision-table" data-dtl="${this._escapeHtml(tableName)}">
                         <span class="toggle-icon">▼</span>
                         <span class="dtl-name">
-                            <a href="#" onclick="event.stopPropagation(); navigateToFile('${this._escapeJs(file)}', ${lineNumber}); return false;" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(tableName)}</a>
+                            <a href="#" data-action="navigate" data-file="${this._escapeHtml(file)}" data-line="${lineNumber}" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(tableName)}</a>
                         </span>
                         <span class="dtl-info">
                             Conditions: ${this._escapeHtml(condCount)}, Alternatives: ${this._escapeHtml(altCountRaw)}, Actions: ${this._escapeHtml(actCount)}
@@ -1421,7 +1421,7 @@ export class SwatSingleTableViewerPanel {
 
                 conditionRows.forEach((childRow: any) => {
                     html += `<tr>`;
-                    html += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(file)}', ${childRow.lineNumber})">${childRow.lineNumber}</a></td>`;
+                    html += `<td class="line-col"><a href="#" data-action="navigate" data-file="${this._escapeHtml(file)}" data-line="${childRow.lineNumber}">${childRow.lineNumber}</a></td>`;
                     html += `<td>${this._escapeHtml(childRow.values?.cond_var || '')}</td>`;
                     html += `<td>${this._escapeHtml(childRow.values?.obj || '')}</td>`;
                     html += `<td>${this._escapeHtml(childRow.values?.obj_num || '')}</td>`;
@@ -1466,7 +1466,7 @@ export class SwatSingleTableViewerPanel {
                 `;
                 actionRows.forEach((childRow: any) => {
                     html += `<tr>`;
-                    html += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(file)}', ${childRow.lineNumber})">${childRow.lineNumber}</a></td>`;
+                    html += `<td class="line-col"><a href="#" data-action="navigate" data-file="${this._escapeHtml(file)}" data-line="${childRow.lineNumber}">${childRow.lineNumber}</a></td>`;
                     html += `<td>${this._escapeHtml(childRow.values?.act_typ || '')}</td>`;
                     html += `<td>${this._escapeHtml(childRow.values?.obj || '')}</td>`;
                     html += `<td>${this._escapeHtml(childRow.values?.obj_num || '')}</td>`;
@@ -1552,7 +1552,7 @@ export class SwatSingleTableViewerPanel {
             return '';
         }
         
-        return `<a href="${this._escapeHtml(url)}" target="_blank" class="gitbook-link" title="View documentation on GitBook (Click or Ctrl+Right Click)">
+        return `<a href="${this._escapeHtml(url)}" target="_blank" rel="noopener" data-action="external-link" class="gitbook-link" title="View documentation on GitBook (Click or Ctrl+Right Click)">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: middle; margin-left: 8px;">
                 <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
             </svg>
@@ -2424,6 +2424,85 @@ export class SwatSingleTableViewerPanel {
     private _getScript(): string {
         return `
             const vscode = acquireVsCodeApi();
+
+            document.addEventListener('click', event => {
+                const target = event.target.closest('[data-action]');
+                if (!target) {
+                    return;
+                }
+
+                const action = target.getAttribute('data-action');
+                switch (action) {
+                    case 'navigate':
+                        event.preventDefault();
+                        navigateToFile(target.getAttribute('data-file'), Number(target.getAttribute('data-line')));
+                        break;
+                    case 'open-file':
+                        event.preventDefault();
+                        openFileByName(target.getAttribute('data-file'));
+                        break;
+                    case 'open-file-highlight':
+                        event.preventDefault();
+                        openFileByNameWithHighlight(
+                            target.getAttribute('data-file'),
+                            target.getAttribute('data-highlight')
+                        );
+                        break;
+                    case 'open-input-file':
+                        event.preventDefault();
+                        openInputFile(target.getAttribute('data-file'));
+                        break;
+                    case 'open-file-for-table':
+                        event.preventDefault();
+                        openFileForTable(target.getAttribute('data-table-name'));
+                        break;
+                    case 'toggle-fk':
+                        event.preventDefault();
+                        toggleFKPeek(target, target.getAttribute('data-fk-table'), target.getAttribute('data-fk-value'));
+                        break;
+                    case 'toggle-classification':
+                        event.preventDefault();
+                        toggleClassificationSection(target.getAttribute('data-classification'));
+                        break;
+                    case 'toggle-wgn-station':
+                        event.preventDefault();
+                        toggleWgnStationSection(target.getAttribute('data-station'));
+                        break;
+                    case 'toggle-atmo-station':
+                        event.preventDefault();
+                        toggleAtmoStationSection(target.getAttribute('data-station'));
+                        break;
+                    case 'toggle-soil':
+                        event.preventDefault();
+                        toggleSoilSection(target.getAttribute('data-soil'));
+                        break;
+                    case 'toggle-plant-community':
+                        event.preventDefault();
+                        togglePlantCommunitySection(target.getAttribute('data-community'));
+                        break;
+                    case 'toggle-decision-table':
+                        event.preventDefault();
+                        toggleDecisionTableSection(target.getAttribute('data-dtl'));
+                        break;
+                    case 'external-link':
+                        // Allow default navigation for external links.
+                        break;
+                }
+            });
+
+            document.addEventListener('contextmenu', event => {
+                const target = event.target.closest('[data-fk-context]');
+                if (!target) {
+                    return;
+                }
+                showFKContextMenu(
+                    event,
+                    target.getAttribute('data-fk-file'),
+                    Number(target.getAttribute('data-fk-line')),
+                    target.getAttribute('data-fk-table'),
+                    target.getAttribute('data-fk-value')
+                );
+            });
 
             function navigateToFile(file, line) {
                 vscode.postMessage({
