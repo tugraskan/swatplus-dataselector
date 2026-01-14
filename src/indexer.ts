@@ -111,6 +111,7 @@ export interface IndexedRow {
     tableName: string;
     lineNumber: number;  // 1-based line number in file
     pkValue: string;     // Primary key value (typically 'id' or 'name')
+    pkValueLower?: string; // Lowercased primary key value for faster lookups
     values: { [columnName: string]: string };
     childRows?: Array<{ lineNumber: number; values: { [columnName: string]: string } }>; // For hierarchical files like weather-wgn.cli
 }
@@ -121,6 +122,7 @@ export interface FKReference {
     sourceLine: number;
     sourceColumn: string;
     fkValue: string;
+    fkValueLower?: string;
     targetTable: string;
     targetColumn: string;
     resolved: boolean;
@@ -460,9 +462,10 @@ export class SwatIndexer {
                 const tableIndex = new Map<string, IndexedRow>();
                 const isDecisionTable = tableName.includes('dtl');
                 (rows as IndexedRow[]).forEach((row) => {
-                    tableIndex.set(row.pkValue.toLowerCase(), row);
+                    const pkValueLower = row.pkValueLower ?? row.pkValue.toLowerCase();
+                    tableIndex.set(pkValueLower, row);
                     if (isDecisionTable) {
-                        this.decisionTableIndex.set(row.pkValue.toLowerCase(), row);
+                        this.decisionTableIndex.set(pkValueLower, row);
                     }
                 });
                 this.index.set(tableName, tableIndex);
@@ -577,6 +580,7 @@ export class SwatIndexer {
         for (const fkRef of this.fkReferences) {
             let targetRow: IndexedRow | undefined;
             let actualTargetTable = fkRef.targetTable;
+            const fkValueLower = fkRef.fkValueLower ?? fkRef.fkValue.toLowerCase();
             
             // Special handling for decision table references
             // Decision tables can be in any *.dtl file, so we search across all DTL tables
@@ -590,7 +594,7 @@ export class SwatIndexer {
                 // Standard FK resolution with case-insensitive lookup
                 const targetTableIndex = this.index.get(fkRef.targetTable);
                 if (targetTableIndex) {
-                    targetRow = targetTableIndex.get(fkRef.fkValue.toLowerCase());
+                    targetRow = targetTableIndex.get(fkValueLower);
                 }
             }
             
@@ -600,7 +604,7 @@ export class SwatIndexer {
                 resolvedCount++;
                 
                 // Build reverse index: target_table:pk_value -> FK references (case-insensitive)
-                const reverseKey = `${actualTargetTable}:${fkRef.fkValue.toLowerCase()}`;
+                const reverseKey = `${actualTargetTable}:${fkValueLower}`;
                 if (!this.reverseIndex.has(reverseKey)) {
                     this.reverseIndex.set(reverseKey, []);
                 }

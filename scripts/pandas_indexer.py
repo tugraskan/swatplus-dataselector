@@ -151,12 +151,17 @@ def parse_lines_to_dataframe(
     table: dict,
     metadata: dict,
     lines: Optional[List[str]] = None
-) -> Tuple[pd.DataFrame, List[Tuple[int, int]], List[str]]:
+) -> Tuple[pd.DataFrame, List[Tuple[int, int]], List[str], List[Dict[str, str]]]:
     """
     Parse TxtInOut rows into a DataFrame starting at data_starts_after.
     
     Returns:
-        (DataFrame with main records, List of (start_line, child_count) tuples for child processing)
+        (
+            DataFrame with main records,
+            List of (start_line, child_count) tuples for child processing,
+            Column names used for parsing,
+            Raw record list for payload construction
+        )
     """
     file_name = file_path.name
     start_line = table.get("data_starts_after", 0)
@@ -251,7 +256,7 @@ def parse_lines_to_dataframe(
     
     df = pd.DataFrame.from_records(records)
     if df.empty:
-        return df, child_line_info, columns
+        return df, child_line_info, columns, records
     
     # Determine primary key
     pk_candidates = table.get("primary_keys") or []
@@ -266,8 +271,14 @@ def parse_lines_to_dataframe(
         df["pkValue"] = df["filename"].astype(str)
     else:
         df["pkValue"] = df.index.astype(str)
-    
-    return df, child_line_info, columns
+
+    df["pkValueLower"] = df["pkValue"].str.lower()
+
+    for idx, record in enumerate(records):
+        record["pkValue"] = str(df.at[idx, "pkValue"])
+        record["pkValueLower"] = str(df.at[idx, "pkValueLower"])
+
+    return df, child_line_info, columns, records
 
 
 def build_fk_references(
@@ -310,11 +321,15 @@ def build_fk_references(
             column_values_cache[column] = df[column].astype(str)
         if column not in column_lower_cache:
             column_lower_cache[column] = column_values_cache[column].str.lower()
-        column_values = column_values_cache[column]
-        mask = ~column_lower_cache[column].isin(null_set)
-        filtered = df.loc[mask, ["lineNumber", column]].to_records(index=False)
+        column_lower = column_lower_cache[column]
+        mask = ~column_lower.isin(null_set)
+        filtered = df.loc[mask, ["lineNumber", column]]
 
-        for line_number, fk_value in filtered:
+        for line_number, fk_value, fk_value_lower in zip(
+            filtered["lineNumber"],
+            filtered[column],
+            column_lower.loc[mask]
+        ):
             references.append(
                 {
                     "sourceFile": str(file_path),
@@ -322,6 +337,7 @@ def build_fk_references(
                     "sourceLine": int(line_number),
                     "sourceColumn": column,
                     "fkValue": str(fk_value),
+                    "fkValueLower": str(fk_value_lower),
                     "targetTable": fk["references"]["table"],
                     "targetColumn": txtinout_target_column,
                     "resolved": False,
@@ -367,11 +383,15 @@ def build_fk_references(
                 column_values_cache[column] = df[column].astype(str)
             if column not in column_lower_cache:
                 column_lower_cache[column] = column_values_cache[column].str.lower()
-            column_values = column_values_cache[column]
-            mask = ~column_lower_cache[column].isin(null_set)
-            filtered = df.loc[mask, ["lineNumber", column]].to_records(index=False)
+            column_lower = column_lower_cache[column]
+            mask = ~column_lower.isin(null_set)
+            filtered = df.loc[mask, ["lineNumber", column]]
 
-            for line_number, fk_value in filtered:
+            for line_number, fk_value, fk_value_lower in zip(
+                filtered["lineNumber"],
+                filtered[column],
+                column_lower.loc[mask]
+            ):
                 references.append(
                     {
                         "sourceFile": str(file_path),
@@ -379,6 +399,7 @@ def build_fk_references(
                         "sourceLine": int(line_number),
                         "sourceColumn": column,
                         "fkValue": str(fk_value),
+                        "fkValueLower": str(fk_value_lower),
                         "targetTable": target_table,
                         "targetColumn": txtinout_target_column,
                         "resolved": False,
@@ -400,7 +421,7 @@ def process_management_sch_child_lines(
 ) -> List[dict]:
     """Process child lines for management.sch and extract FK references."""
     references: List[dict] = []
-    null_set = set(fk_null_values)
+    null_set = {val.lower() for val in fk_null_values}
     
     # Operation type to target table mapping
     op_type_to_table = {
@@ -428,13 +449,14 @@ def process_management_sch_child_lines(
         line = lines[current_line].strip()
         if line:
             dtl_name = line.split()[0] if line.split() else None
-            if dtl_name and dtl_name not in null_set:
+            if dtl_name and dtl_name.lower() not in null_set:
                 references.append({
                     "sourceFile": str(file_path),
                     "sourceTable": table["table_name"],
                     "sourceLine": current_line + 1,
                     "sourceColumn": "auto_op_dtl",
                     "fkValue": dtl_name,
+                    "fkValueLower": dtl_name.lower(),
                     "targetTable": "lum_dtl",
                     "targetColumn": "name",
                     "resolved": False
@@ -453,13 +475,14 @@ def process_management_sch_child_lines(
                 # op_data1 is typically at index 6 in management schedule operation lines
                 op_data1 = values[MANAGEMENT_SCH_OP_DATA1_INDEX] if len(values) > MANAGEMENT_SCH_OP_DATA1_INDEX else None
                 
-                if op_type and op_data1 and op_type in op_type_to_table and op_data1 not in null_set:
+                if op_type and op_data1 and op_type in op_type_to_table and op_data1.lower() not in null_set:
                     references.append({
                         "sourceFile": str(file_path),
                         "sourceTable": table["table_name"],
                         "sourceLine": current_line + 1,
                         "sourceColumn": f"op_data1({op_type})",
                         "fkValue": op_data1,
+                        "fkValueLower": op_data1.lower(),
                         "targetTable": op_type_to_table[op_type],
                         "targetColumn": "name",
                         "resolved": False
@@ -480,7 +503,7 @@ def process_dtl_file(
     Returns:
         (list of row payloads, list of FK references)
     """
-    null_set = set(fk_null_values)
+    null_set = {val.lower() for val in fk_null_values}
     row_payload: List[dict] = []
     fk_references: List[dict] = []
     
@@ -636,13 +659,14 @@ def process_dtl_file(
                     fp = action_values[DTL_ACTION_FP_INDEX]
                     
                     # Track FK if action type has a mapping and fp is not null
-                    if act_typ in action_type_to_table and fp not in null_set:
+                    if act_typ in action_type_to_table and fp.lower() not in null_set:
                         fk_references.append({
                             "sourceFile": str(file_path),
                             "sourceTable": table["table_name"],
                             "sourceLine": current_line + 1,
                             "sourceColumn": f"fp({act_typ})",
                             "fkValue": fp,
+                            "fkValueLower": fp.lower(),
                             "targetTable": action_type_to_table[act_typ],
                             "targetColumn": "name",
                             "resolved": False
@@ -860,13 +884,12 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
             lines = handle.readlines()
 
         # Parse the file with hierarchical support
-        df, child_line_info, columns = parse_lines_to_dataframe(file_path, table, metadata, lines)
+        df, child_line_info, columns, records = parse_lines_to_dataframe(file_path, table, metadata, lines)
         if df.empty:
             continue
 
         # Build row payload
         row_payload = []
-        records = df.to_dict("records")
         for idx, row in enumerate(records):
             values = {col: str(row.get(col, "")) for col in columns}
             row_dict = {
@@ -874,6 +897,7 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
                 "tableName": table["table_name"],
                 "lineNumber": int(row["lineNumber"]),
                 "pkValue": str(row["pkValue"]),
+                "pkValueLower": str(row.get("pkValueLower", "")).lower() if row.get("pkValueLower") else str(row["pkValue"]).lower(),
                 "values": values,
             }
 
