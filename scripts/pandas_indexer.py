@@ -149,7 +149,8 @@ def is_main_record_line(value_map: Dict[str, str], file_name: str, tokens: List[
 def parse_lines_to_dataframe(
     file_path: Path,
     table: dict,
-    metadata: dict
+    metadata: dict,
+    lines: Optional[List[str]] = None
 ) -> Tuple[pd.DataFrame, List[Tuple[int, int]], List[str]]:
     """
     Parse TxtInOut rows into a DataFrame starting at data_starts_after.
@@ -175,8 +176,9 @@ def parse_lines_to_dataframe(
     is_hierarchical = is_hierarchical_file(file_name, metadata)
     hierarchical_config = get_hierarchical_config(file_name, metadata) if is_hierarchical else None
     
-    with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
-        lines = handle.readlines()
+    if lines is None:
+        with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
+            lines = handle.readlines()
 
     columns = schema_columns
     if table.get("has_header_line") and lines:
@@ -277,6 +279,9 @@ def build_fk_references(
 ) -> List[dict]:
     references: List[dict] = []
     null_set = {val.lower() for val in fk_null_values}
+    processed_columns: set[str] = set()
+    column_values_cache: Dict[str, pd.Series] = {}
+    column_lower_cache: Dict[str, pd.Series] = {}
     
     # Get the default target column for TxtInOut FK references
     txtinout_target_column = metadata.get("txtinout_fk_behavior", {}).get("default_target_column", "name")
@@ -294,24 +299,29 @@ def build_fk_references(
         column = fk.get("column")
         if not column or column not in df.columns:
             continue
+        processed_columns.add(column)
         
         # Skip file pointer columns (they point to files, not table rows)
         # Allow weather list files (pcp/tmp/slr/hmd/wnd) to behave as FK targets.
         if column in file_pointer_columns and fk.get("references", {}).get("table") not in WEATHER_FILE_POINTER_FK_TABLES:
             continue
 
-        column_values = df[column].astype(str)
-        mask = ~column_values.str.lower().isin(null_set)
-        filtered = df.loc[mask, ["lineNumber", column]]
+        if column not in column_values_cache:
+            column_values_cache[column] = df[column].astype(str)
+        if column not in column_lower_cache:
+            column_lower_cache[column] = column_values_cache[column].str.lower()
+        column_values = column_values_cache[column]
+        mask = ~column_lower_cache[column].isin(null_set)
+        filtered = df.loc[mask, ["lineNumber", column]].to_records(index=False)
 
-        for _, row in filtered.iterrows():
+        for line_number, fk_value in filtered:
             references.append(
                 {
                     "sourceFile": str(file_path),
                     "sourceTable": table["table_name"],
-                    "sourceLine": int(row["lineNumber"]),
+                    "sourceLine": int(line_number),
                     "sourceColumn": column,
-                    "fkValue": str(row[column]),
+                    "fkValue": str(fk_value),
                     "targetTable": fk["references"]["table"],
                     "targetColumn": txtinout_target_column,
                     "resolved": False,
@@ -333,11 +343,9 @@ def build_fk_references(
                 continue
             
             # Skip if already processed by schema FK
-            already_processed = any(
-                ref["sourceColumn"] == column for ref in references
-            )
-            if already_processed:
+            if column in processed_columns:
                 continue
+            processed_columns.add(column)
             
             # Extract target table from target_file
             target_file = md_fk.get("target_file", "")
@@ -355,18 +363,22 @@ def build_fk_references(
             if not target_table:
                 target_table = target_file.replace(".", "_").replace("-", "_")
             
-            column_values = df[column].astype(str)
-            mask = ~column_values.str.lower().isin(null_set)
-            filtered = df.loc[mask, ["lineNumber", column]]
+            if column not in column_values_cache:
+                column_values_cache[column] = df[column].astype(str)
+            if column not in column_lower_cache:
+                column_lower_cache[column] = column_values_cache[column].str.lower()
+            column_values = column_values_cache[column]
+            mask = ~column_lower_cache[column].isin(null_set)
+            filtered = df.loc[mask, ["lineNumber", column]].to_records(index=False)
 
-            for _, row in filtered.iterrows():
+            for line_number, fk_value in filtered:
                 references.append(
                     {
                         "sourceFile": str(file_path),
                         "sourceTable": table["table_name"],
-                        "sourceLine": int(row["lineNumber"]),
+                        "sourceLine": int(line_number),
                         "sourceColumn": column,
-                        "fkValue": str(row[column]),
+                        "fkValue": str(fk_value),
                         "targetTable": target_table,
                         "targetColumn": txtinout_target_column,
                         "resolved": False,
@@ -640,6 +652,181 @@ def process_dtl_file(
     return row_payload, fk_references
 
 
+def extract_soils_details(row: dict, lines: List[str]) -> Tuple[Dict[str, str], List[dict]]:
+    value_updates: Dict[str, str] = {}
+    child_rows: List[dict] = []
+    line_num = int(row.get("lineNumber", 0))
+    line_idx = line_num - 1
+    layer_count = 0
+
+    if 0 <= line_idx < len(lines):
+        main_tokens = lines[line_idx].strip().split()
+        if main_tokens:
+            name = main_tokens[0]
+            try:
+                layer_count = int(main_tokens[1]) if len(main_tokens) > 1 else 0
+            except (ValueError, TypeError):
+                layer_count = 0
+
+            value_updates.update({
+                "name": name,
+                "nly": str(layer_count) if layer_count else "",
+                "hyd_grp": main_tokens[2] if len(main_tokens) > 2 else "",
+                "dp_tot": main_tokens[3] if len(main_tokens) > 3 else "",
+                "anion_excl": main_tokens[4] if len(main_tokens) > 4 else "",
+                "perc_crk": main_tokens[5] if len(main_tokens) > 5 else "",
+                "texture": main_tokens[6] if len(main_tokens) > 6 else "",
+                "description": " ".join(main_tokens[7:]) if len(main_tokens) > 7 else "",
+            })
+
+    if layer_count > 0:
+        layer_columns = [
+            "dp", "bd", "awc", "soil_k", "carbon", "clay", "silt", "sand",
+            "rock", "alb", "usle_k", "ec", "caco3", "ph"
+        ]
+        for layer_idx in range(layer_count):
+            child_line_idx = line_idx + 1 + layer_idx
+            if child_line_idx >= len(lines):
+                break
+            child_line = lines[child_line_idx].strip()
+            if not child_line:
+                continue
+            child_tokens = child_line.split()
+            child_value_map = {
+                col_name: child_tokens[col_idx] if col_idx < len(child_tokens) else ""
+                for col_idx, col_name in enumerate(layer_columns)
+            }
+            child_value_map["layer"] = str(layer_idx + 1)
+            child_rows.append({
+                "lineNumber": child_line_idx + 1,
+                "values": child_value_map
+            })
+
+    return value_updates, child_rows
+
+
+def extract_plant_details(
+    lines: List[str],
+    child_line_info: List[Tuple[int, int]],
+    record_index: int
+) -> Tuple[Dict[str, str], List[dict]]:
+    value_updates: Dict[str, str] = {}
+    child_rows: List[dict] = []
+    if not child_line_info or record_index >= len(child_line_info):
+        return value_updates, child_rows
+
+    line_num, child_count = child_line_info[record_index]
+    if child_count <= 0:
+        return value_updates, child_rows
+
+    line_idx = line_num - 1
+    if 0 <= line_idx < len(lines):
+        main_tokens = lines[line_idx].strip().split()
+        if len(main_tokens) >= 3:
+            value_updates.update({
+                "name": main_tokens[0],
+                "plnt_cnt": main_tokens[1],
+                "rot_yr_ini": main_tokens[2],
+            })
+
+    plant_columns = [
+        "plnt_name", "lc_status", "lai_init", "bm_init",
+        "phu_init", "plnt_pop", "yrs_init", "rsd_init"
+    ]
+    for plant_idx in range(child_count):
+        child_line_idx = line_idx + 1 + plant_idx
+        if child_line_idx >= len(lines):
+            break
+        child_line = lines[child_line_idx].strip()
+        if not child_line:
+            continue
+        child_tokens = child_line.split()
+        child_value_map = {
+            col_name: child_tokens[col_idx] if col_idx < len(child_tokens) else ""
+            for col_idx, col_name in enumerate(plant_columns)
+        }
+        child_rows.append({
+            "lineNumber": child_line_idx + 1,
+            "values": child_value_map
+        })
+
+    return value_updates, child_rows
+
+
+def extract_weather_wgn_details(
+    lines: List[str],
+    child_line_info: List[Tuple[int, int]],
+    record_index: int
+) -> List[dict]:
+    if not child_line_info or record_index >= len(child_line_info):
+        return []
+    line_num, child_count = child_line_info[record_index]
+    if child_count <= 0:
+        return []
+
+    child_rows = []
+    monthly_columns = [
+        'tmp_max_ave', 'tmp_min_ave', 'tmp_max_sd', 'tmp_min_sd',
+        'pcp_ave', 'pcp_sd', 'pcp_skew', 'wet_dry', 'wet_wet',
+        'pcp_days', 'pcp_hhr', 'slr_ave', 'dew_ave', 'wnd_ave'
+    ]
+    start_idx = line_num - 1
+    for month_idx in range(12):
+        child_line_idx = start_idx + 1 + month_idx + 1
+        if child_line_idx < len(lines):
+            child_line = lines[child_line_idx].strip()
+            if child_line:
+                child_values_list = child_line.split()
+                child_value_map = {}
+                for col_idx, col_name in enumerate(monthly_columns):
+                    child_value_map[col_name] = child_values_list[col_idx] if col_idx < len(child_values_list) else ""
+                child_value_map['month'] = str(month_idx + 1)
+                child_rows.append({
+                    "lineNumber": child_line_idx + 1,
+                    "values": child_value_map
+                })
+
+    return child_rows
+
+
+def extract_atmo_details(row: dict, lines: List[str]) -> List[dict]:
+    try:
+        num_sta = int(row.get('num_sta', 0)) if 'num_sta' in row else 0
+        num_aa = int(row.get('num_aa', 0)) if 'num_aa' in row else 0
+    except (ValueError, TypeError):
+        num_sta = 0
+        num_aa = 0
+
+    if num_sta <= 0 or num_aa <= 0:
+        return []
+
+    child_rows = []
+    current_line_idx = int(row.get('lineNumber', 0)) - 1
+    deposition_types = ['nh4_wet', 'no3_wet', 'nh4_dry', 'no3_dry']
+
+    for station_idx in range(num_sta):
+        station_line_idx = current_line_idx + 1 + (station_idx * 5)
+        if station_line_idx < len(lines):
+            station_name = lines[station_line_idx].strip()
+            station_data = {'station_name': station_name}
+            for dep_idx, dep_type in enumerate(deposition_types):
+                data_line_idx = station_line_idx + 1 + dep_idx
+                if data_line_idx < len(lines):
+                    data_line = lines[data_line_idx].strip()
+                    values = data_line.split()
+                    if values:
+                        station_data[dep_type] = values[:-1] if len(values) > 1 else values
+                        station_data[f'{dep_type}_line'] = data_line_idx + 1
+
+            if 'station_name' in station_data:
+                child_rows.append({
+                    "lineNumber": station_line_idx + 1,
+                    "values": station_data
+                })
+
+    return child_rows
+
+
 def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> dict:
     schema = load_json(schema_path)
     metadata = load_json(metadata_path) if metadata_path.exists() else {}
@@ -669,19 +856,18 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
                 fk_references.extend(dtl_fk_refs)
             continue
 
+        with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
+            lines = handle.readlines()
+
         # Parse the file with hierarchical support
-        df, child_line_info, columns = parse_lines_to_dataframe(file_path, table, metadata)
+        df, child_line_info, columns = parse_lines_to_dataframe(file_path, table, metadata, lines)
         if df.empty:
             continue
 
-        lines = None
-        if file_name in {'soils.sol', 'plant.ini'}:
-            with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
-                lines = handle.readlines()
-
         # Build row payload
         row_payload = []
-        for idx, row in df.iterrows():
+        records = df.to_dict("records")
+        for idx, row in enumerate(records):
             values = {col: str(row.get(col, "")) for col in columns}
             row_dict = {
                 "file": str(file_path),
@@ -693,189 +879,31 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
 
             # Special handling for soils.sol: capture layer data lines
             if file_name == 'soils.sol' and lines:
-                line_num = int(row.get("lineNumber", 0))
-                line_idx = line_num - 1
-                layer_count = 0
-
-                if 0 <= line_idx < len(lines):
-                    main_tokens = lines[line_idx].strip().split()
-                    if main_tokens:
-                        name = main_tokens[0]
-                        try:
-                            layer_count = int(main_tokens[1]) if len(main_tokens) > 1 else 0
-                        except (ValueError, TypeError):
-                            layer_count = 0
-
-                        hyd_grp = main_tokens[2] if len(main_tokens) > 2 else ""
-                        dp_tot = main_tokens[3] if len(main_tokens) > 3 else ""
-                        anion_excl = main_tokens[4] if len(main_tokens) > 4 else ""
-                        perc_crk = main_tokens[5] if len(main_tokens) > 5 else ""
-                        texture = main_tokens[6] if len(main_tokens) > 6 else ""
-                        description = " ".join(main_tokens[7:]) if len(main_tokens) > 7 else ""
-
-                        row_dict["values"].update({
-                            "name": name,
-                            "nly": str(layer_count) if layer_count else "",
-                            "hyd_grp": hyd_grp,
-                            "dp_tot": dp_tot,
-                            "anion_excl": anion_excl,
-                            "perc_crk": perc_crk,
-                            "texture": texture,
-                            "description": description,
-                        })
-
-                if layer_count > 0:
-                    layer_columns = [
-                        "dp", "bd", "awc", "soil_k", "carbon", "clay", "silt", "sand",
-                        "rock", "alb", "usle_k", "ec", "caco3", "ph"
-                    ]
-                    child_rows = []
-                    for layer_idx in range(layer_count):
-                        child_line_idx = line_idx + 1 + layer_idx
-                        if child_line_idx >= len(lines):
-                            break
-                        child_line = lines[child_line_idx].strip()
-                        if not child_line:
-                            continue
-                        child_tokens = child_line.split()
-                        child_value_map = {
-                            col_name: child_tokens[col_idx] if col_idx < len(child_tokens) else ""
-                            for col_idx, col_name in enumerate(layer_columns)
-                        }
-                        child_value_map["layer"] = str(layer_idx + 1)
-                        child_rows.append({
-                            "lineNumber": child_line_idx + 1,
-                            "values": child_value_map
-                        })
-
-                    if child_rows:
-                        row_dict["childRows"] = child_rows
+                value_updates, child_rows = extract_soils_details(row, lines)
+                if value_updates:
+                    row_dict["values"].update(value_updates)
+                if child_rows:
+                    row_dict["childRows"] = child_rows
 
             # Special handling for plant.ini: capture plant community member lines
-            if file_name == 'plant.ini' and lines and child_line_info and idx < len(child_line_info):
-                line_num, child_count = child_line_info[idx]
-                if child_count > 0:
-                    line_idx = line_num - 1
-                    if 0 <= line_idx < len(lines):
-                        main_tokens = lines[line_idx].strip().split()
-                        if len(main_tokens) >= 3:
-                            row_dict["values"].update({
-                                "name": main_tokens[0],
-                                "plnt_cnt": main_tokens[1],
-                                "rot_yr_ini": main_tokens[2],
-                            })
-
-                    plant_columns = [
-                        "plnt_name", "lc_status", "lai_init", "bm_init",
-                        "phu_init", "plnt_pop", "yrs_init", "rsd_init"
-                    ]
-                    child_rows = []
-                    for plant_idx in range(child_count):
-                        child_line_idx = line_idx + 1 + plant_idx
-                        if child_line_idx >= len(lines):
-                            break
-                        child_line = lines[child_line_idx].strip()
-                        if not child_line:
-                            continue
-                        child_tokens = child_line.split()
-                        child_value_map = {
-                            col_name: child_tokens[col_idx] if col_idx < len(child_tokens) else ""
-                            for col_idx, col_name in enumerate(plant_columns)
-                        }
-                        child_rows.append({
-                            "lineNumber": child_line_idx + 1,
-                            "values": child_value_map
-                        })
-
-                    if child_rows:
-                        row_dict["childRows"] = child_rows
+            if file_name == 'plant.ini' and lines:
+                value_updates, child_rows = extract_plant_details(lines, child_line_info, idx)
+                if value_updates:
+                    row_dict["values"].update(value_updates)
+                if child_rows:
+                    row_dict["childRows"] = child_rows
             
             # Special handling for weather-wgn.cli: capture monthly data child lines
-            if file_name == 'weather-wgn.cli' and child_line_info and idx < len(child_line_info):
-                line_num, child_count = child_line_info[idx]
-                if child_count > 0:
-                    with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
-                        lines = handle.readlines()
-                    
-                    # Skip the header line (first child line) and capture the 12 monthly data lines
-                    child_rows = []
-                    # Monthly data columns based on the weather-wgn.cli documentation
-                    monthly_columns = [
-                        'tmp_max_ave', 'tmp_min_ave', 'tmp_max_sd', 'tmp_min_sd',
-                        'pcp_ave', 'pcp_sd', 'pcp_skew', 'wet_dry', 'wet_wet',
-                        'pcp_days', 'pcp_hhr', 'slr_ave', 'dew_ave', 'wnd_ave'
-                    ]
-                    
-                    # Start from line after main record, skip header, then read 12 months
-                    # line_num is 1-based, but lines array is 0-based
-                    start_idx = line_num - 1  # Convert to 0-based index
-                    for month_idx in range(12):
-                        # Skip header line (1) + month offset
-                        child_line_idx = start_idx + 1 + month_idx + 1  # +1 for next line, +month_idx for month, +1 for header skip
-                        if child_line_idx < len(lines):
-                            child_line = lines[child_line_idx].strip()
-                            if child_line:
-                                child_values_list = child_line.split()
-                                child_value_map = {}
-                                for col_idx, col_name in enumerate(monthly_columns):
-                                    child_value_map[col_name] = child_values_list[col_idx] if col_idx < len(child_values_list) else ""
-                                child_value_map['month'] = str(month_idx + 1)  # Add month number (1-12)
-                                child_rows.append({
-                                    "lineNumber": child_line_idx + 1,  # Convert back to 1-based for display
-                                    "values": child_value_map
-                                })
-                    
-                    if child_rows:
-                        row_dict["childRows"] = child_rows
+            if file_name == 'weather-wgn.cli':
+                child_rows = extract_weather_wgn_details(lines, child_line_info, idx)
+                if child_rows:
+                    row_dict["childRows"] = child_rows
             
             # Special handling for atmo.cli: capture station deposition data
             if file_name == 'atmo.cli':
-                with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
-                    lines = handle.readlines()
-                
-                # The main record has num_sta which tells us how many stations
-                try:
-                    num_sta = int(row.get('num_sta', 0)) if 'num_sta' in row.index else 0
-                    num_aa = int(row.get('num_aa', 0)) if 'num_aa' in row.index else 0
-                except (ValueError, TypeError):
-                    num_sta = 0
-                    num_aa = 0
-                
-                if num_sta > 0 and num_aa > 0:
-                    child_rows = []
-                    # Start after the metadata line (line 3, index 2 in 0-based)
-                    # line_num is the metadata line number (1-based)
-                    current_line_idx = int(row.get('lineNumber', 0)) - 1  # Convert to 0-based
-                    
-                    deposition_types = ['nh4_wet', 'no3_wet', 'nh4_dry', 'no3_dry']
-                    
-                    for station_idx in range(num_sta):
-                        # Next line is station name
-                        station_line_idx = current_line_idx + 1 + (station_idx * 5)  # 1 name line + 4 data lines per station
-                        if station_line_idx < len(lines):
-                            station_name = lines[station_line_idx].strip()
-                            
-                            # Next 4 lines are deposition data
-                            station_data = {'station_name': station_name}
-                            for dep_idx, dep_type in enumerate(deposition_types):
-                                data_line_idx = station_line_idx + 1 + dep_idx
-                                if data_line_idx < len(lines):
-                                    data_line = lines[data_line_idx].strip()
-                                    # Split the line and take values (last token is the label)
-                                    values = data_line.split()
-                                    # The last value is the label (nh4_wet, etc), rest are data values
-                                    if values:
-                                        station_data[dep_type] = values[:-1] if len(values) > 1 else values
-                                        station_data[f'{dep_type}_line'] = data_line_idx + 1  # Store line number
-                            
-                            if 'station_name' in station_data:
-                                child_rows.append({
-                                    "lineNumber": station_line_idx + 1,  # 1-based line number
-                                    "values": station_data
-                                })
-                    
-                    if child_rows:
-                        row_dict["childRows"] = child_rows
+                child_rows = extract_atmo_details(row, lines)
+                if child_rows:
+                    row_dict["childRows"] = child_rows
             
             row_payload.append(row_dict)
 
@@ -886,17 +914,14 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
         
         # Special handling for management.sch child lines
         if file_name == 'management.sch' and child_line_info:
-            with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
-                lines = handle.readlines()
-            
             # Process child lines for each main record
             for idx, (line_num, _) in enumerate(child_line_info):
                 # Get the main record to extract numb_auto and numb_ops
-                main_record = df.iloc[idx]
+                main_record = records[idx]
                 try:
                     numb_auto = int(main_record.get('numb_auto', 0))
                     numb_ops = int(main_record.get('numb_ops', 0))
-                except (ValueError, KeyError):
+                except (ValueError, TypeError):
                     numb_auto = 0
                     numb_ops = 0
                 
@@ -932,11 +957,17 @@ def main() -> None:
     parser.add_argument("--dataset", required=True, type=Path, help="Path to the TxtInOut directory")
     parser.add_argument("--schema", required=True, type=Path, help="Path to the schema JSON file")
     parser.add_argument("--metadata", required=True, type=Path, help="Path to the TxtInOut metadata JSON file")
+    parser.add_argument("--output", type=Path, help="Optional output file path for JSON payload")
 
     args = parser.parse_args()
 
     payload = build_index(args.dataset, args.schema, args.metadata)
-    print(json.dumps(payload, indent=2))
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        with args.output.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+    else:
+        print(json.dumps(payload, indent=2))
 
 
 if __name__ == "__main__":
