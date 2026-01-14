@@ -2554,6 +2554,15 @@ export class SwatSingleTableViewerPanel {
 
                 const header = section.querySelector('.plant-community-header');
                 const content = section.querySelector('.plant-community-content');
+                
+                if (content.classList.contains('collapsed')) {
+                    content.classList.remove('collapsed');
+                    header.classList.remove('collapsed');
+                } else {
+                    content.classList.add('collapsed');
+                    header.classList.add('collapsed');
+                }
+            }
             function toggleDecisionTableSection(tableName) {
                 const escapedTable = tableName.replace(/"/g, '\\"');
                 const section = document.querySelector('[data-dtl="' + escapedTable + '"]');
