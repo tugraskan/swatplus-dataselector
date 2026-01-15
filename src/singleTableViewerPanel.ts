@@ -1683,7 +1683,8 @@ export class SwatSingleTableViewerPanel {
             }
             .data-table {
                 width: 100%;
-                border-collapse: collapse;
+                border-collapse: separate;
+                border-spacing: 0;
                 font-size: 0.9em;
             }
             .data-table th {
@@ -1691,16 +1692,20 @@ export class SwatSingleTableViewerPanel {
                 padding: 8px 12px;
                 text-align: left;
                 font-weight: 600;
-                border-bottom: 2px solid var(--vscode-panel-border);
+                border: 1px solid var(--vscode-panel-border);
             }
             .data-table th.fk-col {
                 background-color: var(--vscode-inputOption-activeBackground);
             }
             .data-table td {
                 padding: 6px 12px;
-                border-bottom: 1px solid var(--vscode-panel-border);
+                border: 1px solid var(--vscode-panel-border);
+                background-color: var(--vscode-editor-background);
             }
             .data-table tbody tr:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            .data-table tbody tr:hover td {
                 background-color: var(--vscode-list-hoverBackground);
             }
             .line-col {
@@ -1913,23 +1918,28 @@ export class SwatSingleTableViewerPanel {
             }
             .monthly-data-table {
                 width: 100%;
-                border-collapse: collapse;
+                border-collapse: separate;
+                border-spacing: 0;
                 font-size: 0.85em;
             }
             .monthly-data-table th {
                 background-color: var(--vscode-editor-background);
                 padding: 8px 6px;
                 text-align: left;
-                border-bottom: 2px solid var(--vscode-panel-border);
+                border: 1px solid var(--vscode-panel-border);
                 font-weight: 600;
                 white-space: nowrap;
                 font-size: 0.75em;
             }
             .monthly-data-table td {
                 padding: 6px;
-                border-bottom: 1px solid var(--vscode-panel-border);
+                border: 1px solid var(--vscode-panel-border);
+                background-color: var(--vscode-editor-background);
             }
             .monthly-data-table tr:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            .monthly-data-table tr:hover td {
                 background-color: var(--vscode-list-hoverBackground);
             }
             /* Atmo.cli station-based sub-table view */
@@ -2100,23 +2110,28 @@ export class SwatSingleTableViewerPanel {
             }
             .soil-layer-table {
                 width: 100%;
-                border-collapse: collapse;
+                border-collapse: separate;
+                border-spacing: 0;
                 font-size: 0.85em;
             }
             .soil-layer-table th {
                 background-color: var(--vscode-editor-background);
                 padding: 8px 6px;
                 text-align: left;
-                border-bottom: 2px solid var(--vscode-panel-border);
+                border: 1px solid var(--vscode-panel-border);
                 font-weight: 600;
                 white-space: nowrap;
                 font-size: 0.75em;
             }
             .soil-layer-table td {
                 padding: 6px;
-                border-bottom: 1px solid var(--vscode-panel-border);
+                border: 1px solid var(--vscode-panel-border);
+                background-color: var(--vscode-editor-background);
             }
             .soil-layer-table tr:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            .soil-layer-table tr:hover td {
                 background-color: var(--vscode-list-hoverBackground);
             }
             /* plant.ini community-based sub-table view */
@@ -2124,11 +2139,6 @@ export class SwatSingleTableViewerPanel {
                 margin: 16px 0;
             }
             .plant-community-section {
-            /* Decision table profile-based sub-table view */
-            .dtl-subtables {
-                margin: 16px 0;
-            }
-            .dtl-section {
                 margin-bottom: 12px;
                 border: 1px solid var(--vscode-panel-border);
                 border-radius: 4px;
@@ -2139,11 +2149,6 @@ export class SwatSingleTableViewerPanel {
                 box-shadow: 0 0 8px var(--vscode-focusBorder);
             }
             .plant-community-header {
-            .dtl-section.highlighted-dtl {
-                border: 2px solid var(--vscode-focusBorder);
-                box-shadow: 0 0 8px var(--vscode-focusBorder);
-            }
-            .dtl-header {
                 padding: 12px 16px;
                 background-color: var(--vscode-editor-background);
                 cursor: pointer;
@@ -2172,6 +2177,34 @@ export class SwatSingleTableViewerPanel {
                 text-decoration: underline;
             }
             .community-info {
+                font-size: 0.85em;
+                color: var(--vscode-descriptionForeground);
+                flex: 1;
+            }
+            /* Decision table profile-based sub-table view */
+            .dtl-subtables {
+                margin: 16px 0;
+            }
+            .dtl-section {
+                margin-bottom: 12px;
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                overflow: hidden;
+            }
+            .dtl-section.highlighted-dtl {
+                border: 2px solid var(--vscode-focusBorder);
+                box-shadow: 0 0 8px var(--vscode-focusBorder);
+            }
+            .dtl-header {
+                padding: 12px 16px;
+                background-color: var(--vscode-editor-background);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                user-select: none;
+                transition: background-color 0.2s;
+            }
             .dtl-header:hover {
                 background-color: var(--vscode-list-hoverBackground);
             }
@@ -2197,13 +2230,21 @@ export class SwatSingleTableViewerPanel {
             }
             .plant-community-content {
                 max-height: 2000px;
+                overflow-y: auto;
+                transition: max-height 0.3s ease-out;
+                padding: 12px 16px;
+            }
+            .plant-community-content.collapsed {
+                max-height: 0;
+                overflow: hidden;
+                padding: 0;
+            }
             .dtl-content {
                 max-height: 2500px;
                 overflow-y: auto;
                 transition: max-height 0.3s ease-out;
                 padding: 12px 16px;
             }
-            .plant-community-content.collapsed {
             .dtl-content.collapsed {
                 max-height: 0;
                 overflow: hidden;
@@ -2220,35 +2261,43 @@ export class SwatSingleTableViewerPanel {
                 color: var(--vscode-descriptionForeground);
             }
             .plant-detail-table {
+                width: 100%;
+                border-collapse: separate;
+                border-spacing: 0;
+                font-size: 0.85em;
+            }
             .dtl-section-title {
                 margin: 4px 0 8px;
                 font-size: 0.95em;
             }
             .dtl-table {
                 width: 100%;
-                border-collapse: collapse;
+                border-collapse: separate;
+                border-spacing: 0;
                 font-size: 0.85em;
             }
-            .plant-detail-table th {
+            .plant-detail-table th,
             .dtl-table th {
                 background-color: var(--vscode-editor-background);
                 padding: 8px 6px;
                 text-align: left;
-                border-bottom: 2px solid var(--vscode-panel-border);
+                border: 1px solid var(--vscode-panel-border);
                 font-weight: 600;
                 white-space: nowrap;
                 font-size: 0.75em;
             }
-            .plant-detail-table td {
-                padding: 6px;
-                border-bottom: 1px solid var(--vscode-panel-border);
-            }
-            .plant-detail-table tr:hover {
+            .plant-detail-table td,
             .dtl-table td {
                 padding: 6px;
-                border-bottom: 1px solid var(--vscode-panel-border);
+                border: 1px solid var(--vscode-panel-border);
+                background-color: var(--vscode-editor-background);
             }
+            .plant-detail-table tr:hover,
             .dtl-table tr:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            .plant-detail-table tr:hover td,
+            .dtl-table tr:hover td {
                 background-color: var(--vscode-list-hoverBackground);
             }
             .fk-indicator {
@@ -2386,7 +2435,8 @@ export class SwatSingleTableViewerPanel {
             }
             .fk-peek-table {
                 width: 100%;
-                border-collapse: collapse;
+                border-collapse: separate;
+                border-spacing: 0;
             }
             .fk-peek-table th {
                 text-align: left;
@@ -2394,10 +2444,12 @@ export class SwatSingleTableViewerPanel {
                 background-color: var(--vscode-editorGroupHeader-tabsBackground);
                 font-weight: 600;
                 font-size: 0.9em;
+                border: 1px solid var(--vscode-panel-border);
             }
             .fk-peek-table td {
                 padding: 4px 8px;
-                border-bottom: 1px solid var(--vscode-panel-border);
+                border: 1px solid var(--vscode-panel-border);
+                background-color: var(--vscode-editor-background);
             }
             /* FK Context Menu Styles */
             .fk-context-menu {
