@@ -49,7 +49,7 @@ export class SwatTableViewerPanel {
                         break;
                     case 'getFKRowData':
                         if (message.tableName && message.fkValue) {
-                            this.sendFKRowData(message.tableName, message.fkValue);
+                            this.sendFKRowData(message.tableName, message.fkValue, message.sourceFile, message.sourceLine);
                         }
                         break;
                     case 'openTableInNewTab':
@@ -122,7 +122,7 @@ export class SwatTableViewerPanel {
         }
     }
 
-    private sendFKRowData(tableName: string, fkValue: string) {
+    private sendFKRowData(tableName: string, fkValue: string, sourceFile?: string, sourceLine?: number) {
         try {
             const schema = this.indexer.getSchema();
             const indexData = this.indexer.getIndexData();
@@ -159,7 +159,9 @@ export class SwatTableViewerPanel {
                 fileName: fileName || tableName,
                 columns: columns,
                 rowData: targetRow.values,
-                lineNumber: targetRow.lineNumber
+                lineNumber: targetRow.lineNumber,
+                sourceFile: sourceFile,
+                sourceLine: sourceLine
             });
         } catch (error) {
             console.error('Failed to get FK row data', error);
@@ -945,10 +947,14 @@ export class SwatTableViewerPanel {
                     nextRow.remove();
                 } else {
                     // Request FK row data from extension
+                    const sourceFile = cell.dataset.sourceFile || '';
+                    const sourceLine = Number(cell.dataset.sourceLine || 0);
                     vscode.postMessage({
                         command: 'getFKRowData',
                         tableName: tableName,
-                        fkValue: fkValue
+                        fkValue: fkValue,
+                        sourceFile: sourceFile,
+                        sourceLine: sourceLine
                     });
                 }
             }
@@ -1028,13 +1034,15 @@ export class SwatTableViewerPanel {
             window.addEventListener('message', event => {
                 const message = event.data;
                 if (message.command === 'showFKRowData') {
-                    displayFKPeek(message.tableName, message.fkValue, message.fileName, message.columns, message.rowData, message.lineNumber);
+                    displayFKPeek(message.tableName, message.fkValue, message.fileName, message.columns, message.rowData, message.lineNumber, message.sourceFile, message.sourceLine);
                 }
             });
 
-            function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber) {
-                // Find the specific FK cell that matches both table name AND FK value
-                const fkCells = document.querySelectorAll(\`td.fk-cell[data-fk-table="\${tableName}"][data-fk-value="\${fkValue}"]\`);
+            function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber, sourceFile, sourceLine) {
+                const sourceSelector = sourceFile ? \`[data-source-file="\${sourceFile}"]\` : '';
+                const sourceLineSelector = sourceLine ? \`[data-source-line="\${sourceLine}"]\` : '';
+                const selector = \`td.fk-cell[data-fk-table="\${tableName}"][data-fk-value="\${fkValue}"]\${sourceSelector}\${sourceLineSelector}\`;
+                const fkCells = document.querySelectorAll(selector);
                 
                 fkCells.forEach(cell => {
                     const currentRow = cell.closest('tr');
