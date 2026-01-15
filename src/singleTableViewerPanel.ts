@@ -225,13 +225,14 @@ export class SwatSingleTableViewerPanel {
             let columns: string[] = [];
             columns = Object.keys(targetRow.values || {});
             
+            const showRelated = false;
             const relatedRows: Array<{ lineNumber: number; file: string; values: Record<string, string> }> = [];
             let relatedColumns: string[] = [];
             let relatedTotal = 0;
             let relatedTableName: string | undefined;
             let relatedColumnName: string | undefined;
 
-            if (sourceTable && sourceColumn) {
+            if (showRelated && sourceTable && sourceColumn) {
                 const sourceTableData = indexData.get(sourceTable);
                 if (sourceTableData) {
                     const firstRow = sourceTableData.values().next().value;
@@ -266,6 +267,7 @@ export class SwatSingleTableViewerPanel {
                 fkColumns: fkColumns,
                 sourceFile: sourceFile,
                 sourceLine: sourceLine,
+                showRelated: showRelated,
                 relatedRows: relatedRows,
                 relatedColumns: relatedColumns,
                 relatedTotal: relatedTotal,
@@ -3237,6 +3239,7 @@ export class SwatSingleTableViewerPanel {
                         message.fkColumns,
                         message.sourceFile,
                         message.sourceLine,
+                        message.showRelated,
                         message.relatedRows,
                         message.relatedColumns,
                         message.relatedTotal,
@@ -3246,7 +3249,7 @@ export class SwatSingleTableViewerPanel {
                 }
             });
             
-            function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber, filePointers, fkColumns, sourceFile, sourceLine, relatedRows, relatedColumns, relatedTotal, relatedTableName, relatedColumnName) {
+            function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber, filePointers, fkColumns, sourceFile, sourceLine, showRelated, relatedRows, relatedColumns, relatedTotal, relatedTableName, relatedColumnName) {
                 const sourceSelector = sourceFile ? \`[data-source-file="\${escapeSelectorValue(sourceFile)}"]\` : '';
                 const sourceLineSelector = sourceLine ? \`[data-source-line="\${escapeSelectorValue(sourceLine)}"]\` : '';
                 const selector = \`td.fk-cell[data-fk-table="\${escapeSelectorValue(tableName)}"][data-fk-value="\${escapeSelectorValue(fkValue)}"]\${sourceSelector}\${sourceLineSelector}\`;
@@ -3269,7 +3272,7 @@ export class SwatSingleTableViewerPanel {
                     header.className = 'fk-peek-header';
                     const headerText = document.createElement('span');
                     headerText.className = 'fk-peek-header-text';
-                    if (Array.isArray(relatedRows) && relatedTableName && relatedColumnName) {
+                    if (showRelated && Array.isArray(relatedRows) && relatedTableName && relatedColumnName) {
                         const summaryText = document.createElement('span');
                         const totalCount = typeof relatedTotal === 'number' ? relatedTotal : relatedRows.length;
                         const shownCount = relatedRows.length;
@@ -3317,8 +3320,8 @@ export class SwatSingleTableViewerPanel {
                     
                     const thead = document.createElement('thead');
                     const headerRow = document.createElement('tr');
-                    const showRelated = Array.isArray(relatedRows) && relatedTableName && relatedColumnName;
-                    const displayColumns = showRelated ? ['Line', ...(relatedColumns || [])] : columns;
+                    const showRelatedRows = showRelated && Array.isArray(relatedRows) && relatedTableName && relatedColumnName;
+                    const displayColumns = showRelatedRows ? ['Line', ...(relatedColumns || [])] : columns;
                     displayColumns.forEach(col => {
                         const th = document.createElement('th');
                         th.textContent = col;
@@ -3328,7 +3331,7 @@ export class SwatSingleTableViewerPanel {
                     table.appendChild(thead);
                     
                     const tbody = document.createElement('tbody');
-                    if (showRelated) {
+                    if (showRelatedRows) {
                         if (relatedRows.length === 0) {
                             const emptyRow = document.createElement('tr');
                             const emptyCell = document.createElement('td');
