@@ -284,7 +284,7 @@ export class SwatTableViewerPanel {
             
             tablesHtml += `
                 <div class="table-section" ${isFocused ? 'id="focused-table"' : ''}>
-                    <h3 class="table-header ${collapsedClass}" onclick="toggleTable('${tableName}')">
+                    <h3 class="table-header ${collapsedClass}" data-action="toggle-table" data-table-id="${this._escapeHtml(tableName)}">
                         <span class="toggle-icon">▼</span>
                         ${tableName}
                         <span class="badge">${rowCount} rows</span>
@@ -412,7 +412,7 @@ export class SwatTableViewerPanel {
 
         for (const row of rows.slice(0, 1000)) { // Limit to 1000 rows for performance
             tableHtml += `<tr>`;
-            tableHtml += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(row.file)}', ${row.lineNumber})">${row.lineNumber}</a></td>`;
+            tableHtml += `<td class="line-col"><a href="#" data-action="navigate" data-file="${this._escapeHtml(row.file)}" data-line="${row.lineNumber}">${row.lineNumber}</a></td>`;
             
             for (const col of columns) {
                 const value = row.values[col] || '';
@@ -423,14 +423,14 @@ export class SwatTableViewerPanel {
                     const canOpen = this.canOpenFile(value);
                     const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
                     const title = canOpen ? `Click to open ${this._escapeHtml(value)}` : `${this._escapeHtml(value)} - Not indexed (may not exist in dataset)`;
-                    tableHtml += `<td class="file-link-cell"><a href="#" onclick="openFileByName('${this._escapeJs(value)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                    tableHtml += `<td class="file-link-cell"><a href="#" data-action="open-file" data-file="${this._escapeHtml(value)}" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
                 } else if (fkInfo && value) {
                     // Try to resolve FK
                     const targetRow = this.indexer.resolveFKTarget(fkInfo.references.table, value);
                     if (targetRow) {
                         // Embed the FK row data as JSON in data attributes
                         const fileName = this.indexer.getFileNameForTable(fkInfo.references.table) || fkInfo.references.table;
-                        tableHtml += `<td class="fk-cell" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}" data-source-file="${this._escapeHtml(row.file)}" data-source-line="${row.lineNumber}"><a href="#" onclick="toggleFKPeek(this, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" oncontextmenu="showFKContextMenu(event, '${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber}, '${this._escapeJs(fkInfo.references.table)}'); return false;" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
+                        tableHtml += `<td class="fk-cell" data-fk-context="true" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" data-action="toggle-fk" data-fk-context="true" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
                     } else {
                         tableHtml += `<td class="fk-cell unresolved" title="Unresolved FK to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</td>`;
                     }
@@ -480,7 +480,7 @@ export class SwatTableViewerPanel {
             return '';
         }
         
-        return `<a href="${this._escapeHtml(url)}" target="_blank" class="gitbook-link" title="View documentation on GitBook (Click or Ctrl+Right Click)" onclick="event.stopPropagation();">
+        return `<a href="${this._escapeHtml(url)}" target="_blank" rel="noopener" data-action="external-link" class="gitbook-link" title="View documentation on GitBook (Click or Ctrl+Right Click)">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: middle; margin-left: 6px;">
                 <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
             </svg>
@@ -644,7 +644,8 @@ export class SwatTableViewerPanel {
             }
             .data-table {
                 width: 100%;
-                border-collapse: collapse;
+                border-collapse: separate;
+                border-spacing: 0;
                 font-size: 0.9em;
             }
             .data-table th {
@@ -652,7 +653,7 @@ export class SwatTableViewerPanel {
                 padding: 8px 12px;
                 text-align: left;
                 font-weight: 600;
-                border-bottom: 2px solid var(--vscode-panel-border);
+                border: 1px solid var(--vscode-panel-border);
                 position: sticky;
                 top: 0;
                 z-index: 10;
@@ -662,9 +663,13 @@ export class SwatTableViewerPanel {
             }
             .data-table td {
                 padding: 6px 12px;
-                border-bottom: 1px solid var(--vscode-panel-border);
+                border: 1px solid var(--vscode-panel-border);
+                background-color: var(--vscode-editor-background);
             }
             .data-table tbody tr:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            .data-table tbody tr:hover td {
                 background-color: var(--vscode-list-hoverBackground);
             }
             .line-col {
@@ -804,7 +809,8 @@ export class SwatTableViewerPanel {
             }
             .fk-peek-table {
                 width: 100%;
-                border-collapse: collapse;
+                border-collapse: separate;
+                border-spacing: 0;
             }
             .fk-peek-table th {
                 text-align: left;
@@ -812,10 +818,12 @@ export class SwatTableViewerPanel {
                 background-color: var(--vscode-editorGroupHeader-tabsBackground);
                 font-weight: 600;
                 font-size: 0.9em;
+                border: 1px solid var(--vscode-panel-border);
             }
             .fk-peek-table td {
                 padding: 4px 8px;
-                border-bottom: 1px solid var(--vscode-panel-border);
+                border: 1px solid var(--vscode-panel-border);
+                background-color: var(--vscode-editor-background);
             }
             /* FK Context Menu Styles */
             .fk-context-menu {
@@ -845,6 +853,52 @@ export class SwatTableViewerPanel {
     private _getScript(): string {
         return `
             const vscode = acquireVsCodeApi();
+
+            document.addEventListener('click', event => {
+                const target = event.target.closest('[data-action]');
+                if (!target) {
+                    return;
+                }
+
+                const action = target.getAttribute('data-action');
+                switch (action) {
+                    case 'toggle-table':
+                        event.preventDefault();
+                        toggleTable(target.getAttribute('data-table-id'));
+                        break;
+                    case 'navigate':
+                        event.preventDefault();
+                        navigateToFile(target.getAttribute('data-file'), Number(target.getAttribute('data-line')));
+                        break;
+                    case 'open-file':
+                        event.preventDefault();
+                        openFileByName(target.getAttribute('data-file'));
+                        break;
+                    case 'toggle-fk':
+                        event.preventDefault();
+                        toggleFKPeek(target, target.getAttribute('data-fk-table'), target.getAttribute('data-fk-value'));
+                        break;
+                    case 'external-link':
+                        // Allow default navigation for external links.
+                        break;
+                }
+            });
+
+            document.addEventListener('contextmenu', event => {
+                if (!(event.target instanceof Element)) {
+                    return;
+                }
+                const target = event.target.closest('[data-fk-context]');
+                if (!target) {
+                    return;
+                }
+                showFKContextMenu(
+                    event,
+                    target.getAttribute('data-fk-file'),
+                    Number(target.getAttribute('data-fk-line')),
+                    target.getAttribute('data-fk-table')
+                );
+            });
 
             function toggleTable(tableId) {
                 const content = document.getElementById(tableId);

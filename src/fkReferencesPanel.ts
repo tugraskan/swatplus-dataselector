@@ -138,13 +138,13 @@ export class SwatFKReferencesPanel {
 
             refsHtml += `
                 <div class="file-section">
-                    <h3 class="file-header" onclick="toggleSection('${fileName}')">
+                    <h3 class="file-header" data-action="toggle-section" data-section-id="${this._escapeHtml(fileName)}">
                         <span class="toggle-icon">▼</span>
                         ${fileName}
                         <span class="badge">${refs.length} references</span>
                         ${unresolvedCount > 0 ? `<span class="badge-warning">${unresolvedCount} unresolved</span>` : ''}
                     </h3>
-                    <div id="${fileName}" class="file-content">
+                    <div id="${this._escapeHtml(fileName)}" class="file-content">
                         <table class="refs-table">
                             <thead>
                                 <tr>
@@ -164,12 +164,12 @@ export class SwatFKReferencesPanel {
                 const statusClass = ref.resolved ? 'resolved' : 'unresolved';
                 const statusText = ref.resolved ? '✓ Found' : '✗ Not found';
                 const targetLink = ref.resolved && ref.targetRow
-                    ? `<a href="#" onclick="navigateToTarget('${ref.targetRow.file}', ${ref.targetRow.lineNumber})">${ref.fkValue}</a>`
+                    ? `<a href="#" data-action="navigate-target" data-file="${this._escapeHtml(ref.targetRow.file)}" data-line="${ref.targetRow.lineNumber}">${ref.fkValue}</a>`
                     : ref.fkValue;
 
                 refsHtml += `
                     <tr class="${statusClass}">
-                        <td><a href="#" onclick="navigateToSource('${ref.sourceFile}', ${ref.sourceLine})">${ref.sourceLine}</a></td>
+                        <td><a href="#" data-action="navigate-source" data-file="${this._escapeHtml(ref.sourceFile)}" data-line="${ref.sourceLine}">${ref.sourceLine}</a></td>
                         <td>${ref.sourceColumn}</td>
                         <td><code>${ref.fkValue}</code></td>
                         <td>${targetFileName}</td>
@@ -193,7 +193,7 @@ export class SwatFKReferencesPanel {
             const totalFiles = this.indexer.getAllFileCioReferences().length;
             fileCioHtml = `
                 <div class="file-section">
-                    <h3 class="file-header" onclick="toggleSection('file.cio-refs')">
+                    <h3 class="file-header" data-action="toggle-section" data-section-id="file.cio-refs">
                         <span class="toggle-icon">▼</span>
                         file.cio File References
                         <span class="badge">${fileCioData.size} classifications, ${totalFiles} files</span>
@@ -415,6 +415,29 @@ export class SwatFKReferencesPanel {
     <script>
         const vscode = acquireVsCodeApi();
 
+        document.addEventListener('click', event => {
+            const target = event.target.closest('[data-action]');
+            if (!target) {
+                return;
+            }
+
+            const action = target.getAttribute('data-action');
+            switch (action) {
+                case 'toggle-section':
+                    event.preventDefault();
+                    toggleSection(target.getAttribute('data-section-id'));
+                    break;
+                case 'navigate-source':
+                    event.preventDefault();
+                    navigateToSource(target.getAttribute('data-file'), Number(target.getAttribute('data-line')));
+                    break;
+                case 'navigate-target':
+                    event.preventDefault();
+                    navigateToTarget(target.getAttribute('data-file'), Number(target.getAttribute('data-line')));
+                    break;
+            }
+        });
+
         function toggleSection(id) {
             const content = document.getElementById(id);
             const header = content.previousElementSibling;
@@ -478,5 +501,14 @@ export class SwatFKReferencesPanel {
     </div>
 </body>
 </html>`;
+    }
+
+    private _escapeHtml(value: string): string {
+        return value
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 }
