@@ -364,12 +364,34 @@ export class SwatTableViewerPanel {
 
         const issueCounts = new Map<string, { column: string; targetTable: string; count: number }>();
 
+        const controlsHtml = `
+            <div class="table-controls" data-table="${this._escapeHtml(tableName)}">
+                <label>
+                    Filter
+                    <input type="text" class="table-filter-input" data-table="${this._escapeHtml(tableName)}" placeholder="Type to filter rows" />
+                </label>
+                <label>
+                    Column
+                    <select class="table-filter-column" data-table="${this._escapeHtml(tableName)}">
+                        <option value="__all">All columns</option>
+                        <option value="__line">Line</option>
+                        ${columns.map(col => `<option value="${this._escapeHtml(col)}">${this._escapeHtml(col)}</option>`).join('')}
+                    </select>
+                </label>
+                <button type="button" class="table-filter-clear" data-action="clear-filter" data-table="${this._escapeHtml(tableName)}">Clear</button>
+            </div>
+        `;
+
         let tableHtml = `
+            ${controlsHtml}
             <div class="table-wrapper">
-                <table class="data-table">
+                <table class="data-table" data-table-name="${this._escapeHtml(tableName)}">
                     <thead>
                         <tr>
-                            <th class="line-col">Line</th>
+                            <th class="line-col sortable" data-col-name="__line" data-sortable="true" title="Line">
+                                Line
+                                <span class="sort-indicator"></span>
+                            </th>
                             ${columns.map(col => {
                                 const colMeta = columnMetadata.get(col);
                                 const fkInfo = fkColumns.get(col);
@@ -406,10 +428,11 @@ export class SwatTableViewerPanel {
                                 }
                                 
                                 return `
-                                <th class="${fkInfo ? 'fk-col' : ''}" title="${this._escapeHtml(tooltip)}">
+                                <th class="${fkInfo ? 'fk-col' : ''} sortable" data-col-name="${this._escapeHtml(col)}" data-sortable="true" title="${this._escapeHtml(tooltip)}">
                                     ${col}
                                     ${fkInfo ? '<span class="fk-indicator" title="Foreign Key">🔗</span>' : ''}
                                     ${isFilePointer ? '<span class="file-pointer-indicator" title="File Pointer">📄</span>' : ''}
+                                    <span class="sort-indicator"></span>
                                 </th>
                             `;
                             }).join('')}
@@ -420,7 +443,7 @@ export class SwatTableViewerPanel {
 
         for (const row of rows) {
             tableHtml += `<tr>`;
-            tableHtml += `<td class="line-col"><a href="#" data-action="navigate" data-file="${this._escapeHtml(row.file)}" data-line="${row.lineNumber}">${row.lineNumber}</a></td>`;
+            tableHtml += `<td class="line-col" data-col-name="__line"><a href="#" data-action="navigate" data-file="${this._escapeHtml(row.file)}" data-line="${row.lineNumber}">${row.lineNumber}</a></td>`;
             
             for (const col of columns) {
                 const value = row.values[col] || '';
@@ -431,14 +454,14 @@ export class SwatTableViewerPanel {
                     const canOpen = this.canOpenFile(value);
                     const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
                     const title = canOpen ? `Click to open ${this._escapeHtml(value)}` : `${this._escapeHtml(value)} - Not indexed (may not exist in dataset)`;
-                    tableHtml += `<td class="file-link-cell"><a href="#" data-action="open-file" data-file="${this._escapeHtml(value)}" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                    tableHtml += `<td class="file-link-cell" data-col-name="${this._escapeHtml(col)}"><a href="#" data-action="open-file" data-file="${this._escapeHtml(value)}" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
                 } else if (fkInfo && value) {
                     // Try to resolve FK
                     const targetRow = this.indexer.resolveFKTarget(fkInfo.references.table, value);
                     if (targetRow) {
                         // Embed the FK row data as JSON in data attributes
                         const fileName = this.indexer.getFileNameForTable(fkInfo.references.table) || fkInfo.references.table;
-                        tableHtml += `<td class="fk-cell" data-fk-context="true" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" data-action="toggle-fk" data-fk-context="true" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
+                        tableHtml += `<td class="fk-cell" data-col-name="${this._escapeHtml(col)}" data-fk-context="true" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" data-action="toggle-fk" data-fk-context="true" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
                     } else {
                         const issueKey = `${col}::${fkInfo.references.table}`;
                         const existing = issueCounts.get(issueKey);
@@ -447,10 +470,10 @@ export class SwatTableViewerPanel {
                         } else {
                             issueCounts.set(issueKey, { column: col, targetTable: fkInfo.references.table, count: 1 });
                         }
-                        tableHtml += `<td class="fk-cell unresolved" title="Unresolved FK to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</td>`;
+                        tableHtml += `<td class="fk-cell unresolved" data-col-name="${this._escapeHtml(col)}" title="Unresolved FK to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</td>`;
                     }
                 } else {
-                    tableHtml += `<td>${this._escapeHtml(value)}</td>`;
+                    tableHtml += `<td data-col-name="${this._escapeHtml(col)}">${this._escapeHtml(value)}</td>`;
                 }
             }
             
@@ -672,6 +695,43 @@ export class SwatTableViewerPanel {
             .table-content.collapsed {
                 display: none;
             }
+            .table-controls {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 12px;
+                align-items: center;
+                padding: 12px 16px;
+                border-bottom: 1px solid var(--vscode-panel-border);
+                background-color: var(--vscode-sideBar-background);
+            }
+            .table-controls label {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 0.85em;
+                color: var(--vscode-descriptionForeground);
+            }
+            .table-controls input,
+            .table-controls select {
+                background-color: var(--vscode-input-background);
+                color: var(--vscode-input-foreground);
+                border: 1px solid var(--vscode-input-border);
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 0.85em;
+            }
+            .table-controls button {
+                background-color: var(--vscode-button-secondaryBackground);
+                color: var(--vscode-button-secondaryForeground);
+                border: 1px solid transparent;
+                border-radius: 4px;
+                padding: 4px 10px;
+                cursor: pointer;
+                font-size: 0.85em;
+            }
+            .table-controls button:hover {
+                background-color: var(--vscode-button-secondaryHoverBackground);
+            }
             .issue-summary {
                 padding: 12px 16px;
                 border-bottom: 1px solid var(--vscode-panel-border);
@@ -707,6 +767,21 @@ export class SwatTableViewerPanel {
                 position: sticky;
                 top: 0;
                 z-index: 10;
+            }
+            .data-table th.sortable {
+                cursor: pointer;
+                user-select: none;
+            }
+            .data-table th .sort-indicator {
+                margin-left: 6px;
+                font-size: 0.75em;
+                opacity: 0.65;
+            }
+            .data-table th.sorted-asc .sort-indicator::after {
+                content: '▲';
+            }
+            .data-table th.sorted-desc .sort-indicator::after {
+                content: '▼';
             }
             .data-table th.fk-col {
                 background-color: var(--vscode-inputOption-activeBackground);
@@ -939,9 +1014,58 @@ export class SwatTableViewerPanel {
                         event.preventDefault();
                         toggleFKPeek(target, target.getAttribute('data-fk-table'), target.getAttribute('data-fk-value'));
                         break;
+                    case 'clear-filter':
+                        event.preventDefault();
+                        clearFilter(target.getAttribute('data-table'));
+                        break;
                     case 'external-link':
                         // Allow default navigation for external links.
                         break;
+                }
+            });
+
+            document.addEventListener('click', event => {
+                if (!(event.target instanceof Element)) {
+                    return;
+                }
+                const header = event.target.closest('th[data-sortable="true"]');
+                if (!header) {
+                    return;
+                }
+                const table = header.closest('table');
+                if (!table) {
+                    return;
+                }
+                event.preventDefault();
+                const tableName = table.getAttribute('data-table-name') || '';
+                const columnName = header.getAttribute('data-col-name') || '';
+                if (!tableName || !columnName) {
+                    return;
+                }
+                sortTable(tableName, columnName);
+            });
+
+            document.addEventListener('input', event => {
+                if (!(event.target instanceof Element)) {
+                    return;
+                }
+                if (event.target.matches('.table-filter-input')) {
+                    const tableName = event.target.getAttribute('data-table') || '';
+                    if (tableName) {
+                        applyFilter(tableName);
+                    }
+                }
+            });
+
+            document.addEventListener('change', event => {
+                if (!(event.target instanceof Element)) {
+                    return;
+                }
+                if (event.target.matches('.table-filter-column')) {
+                    const tableName = event.target.getAttribute('data-table') || '';
+                    if (tableName) {
+                        applyFilter(tableName);
+                    }
                 }
             });
 
@@ -995,6 +1119,114 @@ export class SwatTableViewerPanel {
                     command: 'openFile',
                     fileName: fileName
                 });
+            }
+
+            function clearFilter(tableName) {
+                const input = document.querySelector(\`.table-filter-input[data-table="\${escapeSelectorValue(tableName)}"]\`);
+                const select = document.querySelector(\`.table-filter-column[data-table="\${escapeSelectorValue(tableName)}"]\`);
+                if (input) {
+                    input.value = '';
+                }
+                if (select) {
+                    select.value = '__all';
+                }
+                applyFilter(tableName);
+            }
+
+            function removePeekRows(table) {
+                table.querySelectorAll('tr.peek-row-container').forEach(row => row.remove());
+            }
+
+            function getColumnIndex(table, columnName) {
+                const headers = Array.from(table.tHead?.rows[0]?.cells || []);
+                for (let i = 0; i < headers.length; i += 1) {
+                    const header = headers[i];
+                    if (header.getAttribute('data-col-name') === columnName) {
+                        return i;
+                    }
+                }
+                return -1;
+            }
+
+            function applyFilter(tableName) {
+                const table = document.querySelector(\`table[data-table-name="\${escapeSelectorValue(tableName)}"]\`);
+                if (!table || !table.tBodies[0]) {
+                    return;
+                }
+                removePeekRows(table);
+                const input = document.querySelector(\`.table-filter-input[data-table="\${escapeSelectorValue(tableName)}"]\`);
+                const select = document.querySelector(\`.table-filter-column[data-table="\${escapeSelectorValue(tableName)}"]\`);
+                const filterValue = (input && 'value' in input ? input.value : '').toString().trim().toLowerCase();
+                const columnName = select && 'value' in select ? select.value : '__all';
+                const rows = Array.from(table.tBodies[0].rows);
+                const columnIndex = columnName === '__all' ? -1 : getColumnIndex(table, columnName);
+
+                rows.forEach(row => {
+                    if (row.classList.contains('peek-row-container')) {
+                        row.remove();
+                        return;
+                    }
+                    if (!filterValue) {
+                        row.hidden = false;
+                        return;
+                    }
+                    let text = '';
+                    if (columnIndex === -1) {
+                        text = row.textContent || '';
+                    } else {
+                        const cell = row.cells[columnIndex];
+                        text = cell ? cell.textContent || '' : '';
+                    }
+                    row.hidden = !text.toLowerCase().includes(filterValue);
+                });
+            }
+
+            function sortTable(tableName, columnName) {
+                const table = document.querySelector(\`table[data-table-name="\${escapeSelectorValue(tableName)}"]\`);
+                if (!table || !table.tBodies[0]) {
+                    return;
+                }
+                removePeekRows(table);
+                const columnIndex = getColumnIndex(table, columnName);
+                if (columnIndex === -1) {
+                    return;
+                }
+                const currentCol = table.getAttribute('data-sort-col');
+                const currentDir = table.getAttribute('data-sort-dir') || 'asc';
+                const nextDir = currentCol === columnName && currentDir === 'asc' ? 'desc' : 'asc';
+                table.setAttribute('data-sort-col', columnName);
+                table.setAttribute('data-sort-dir', nextDir);
+
+                const rows = Array.from(table.tBodies[0].rows);
+                const getValue = (row) => {
+                    const cell = row.cells[columnIndex];
+                    return cell ? (cell.textContent || '').trim() : '';
+                };
+                rows.sort((a, b) => {
+                    const valueA = getValue(a);
+                    const valueB = getValue(b);
+                    const numA = Number(valueA);
+                    const numB = Number(valueB);
+                    const bothNumeric = valueA !== '' && valueB !== '' && Number.isFinite(numA) && Number.isFinite(numB);
+                    let comparison = 0;
+                    if (bothNumeric) {
+                        comparison = numA - numB;
+                    } else {
+                        comparison = valueA.localeCompare(valueB, undefined, { numeric: true, sensitivity: 'base' });
+                    }
+                    return nextDir === 'asc' ? comparison : -comparison;
+                });
+                rows.forEach(row => table.tBodies[0].appendChild(row));
+
+                const headers = Array.from(table.tHead?.rows[0]?.cells || []);
+                headers.forEach(header => {
+                    header.classList.remove('sorted-asc', 'sorted-desc');
+                    if (header.getAttribute('data-col-name') === columnName) {
+                        header.classList.add(nextDir === 'asc' ? 'sorted-asc' : 'sorted-desc');
+                    }
+                });
+
+                applyFilter(tableName);
             }
 
             function toggleFKPeek(element, tableName, fkValue) {
