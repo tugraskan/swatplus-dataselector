@@ -1809,17 +1809,20 @@ export class SwatSingleTableViewerPanel {
             .classification-files-grid {
                 display: grid;
                 grid-template-rows: auto auto;
-                gap: 8px;
+                gap: 0;
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                overflow: hidden;
             }
             .files-row {
                 display: grid;
-                gap: 8px;
+                gap: 0;
                 align-items: center;
             }
             .files-header {
                 margin-bottom: 0;
             }
-            .file-header {
+            .file-cio-subtables .file-header {
                 padding: 4px 8px;
                 color: var(--vscode-descriptionForeground);
                 font-size: 0.8em;
@@ -1828,8 +1831,11 @@ export class SwatSingleTableViewerPanel {
                 overflow: hidden;
                 text-overflow: ellipsis;
                 min-width: 0;
+                border-right: 1px solid var(--vscode-panel-border);
+                border-bottom: 1px solid var(--vscode-panel-border);
+                background-color: var(--vscode-editor-background);
             }
-            .file-link {
+            .file-cio-subtables .file-link {
                 display: block;
                 text-decoration: none;
                 color: var(--vscode-textLink-foreground);
@@ -1839,20 +1845,27 @@ export class SwatSingleTableViewerPanel {
                 text-overflow: ellipsis;
                 min-width: 0;
                 padding: 4px 8px;
+                border-right: 1px solid var(--vscode-panel-border);
+                border-bottom: 1px solid var(--vscode-panel-border);
+                background-color: var(--vscode-editor-background);
             }
-            .file-link:hover {
+            .file-cio-subtables .file-link:hover {
                 text-decoration: underline;
                 color: var(--vscode-textLink-activeForeground);
+                background-color: var(--vscode-list-hoverBackground);
             }
-            .file-null {
+            .file-cio-subtables .file-null {
                 font-style: italic;
                 opacity: 0.5;
                 cursor: default;
                 color: var(--vscode-descriptionForeground);
                 padding: 4px 8px;
                 min-width: 0;
+                border-right: 1px solid var(--vscode-panel-border);
+                border-bottom: 1px solid var(--vscode-panel-border);
+                background-color: var(--vscode-editor-background);
             }
-            .file-null {
+            .file-cio-subtables .file-null {
                 color: var(--vscode-disabledForeground);
                 font-style: italic;
                 padding: 4px 8px;
