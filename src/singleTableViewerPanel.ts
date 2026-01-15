@@ -1235,16 +1235,13 @@ export class SwatSingleTableViewerPanel {
     private _getPlantIniSubTableHtml(rows: any[]): string {
         const metadata = this.indexer.getMetadata();
         const fileMetadata = metadata?.file_metadata?.['plant.ini'];
-    private _getDecisionTableSubTableHtml(rows: any[], fileName: string): string {
-        const metadata = this.indexer.getMetadata();
-        const fileMetadata = metadata?.file_metadata?.[fileName];
 
         let html = '';
 
         if (fileMetadata && fileMetadata.description) {
             html += `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
         }
-// needs review
+
         html += `<div class="plant-ini-subtables">`;
 
         const plantColumns = [
@@ -1257,6 +1254,8 @@ export class SwatSingleTableViewerPanel {
             { key: 'yrs_init', label: 'Years Init' },
             { key: 'rsd_init', label: 'Residue Init' }
         ];
+        const plantFileName = 'plants.plt';
+        const canOpenPlants = this.canOpenFile(plantFileName);
 
         for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
             const communityName = row.values.name || 'Unknown Community';
@@ -1295,6 +1294,63 @@ export class SwatSingleTableViewerPanel {
                                     <tr>
                                         <th class="line-col">Line</th>
                                         ${plantColumns.map(col => `<th title="${this._escapeHtml(col.label)}">${this._escapeHtml(col.label)}</th>`).join('')}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                `;
+
+                row.childRows.forEach((childRow: any) => {
+                    html += `<tr>`;
+                    html += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(file)}', ${childRow.lineNumber})">${childRow.lineNumber}</a></td>`;
+                    plantColumns.forEach((col) => {
+                        const value = childRow.values[col.key] || '';
+                        if (col.key === 'plnt_name' && value) {
+                            const linkClass = canOpenPlants ? 'fk-link' : 'fk-link broken-link';
+                            const title = canOpenPlants
+                                ? `Peek plant row from ${plantFileName}`
+                                : `${plantFileName} - Not indexed (may not exist in dataset)`;
+                            if (canOpenPlants) {
+                                html += `<td class="fk-cell" data-fk-table="plants_plt" data-fk-value="${this._escapeHtml(value)}" data-source-file="${this._escapeHtml(file)}" data-source-line="${childRow.lineNumber}"><a href="#" onclick="toggleFKPeek(this, 'plants_plt', '${this._escapeJs(value)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                            } else {
+                                html += `<td class="fk-cell unresolved" data-fk-table="plants_plt" data-fk-value="${this._escapeHtml(value)}" data-source-file="${this._escapeHtml(file)}" data-source-line="${childRow.lineNumber}"><span class="${linkClass}" title="${title}">${this._escapeHtml(value)}</span></td>`;
+                            }
+                        } else {
+                            html += `<td>${this._escapeHtml(value)}</td>`;
+                        }
+                    });
+                    html += `</tr>`;
+                });
+
+                html += `
+                                </tbody>
+                            </table>
+                        </div>
+                `;
+            } else {
+                html += `<p class="empty-message">No plant data available</p>`;
+            }
+
+            html += `
+                    </div>
+                </div>
+            `;
+        }
+
+        html += `</div>`;
+
+        return html;
+    }
+
+    private _getDecisionTableSubTableHtml(rows: any[], fileName: string): string {
+        const metadata = this.indexer.getMetadata();
+        const fileMetadata = metadata?.file_metadata?.[fileName];
+
+        let html = '';
+
+        if (fileMetadata && fileMetadata.description) {
+            html += `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
+        }
+
         html += `<div class="dtl-subtables">`;
 
         for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
@@ -1409,27 +1465,7 @@ export class SwatSingleTableViewerPanel {
                                 </thead>
                                 <tbody>
                 `;
-// needs review
-                const plantFileName = 'plants.plt';
-                const canOpenPlants = this.canOpenFile(plantFileName);
-                row.childRows.forEach((childRow: any) => {
-                    html += `<tr>`;
-                    html += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(file)}', ${childRow.lineNumber})">${childRow.lineNumber}</a></td>`;
-                    plantColumns.forEach((col) => {
-                        const value = childRow.values[col.key] || '';
-                        if (col.key === 'plnt_name' && value) {
-                            const linkClass = canOpenPlants ? 'fk-link' : 'fk-link broken-link';
-                            const title = canOpenPlants
-                                ? `Peek plant row from ${plantFileName}`
-                                : `${plantFileName} - Not indexed (may not exist in dataset)`;
-                            if (canOpenPlants) {
-                                html += `<td class="fk-cell" data-fk-table="plants_plt" data-fk-value="${this._escapeHtml(value)}" data-source-file="${this._escapeHtml(file)}" data-source-line="${childRow.lineNumber}"><a href="#" onclick="toggleFKPeek(this, 'plants_plt', '${this._escapeJs(value)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
-                            } else {
-                                html += `<td class="fk-cell unresolved" data-fk-table="plants_plt" data-fk-value="${this._escapeHtml(value)}" data-source-file="${this._escapeHtml(file)}" data-source-line="${childRow.lineNumber}"><span class="${linkClass}" title="${title}">${this._escapeHtml(value)}</span></td>`;
-                            }
-                        } else {
-                            html += `<td>${this._escapeHtml(value)}</td>`;
-                        }
+
                 actionRows.forEach((childRow: any) => {
                     html += `<tr>`;
                     html += `<td class="line-col"><a href="#" onclick="navigateToFile('${this._escapeJs(file)}', ${childRow.lineNumber})">${childRow.lineNumber}</a></td>`;
@@ -1453,8 +1489,6 @@ export class SwatSingleTableViewerPanel {
                         </div>
                 `;
             } else {
-                                         // needs review
-                html += `<p class="empty-message">No plant data available</p>`;
                 html += `<p class="empty-message">No action data available</p>`;
             }
 
