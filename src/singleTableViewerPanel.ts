@@ -1714,12 +1714,18 @@ export class SwatSingleTableViewerPanel {
                                 <tbody>
                 `;
                 actionRows.forEach((childRow: any) => {
+                    const actName = childRow.values?.act_name || '';
+                    const decisionTarget = actName ? this.indexer.resolveDecisionTable(actName) : undefined;
+                    const decisionFile = decisionTarget?.file || file;
+                    const actNameHtml = decisionTarget
+                        ? `<a href="#" data-action="open-file-highlight" data-file="${this._escapeHtml(decisionFile)}" data-highlight="${this._escapeHtml(actName)}" class="fk-link" title="Open decision table ${this._escapeHtml(actName)}">${this._escapeHtml(actName)}</a>`
+                        : this._escapeHtml(actName);
                     html += `<tr>`;
                     html += `<td class="line-col"><a href="#" data-action="navigate" data-file="${this._escapeHtml(file)}" data-line="${childRow.lineNumber}">${childRow.lineNumber}</a></td>`;
                     html += `<td>${this._escapeHtml(childRow.values?.act_typ || '')}</td>`;
                     html += `<td>${this._escapeHtml(childRow.values?.obj || '')}</td>`;
                     html += `<td>${this._escapeHtml(childRow.values?.obj_num || '')}</td>`;
-                    html += `<td>${this._escapeHtml(childRow.values?.act_name || '')}</td>`;
+                    html += `<td>${actNameHtml}</td>`;
                     html += `<td>${this._escapeHtml(childRow.values?.act_option || '')}</td>`;
                     html += `<td>${this._escapeHtml(childRow.values?.const || '')}</td>`;
                     html += `<td>${this._escapeHtml(childRow.values?.const2 || '')}</td>`;
