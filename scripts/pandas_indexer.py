@@ -887,6 +887,7 @@ def extract_management_sch_details(lines: List[str], record: dict) -> Tuple[Dict
             "lineNumber": child_line_idx + 1,
             "values": {
                 "section": "auto",
+                "name": tokens[0],
                 "d_table": tokens[0],
                 "plant1": tokens[1] if len(tokens) > 1 else "",
                 "plant2": tokens[2] if len(tokens) > 2 else "",

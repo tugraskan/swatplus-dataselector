@@ -1443,7 +1443,7 @@ export class SwatSingleTableViewerPanel {
         html += `<div class="management-sch-subtables">`;
 
         const autoColumns = [
-            { key: 'd_table', label: 'Decision Table' },
+            { key: 'name', label: 'Decision Table' },
             { key: 'plant1', label: 'Plant 1' },
             { key: 'plant2', label: 'Plant 2' }
         ];
@@ -1512,8 +1512,9 @@ export class SwatSingleTableViewerPanel {
                     html += `<tr>`;
                     html += `<td class="line-col"><a href="#" data-action="navigate" data-file="${this._escapeHtml(file)}" data-line="${childRow.lineNumber}">${childRow.lineNumber}</a></td>`;
                     autoColumns.forEach((col) => {
-                        const value = childRow.values[col.key] || '';
-                        if (col.key === 'd_table' && value) {
+                        const rawValue = childRow.values[col.key] || '';
+                        const value = col.key === 'name' && !rawValue ? (childRow.values.d_table || '') : rawValue;
+                        if (col.key === 'name' && value) {
                             const linkClass = canOpenDecisionTables ? 'fk-link' : 'fk-link broken-link';
                             const title = canOpenDecisionTables
                                 ? `Peek decision table row from ${decisionTableFileName}`
