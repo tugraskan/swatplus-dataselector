@@ -67,7 +67,13 @@
     "lum_dtl": "lum.dtl",
     "scen_lu_dtl": "scen_lu.dtl",
     "res_rel_dtl": "res_rel.dtl",
-    "flo_con_dtl": "flo_con.dtl"
+    "flo_con_dtl": "flo_con.dtl",
+    "harv_ops": "harv.ops",
+    "graze_ops": "graze.ops",
+    "irr_ops": "irr.ops",
+    "chem_app_ops": "chem-app.ops",
+    "fire_ops": "fire.ops",
+    "sweep_ops": "sweep.ops"
   },
   "txtinout_fk_behavior": {
     "description": "In TxtInOut text files, FK references typically point to the 'name' column in target files, not 'id'",
