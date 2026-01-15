@@ -91,9 +91,11 @@ export class SwatSingleTableViewerPanel {
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
 
+        const resolvedTableName = SwatSingleTableViewerPanel.resolveTableName(indexer, tableName);
+
         // If we already have a panel for this table, show it and update highlight
-        if (SwatSingleTableViewerPanel.panels.has(tableName)) {
-            const existingPanel = SwatSingleTableViewerPanel.panels.get(tableName)!;
+        if (SwatSingleTableViewerPanel.panels.has(resolvedTableName)) {
+            const existingPanel = SwatSingleTableViewerPanel.panels.get(resolvedTableName)!;
             existingPanel._panel.reveal(column);
             existingPanel.highlightValue = highlightValue; // Update highlight value
             existingPanel._update();
@@ -101,7 +103,7 @@ export class SwatSingleTableViewerPanel {
         }
 
         // Otherwise, create a new panel for this table
-        const fileName = indexer.getFileNameForTable(tableName) || tableName;
+        const fileName = indexer.getFileNameForTable(resolvedTableName) || resolvedTableName;
         const panel = vscode.window.createWebviewPanel(
             'swatSingleTableViewer',
             `SWAT+ Table: ${fileName}`,
@@ -112,8 +114,26 @@ export class SwatSingleTableViewerPanel {
             }
         );
 
-        const newPanel = new SwatSingleTableViewerPanel(panel, indexer, tableName, highlightValue);
-        SwatSingleTableViewerPanel.panels.set(tableName, newPanel);
+        const newPanel = new SwatSingleTableViewerPanel(panel, indexer, resolvedTableName, highlightValue);
+        SwatSingleTableViewerPanel.panels.set(resolvedTableName, newPanel);
+    }
+
+    private static resolveTableName(indexer: SwatIndexer, tableName: string): string {
+        if (indexer.isTableIndexed(tableName)) {
+            return tableName;
+        }
+
+        const mappedTableName = indexer.getTableNameFromFile(tableName);
+        if (mappedTableName && indexer.isTableIndexed(mappedTableName)) {
+            return mappedTableName;
+        }
+
+        const normalizedTableName = tableName.replace(/[.-]/g, '_').toLowerCase();
+        if (indexer.isTableIndexed(normalizedTableName)) {
+            return normalizedTableName;
+        }
+
+        return tableName;
     }
 
     public dispose() {
