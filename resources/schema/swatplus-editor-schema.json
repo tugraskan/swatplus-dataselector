@@ -12736,6 +12736,126 @@
       "foreign_keys": [],
       "notes": "Auto-generated via dynamic scan"
     },
+    "aqu_cha.lin": {
+      "file_name": "aqu_cha.lin",
+      "table_name": "aqu_cha_lin",
+      "model_class": "project.link.Aqu_cha_lin",
+      "source_file": "project/link.py",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "numb",
+          "db_column": "numb",
+          "type": "IntegerField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem_cnt",
+          "db_column": "elem_cnt",
+          "type": "IntegerField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem1",
+          "db_column": "elem1",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem2",
+          "db_column": "elem2",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem3",
+          "db_column": "elem3",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem4",
+          "db_column": "elem4",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem5",
+          "db_column": "elem5",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem6",
+          "db_column": "elem6",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem7",
+          "db_column": "elem7",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem8",
+          "db_column": "elem8",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem9",
+          "db_column": "elem9",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem10",
+          "db_column": "elem10",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "numb"
+      ],
+      "foreign_keys": [],
+      "notes": "Auto-generated via dynamic scan"
+    },
     "chan-surf-lin.ob": {
       "file_name": "chan-surf-lin.ob",
       "table_name": "chan_surf_lin_ob",
