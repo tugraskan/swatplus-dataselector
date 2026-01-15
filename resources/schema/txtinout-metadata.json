@@ -37,6 +37,7 @@
     "hydrology_cha": "hydrology.cha",
     "sediment_cha": "sediment.cha",
     "nutrients_cha": "nutrients.cha",
+    "temperature_cha": "temperature.cha",
     "plant_ini": "plant.ini",
     "management_sch": "management.sch",
     "cntable_lum": "cntable.lum",
@@ -104,6 +105,7 @@
     "hydrology.cha": "Channel hydrology parameters",
     "sediment.cha": "Channel sediment parameters",
     "nutrients.cha": "Channel nutrient parameters",
+    "temperature.cha": "Channel temperature parameters",
     "reservoir.res": "Reservoir definitions",
     "initial.res": "Reservoir initialization",
     "hydrology.res": "Reservoir hydrology parameters",
@@ -202,7 +204,8 @@
       "initial.cha",
       "hydrology.cha",
       "sediment.cha",
-      "nutrients.cha"
+      "nutrients.cha",
+      "temperature.cha"
     ],
     "reservoirs": [
       "reservoir.res",
