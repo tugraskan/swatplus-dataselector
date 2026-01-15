@@ -22909,12 +22909,148 @@
       ],
       "foreign_keys": [],
       "notes": "Simple list file containing filenames - added for compatibility"
+    },
+    "pesticide.pes": {
+      "file_name": "pesticide.pes",
+      "table_name": "pesticide_pes",
+      "model_class": "project.hru_parm_db.Pesticide_pes",
+      "source_file": "project/hru_parm_db.py",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "soil_ads",
+          "db_column": "soil_ads",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac_wash",
+          "db_column": "frac_wash",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "hl_foliage",
+          "db_column": "hl_foliage",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "hl_soil",
+          "db_column": "hl_soil",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "solub",
+          "db_column": "solub",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "aq_reac",
+          "db_column": "aq_reac",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "aq_volat",
+          "db_column": "aq_volat",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "mol_wt",
+          "db_column": "mol_wt",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "aq_resus",
+          "db_column": "aq_resus",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "aq_settle",
+          "db_column": "aq_settle",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "ben_act_dep",
+          "db_column": "ben_act_dep",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "ben_bury",
+          "db_column": "ben_bury",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "ben_reac",
+          "db_column": "ben_reac",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Auto-generated via dynamic scan"
     }
   },
   "statistics": {
     "files_scanned": 55,
     "models_found": 256,
     "tables_mapped": 218,
-    "table_count": 223
+    "table_count": 228
   }
 }
