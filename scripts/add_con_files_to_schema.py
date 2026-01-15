@@ -189,6 +189,12 @@ def main():
             'object_pointer': 'hru',
             'description': 'HRU'
         },
+        'outlet.con': {
+            'table_name': 'out_con',
+            'model_class': 'project.connect.Outlet_con',
+            'object_pointer': 'out',
+            'description': 'outlet'
+        },
         'rout_unit.con': {
             'table_name': 'rout_unit_con',
             'model_class': 'project.connect.Rout_unit_con',

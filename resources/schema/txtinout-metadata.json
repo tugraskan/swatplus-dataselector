@@ -581,17 +581,17 @@
     },
     "initial.res": {
       "description": "File pointer columns for initial.res",
-      "org_min\u200b": "Points to org_min\u200b file",
-      "pest\u200b": "Points to pest\u200b file",
-      "salt\u200b": "Points to salt\u200b file"
+      "org_min​": "Points to org_min​ file",
+      "pest​": "Points to pest​ file",
+      "salt​": "Points to salt​ file"
     },
     "reservoir.res": {
       "description": "File pointer columns for reservoir.res",
-      "init\u200b": "Points to init\u200b file",
-      "hyd\u200b": "Points to hyd\u200b file",
-      "rel\u200b": "Points to rel\u200b file",
-      "sed\u200b": "Points to sed\u200b file",
-      "nut\u200b": "Points to nut\u200b file"
+      "init​": "Points to init​ file",
+      "hyd​": "Points to hyd​ file",
+      "rel​": "Points to rel​ file",
+      "sed​": "Points to sed​ file",
+      "nut​": "Points to nut​ file"
     },
     "untitled": {
       "description": "File pointer columns for untitled",
@@ -605,8 +605,8 @@
     },
     "wetland.wet": {
       "description": "File pointer columns for wetland.wet",
-      "init\u200b": "Points to init\u200b file",
-      "hyd\u200b": "Points to hyd\u200b file",
+      "init​": "Points to init​ file",
+      "hyd​": "Points to hyd​ file",
       "rel": "Pointer to the reservoir and wetland release decision table file",
       "sed": "Pointer to the reservoir and wetland sediment file",
       "nut": "Pointer to the reservoir and wetland nutrient file"
@@ -1532,6 +1532,14 @@
       "special_structure": false,
       "primary_keys": [
         "name"
+      ]
+    },
+    "outlet.con": {
+      "description": "This file defines the outlet connectivity.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "id"
       ]
     }
   },

@@ -1469,6 +1469,14 @@
       "primary_keys": [
         "name"
       ]
+    },
+    "outlet.con": {
+      "description": "This file defines the outlet connectivity.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "id"
+      ]
     }
   },
   "enhanced_schema_available": true
