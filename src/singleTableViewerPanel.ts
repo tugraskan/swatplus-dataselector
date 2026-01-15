@@ -559,9 +559,21 @@ export class SwatSingleTableViewerPanel {
                                     tooltip += `\nForeign Key → ${fkInfo.references.table}`;
                                 }
                                 if (isFilePointer && typeof filePointers === 'object') {
-                                    const pointerDesc = filePointers[col];
-                                    if (pointerDesc && pointerDesc !== 'description') {
-                                        tooltip += `\n${pointerDesc}`;
+                                    const pointerConfig = filePointers[col];
+                                    if (pointerConfig && pointerConfig !== 'description') {
+                                        if (typeof pointerConfig === 'string') {
+                                            tooltip += `\n${pointerConfig}`;
+                                        } else if (typeof pointerConfig === 'object') {
+                                            if (pointerConfig.description) {
+                                                tooltip += `\n${pointerConfig.description}`;
+                                            }
+                                            if (pointerConfig.target_file) {
+                                                tooltip += `\nFile Pointer → ${pointerConfig.target_file}`;
+                                            }
+                                            if (pointerConfig.file_pattern) {
+                                                tooltip += `\nPattern: ${pointerConfig.file_pattern}`;
+                                            }
+                                        }
                                     }
                                 }
                                 
