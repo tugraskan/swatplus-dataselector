@@ -851,7 +851,7 @@ export class SwatSingleTableViewerPanel {
                     </div>
                     <div class="classification-content">
                         <div class="classification-files-grid">
-                            <div class="files-row files-header" style="grid-template-columns: repeat(${expectedFiles.length}, minmax(150px, auto)); text-align: right;">
+                            <div class="files-row files-header" style="grid-template-columns: repeat(${expectedFiles.length}, 160px);">
             `;
 
             // Row 1: Expected files from GitBook (headers)
@@ -861,7 +861,7 @@ export class SwatSingleTableViewerPanel {
 
             html += `
                             </div>
-                            <div class="files-row files-actual" style="grid-template-columns: repeat(${expectedFiles.length}, minmax(150px, auto)); text-align: right;">
+                            <div class="files-row files-actual" style="grid-template-columns: repeat(${expectedFiles.length}, 160px);">
             `;
 
             // Row 2: Actual files from file.cio (clickable if they exist)
@@ -1818,6 +1818,8 @@ export class SwatSingleTableViewerPanel {
                 display: grid;
                 gap: 0;
                 align-items: center;
+                justify-items: stretch;
+                text-align: left;
             }
             .files-header {
                 margin-bottom: 0;
@@ -1831,6 +1833,8 @@ export class SwatSingleTableViewerPanel {
                 overflow: hidden;
                 text-overflow: ellipsis;
                 min-width: 0;
+                width: 100%;
+                box-sizing: border-box;
                 border-right: 1px solid var(--vscode-panel-border);
                 border-bottom: 1px solid var(--vscode-panel-border);
                 background-color: var(--vscode-editor-background);
@@ -1845,6 +1849,8 @@ export class SwatSingleTableViewerPanel {
                 text-overflow: ellipsis;
                 min-width: 0;
                 padding: 4px 8px;
+                width: 100%;
+                box-sizing: border-box;
                 border-right: 1px solid var(--vscode-panel-border);
                 border-bottom: 1px solid var(--vscode-panel-border);
                 background-color: var(--vscode-editor-background);
@@ -1861,6 +1867,8 @@ export class SwatSingleTableViewerPanel {
                 color: var(--vscode-descriptionForeground);
                 padding: 4px 8px;
                 min-width: 0;
+                width: 100%;
+                box-sizing: border-box;
                 border-right: 1px solid var(--vscode-panel-border);
                 border-bottom: 1px solid var(--vscode-panel-border);
                 background-color: var(--vscode-editor-background);
