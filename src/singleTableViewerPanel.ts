@@ -788,7 +788,7 @@ export class SwatSingleTableViewerPanel {
             },
             'channel': {
                 displayName: 'Channel',
-                files: ['initial.cha', 'channel.cha', 'hydrology.cha', 'sediment.cha', 'nutrients.cha', 'channel-lte.cha', 'hyd-sed-lte.cha', 'temperature.cha']
+                files: ['initial.cha', 'channel.cha', 'hydrology.cha', 'sediment.cha', 'nutrients.cha', 'sed_nut.cha', 'channel-lte.cha', 'hyd-sed-lte.cha', 'temperature.cha']
             },
             'reservoir': {
                 displayName: 'Reservoir',

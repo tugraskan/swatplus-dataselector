@@ -37,6 +37,7 @@
     "hydrology_cha": "hydrology.cha",
     "sediment_cha": "sediment.cha",
     "nutrients_cha": "nutrients.cha",
+    "sed_nut_cha": "sed_nut.cha",
     "temperature_cha": "temperature.cha",
     "plant_ini": "plant.ini",
     "management_sch": "management.sch",
@@ -106,6 +107,7 @@
     "hydrology.cha": "Channel hydrology parameters",
     "sediment.cha": "Channel sediment parameters",
     "nutrients.cha": "Channel nutrient parameters",
+    "sed_nut.cha": "Channel sediment and nutrient parameters",
     "temperature.cha": "Channel temperature parameters",
     "reservoir.res": "Reservoir definitions",
     "initial.res": "Reservoir initialization",
@@ -206,6 +208,7 @@
       "hydrology.cha",
       "sediment.cha",
       "nutrients.cha",
+      "sed_nut.cha",
       "temperature.cha"
     ],
     "reservoirs": [
@@ -1068,6 +1071,14 @@
     },
     "nutrients.cha": {
       "description": "This file controls the channel nutrient properties.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "name"
+      ]
+    },
+    "sed_nut.cha": {
+      "description": "This file controls combined channel sediment and nutrient properties.",
       "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
       "special_structure": false,
       "primary_keys": [
