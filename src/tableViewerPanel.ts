@@ -362,8 +362,9 @@ export class SwatTableViewerPanel {
             descriptionHtml = `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
         }
 
+        const issueCounts = new Map<string, { column: string; targetTable: string; count: number }>();
+
         let tableHtml = `
-            ${descriptionHtml}
             <div class="table-wrapper">
                 <table class="data-table">
                     <thead>
@@ -439,6 +440,13 @@ export class SwatTableViewerPanel {
                         const fileName = this.indexer.getFileNameForTable(fkInfo.references.table) || fkInfo.references.table;
                         tableHtml += `<td class="fk-cell" data-fk-context="true" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" data-action="toggle-fk" data-fk-context="true" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
                     } else {
+                        const issueKey = `${col}::${fkInfo.references.table}`;
+                        const existing = issueCounts.get(issueKey);
+                        if (existing) {
+                            existing.count += 1;
+                        } else {
+                            issueCounts.set(issueKey, { column: col, targetTable: fkInfo.references.table, count: 1 });
+                        }
                         tableHtml += `<td class="fk-cell unresolved" title="Unresolved FK to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</td>`;
                     }
                 } else {
@@ -455,7 +463,35 @@ export class SwatTableViewerPanel {
             </div>
         `;
 
-        return tableHtml;
+        let issuesHtml = '';
+        if (issueCounts.size > 0) {
+            const issueItems = Array.from(issueCounts.values()).sort((a, b) => {
+                const columnSort = a.column.localeCompare(b.column);
+                if (columnSort !== 0) {
+                    return columnSort;
+                }
+                return a.targetTable.localeCompare(b.targetTable);
+            });
+            issuesHtml = `
+                <div class="issue-summary">
+                    <div class="issue-title">Issues</div>
+                    <ul>
+                        ${issueItems.map(issue => `
+                            <li>
+                                Unresolved foreign key values in <strong>${this._escapeHtml(issue.column)}</strong>
+                                → ${this._escapeHtml(issue.targetTable)} (${issue.count})
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+
+        return `
+            ${descriptionHtml}
+            ${issuesHtml}
+            ${tableHtml}
+        `;
     }
 
     private _escapeHtml(text: string): string {
@@ -635,6 +671,22 @@ export class SwatTableViewerPanel {
             }
             .table-content.collapsed {
                 display: none;
+            }
+            .issue-summary {
+                padding: 12px 16px;
+                border-bottom: 1px solid var(--vscode-panel-border);
+                background-color: var(--vscode-sideBar-background);
+            }
+            .issue-title {
+                font-weight: 600;
+                margin-bottom: 6px;
+            }
+            .issue-summary ul {
+                margin: 0;
+                padding-left: 20px;
+            }
+            .issue-summary li {
+                margin: 4px 0;
             }
             .table-wrapper {
                 overflow-x: auto;
