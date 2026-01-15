@@ -642,7 +642,8 @@ export class SwatTableViewerPanel {
             }
             .data-table {
                 width: 100%;
-                border-collapse: collapse;
+                border-collapse: separate;
+                border-spacing: 0;
                 font-size: 0.9em;
             }
             .data-table th {
@@ -650,7 +651,7 @@ export class SwatTableViewerPanel {
                 padding: 8px 12px;
                 text-align: left;
                 font-weight: 600;
-                border-bottom: 2px solid var(--vscode-panel-border);
+                border: 1px solid var(--vscode-panel-border);
                 position: sticky;
                 top: 0;
                 z-index: 10;
@@ -660,9 +661,13 @@ export class SwatTableViewerPanel {
             }
             .data-table td {
                 padding: 6px 12px;
-                border-bottom: 1px solid var(--vscode-panel-border);
+                border: 1px solid var(--vscode-panel-border);
+                background-color: var(--vscode-editor-background);
             }
             .data-table tbody tr:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            .data-table tbody tr:hover td {
                 background-color: var(--vscode-list-hoverBackground);
             }
             .line-col {
@@ -802,7 +807,8 @@ export class SwatTableViewerPanel {
             }
             .fk-peek-table {
                 width: 100%;
-                border-collapse: collapse;
+                border-collapse: separate;
+                border-spacing: 0;
             }
             .fk-peek-table th {
                 text-align: left;
@@ -810,10 +816,12 @@ export class SwatTableViewerPanel {
                 background-color: var(--vscode-editorGroupHeader-tabsBackground);
                 font-weight: 600;
                 font-size: 0.9em;
+                border: 1px solid var(--vscode-panel-border);
             }
             .fk-peek-table td {
                 padding: 4px 8px;
-                border-bottom: 1px solid var(--vscode-panel-border);
+                border: 1px solid var(--vscode-panel-border);
+                background-color: var(--vscode-editor-background);
             }
             /* FK Context Menu Styles */
             .fk-context-menu {
