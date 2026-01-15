@@ -2993,6 +2993,134 @@
       "foreign_keys": [],
       "notes": "Auto-generated via dynamic scan"
     },
+    "sed_nut.cha": {
+      "file_name": "sed_nut.cha",
+      "table_name": "sed_nut_cha",
+      "model_class": "project.channel.Sed_nut_cha",
+      "source_file": "project/channel.py",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "order",
+          "db_column": "order",
+          "type": "IntegerField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "pk_rto",
+          "db_column": "pk_rto",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "fp_inun_days",
+          "db_column": "fp_inun_days",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "n_setl",
+          "db_column": "n_setl",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "p_setl",
+          "db_column": "p_setl",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "n_sol_part",
+          "db_column": "n_sol_part",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "p_sol_part",
+          "db_column": "p_sol_part",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "n_dep_enr",
+          "db_column": "n_dep_enr",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "p_dep_enr",
+          "db_column": "p_dep_enr",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "arc_len_fr",
+          "db_column": "arc_len_fr",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "part_size",
+          "db_column": "part_size",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "wash_bed_fr",
+          "db_column": "wash_bed_fr",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "name"
+      ],
+      "foreign_keys": [],
+      "notes": "Auto-generated via dynamic scan"
+    },
     "temperature.cha": {
       "file_name": "temperature.cha",
       "table_name": "temperature_cha",
@@ -3487,8 +3615,8 @@
           "is_primary_key": false,
           "is_foreign_key": true,
           "fk_target": {
-            "table": "nutrients_cha",
-            "column": "id"
+            "table": "sed_nut_cha",
+            "column": "name"
           }
         },
         {
@@ -3532,8 +3660,8 @@
           "column": "cha_nut",
           "db_column": "cha_nut_id",
           "references": {
-            "table": "nutrients_cha",
-            "column": "id"
+            "table": "sed_nut_cha",
+            "column": "name"
           }
         }
       ],
