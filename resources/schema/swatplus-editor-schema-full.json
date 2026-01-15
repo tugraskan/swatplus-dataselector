@@ -12866,6 +12866,22 @@
           "nullable": false,
           "is_primary_key": false,
           "is_foreign_key": false
+        },
+        {
+          "name": "numb_ops",
+          "db_column": "numb_ops",
+          "type": "IntegerField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "numb_auto",
+          "db_column": "numb_auto",
+          "type": "IntegerField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
         }
       ],
       "primary_keys": [
