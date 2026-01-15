@@ -66,6 +66,7 @@
     "septic_sep": "septic.sep",
     "lum_dtl": "lum.dtl",
     "scen_lu_dtl": "scen_lu.dtl",
+    "res_dtl": "res.dtl",
     "res_rel_dtl": "res_rel.dtl",
     "flo_con_dtl": "flo_con.dtl",
     "harv_ops": "harv.ops",
