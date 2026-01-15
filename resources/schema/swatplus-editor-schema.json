@@ -2993,6 +2993,78 @@
       "foreign_keys": [],
       "notes": "Auto-generated via dynamic scan"
     },
+    "temperature.cha": {
+      "file_name": "temperature.cha",
+      "table_name": "temperature_cha",
+      "model_class": "project.channel.Temperature_cha",
+      "source_file": "project/channel.py",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "sno_mlt",
+          "db_column": "sno_mlt",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "gw",
+          "db_column": "gw",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "sur_lat",
+          "db_column": "sur_lat",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "bulk_co",
+          "db_column": "bulk_co",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "air_lag",
+          "db_column": "air_lag",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Auto-generated via dynamic scan"
+    },
     "channel.cha": {
       "file_name": "channel.cha",
       "table_name": "channel_cha",
