@@ -63,7 +63,13 @@
     "pesticide_pes": "pesticide.pes",
     "tillage_til": "tillage.til",
     "urban_urb": "urban.urb",
-    "septic_sep": "septic.sep"
+    "septic_sep": "septic.sep",
+    "harv_ops": "harv.ops",
+    "graze_ops": "graze.ops",
+    "irr_ops": "irr.ops",
+    "chem_app_ops": "chem-app.ops",
+    "fire_ops": "fire.ops",
+    "sweep_ops": "sweep.ops"
   },
   "txtinout_fk_behavior": {
     "description": "In TxtInOut text files, FK references typically point to the 'name' column in target files, not 'id'",
@@ -1462,6 +1468,14 @@
       "special_structure": false,
       "primary_keys": [
         "name"
+      ]
+    },
+    "outlet.con": {
+      "description": "This file defines the outlet connectivity.",
+      "metadata_structure": "Standard (Line 1: Title, Line 2: Header, Line 3+: Data)",
+      "special_structure": false,
+      "primary_keys": [
+        "id"
       ]
     }
   },

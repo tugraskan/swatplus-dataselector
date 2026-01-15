@@ -1013,6 +1013,94 @@
       "foreign_keys": [],
       "notes": "Auto-generated via dynamic scan"
     },
+    "plant-parms.cal": {
+      "file_name": "plant-parms.cal",
+      "table_name": "plant_parms_cal",
+      "model_class": "project.change.Plant_parms_cal",
+      "source_file": "project/change.py",
+      "has_metadata_line": true,
+      "has_header_line": false,
+      "data_starts_after": 5,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "var",
+          "db_column": "var",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "init",
+          "db_column": "init",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "chg_typ",
+          "db_column": "chg_typ",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "neg",
+          "db_column": "neg",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "pos",
+          "db_column": "pos",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lo",
+          "db_column": "lo",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "up",
+          "db_column": "up",
+          "type": "DoubleField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "notes": "Auto-generated via dynamic scan"
+    },
     "calibration.cal": {
       "file_name": "calibration.cal",
       "table_name": "calibration_cal",
@@ -4960,6 +5048,126 @@
           }
         }
       ],
+      "notes": "Auto-generated via dynamic scan"
+    },
+    "rout-unit.def": {
+      "file_name": "rout-unit.def",
+      "table_name": "rout_unit_def",
+      "model_class": "project.routing_unit.Rout_unit_def",
+      "source_file": "project/routing_unit.py",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "AutoField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem_tot",
+          "db_column": "elem_tot",
+          "type": "IntegerField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem1",
+          "db_column": "elem1",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem2",
+          "db_column": "elem2",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem3",
+          "db_column": "elem3",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem4",
+          "db_column": "elem4",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem5",
+          "db_column": "elem5",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem6",
+          "db_column": "elem6",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem7",
+          "db_column": "elem7",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem8",
+          "db_column": "elem8",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem9",
+          "db_column": "elem9",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elem10",
+          "db_column": "elem10",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [],
       "notes": "Auto-generated via dynamic scan"
     },
     "d_table.dtl": {
@@ -23739,6 +23947,171 @@
         }
       ],
       "notes": "Auto-generated for recall connectivity"
+    },
+    "outlet.con": {
+      "file_name": "outlet.con",
+      "table_name": "out_con",
+      "model_class": "project.connect.Outlet_con",
+      "source_file": "project/connect.py",
+      "has_metadata_line": true,
+      "has_header_line": true,
+      "data_starts_after": 2,
+      "columns": [
+        {
+          "name": "id",
+          "db_column": "id",
+          "type": "IntegerField",
+          "nullable": false,
+          "is_primary_key": true,
+          "is_foreign_key": false
+        },
+        {
+          "name": "name",
+          "db_column": "name",
+          "type": "CharField",
+          "nullable": false,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "gis_id",
+          "db_column": "gis_id",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "area",
+          "db_column": "area",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lat",
+          "db_column": "lat",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "lon",
+          "db_column": "lon",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "elev",
+          "db_column": "elev",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "out",
+          "db_column": "out",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true
+        },
+        {
+          "name": "wst",
+          "db_column": "wst",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "fk_target": {
+            "table": "weather_sta_cli",
+            "column": "name"
+          }
+        },
+        {
+          "name": "cst",
+          "db_column": "cst",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "ovfl",
+          "db_column": "ovfl",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "rule",
+          "db_column": "rule",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "out_tot",
+          "db_column": "out_tot",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "obj_typ",
+          "db_column": "obj_typ",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "obj_id",
+          "db_column": "obj_id",
+          "type": "IntegerField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": true
+        },
+        {
+          "name": "hyd_typ",
+          "db_column": "hyd_typ",
+          "type": "CharField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        },
+        {
+          "name": "frac",
+          "db_column": "frac",
+          "type": "DecimalField",
+          "nullable": true,
+          "is_primary_key": false,
+          "is_foreign_key": false
+        }
+      ],
+      "primary_keys": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "wst",
+          "db_column": "wst",
+          "references": {
+            "table": "weather_sta_cli",
+            "column": "name"
+          }
+        }
+      ],
+      "notes": "Auto-generated for outlet connectivity"
     }
   },
   "statistics": {
