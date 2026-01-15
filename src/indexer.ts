@@ -543,7 +543,8 @@ export class SwatIndexer {
         }, async (progress, token) => {
             // Use pandas-backed indexing (required)
             progress.report({ message: 'Indexing files...', increment: 10 });
-            const pandasResult = this.buildIndexWithPandas(datasetPath);
+            const pandasDatasetPath = this.txtInOutPath || datasetPath;
+            const pandasResult = this.buildIndexWithPandas(pandasDatasetPath);
             if (!pandasResult.success) {
                 const errorDetail = pandasResult.error || 'Unknown error';
                 vscode.window.showErrorMessage(
