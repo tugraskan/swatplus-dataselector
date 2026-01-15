@@ -617,7 +617,7 @@ export class SwatSingleTableViewerPanel {
                     <select class="table-filter-column" data-table="${this._escapeHtml(this.tableName)}">
                         <option value="__all">All columns</option>
                         <option value="__line">Line</option>
-                        ${columns.map(col => `<option value="${this._escapeHtml(col)}">${this._escapeHtml(col)}</option>`).join('')}
+                        ${columns.map((col, index) => `<option value="${this._escapeHtml(col)}"${index === 0 ? ' selected' : ''}>${this._escapeHtml(col)}</option>`).join('')}
                     </select>
                 </label>
                 <button type="button" class="table-filter-clear" data-action="clear-filter" data-table="${this._escapeHtml(this.tableName)}">Clear</button>
@@ -3027,6 +3027,8 @@ export class SwatSingleTableViewerPanel {
                 sortTable(tableName, columnName);
             });
 
+            const filterTimers = new Map();
+
             document.addEventListener('input', event => {
                 if (!(event.target instanceof Element)) {
                     return;
@@ -3034,7 +3036,7 @@ export class SwatSingleTableViewerPanel {
                 if (event.target.matches('.table-filter-input')) {
                     const tableName = event.target.getAttribute('data-table') || '';
                     if (tableName) {
-                        applyFilter(tableName);
+                        scheduleFilter(tableName);
                     }
                 }
             });
@@ -3133,6 +3135,47 @@ export class SwatSingleTableViewerPanel {
                 applyFilter(tableName);
             }
 
+            function scheduleFilter(tableName) {
+                if (filterTimers.has(tableName)) {
+                    clearTimeout(filterTimers.get(tableName));
+                }
+                const timer = setTimeout(() => {
+                    filterTimers.delete(tableName);
+                    applyFilter(tableName);
+                }, 250);
+                filterTimers.set(tableName, timer);
+            }
+
+            function parseNumericFilter(text) {
+                const match = text.match(/^\\s*(<=|>=|!=|=|<|>)\\s*(-?\\d+(?:\\.\\d+)?)\\s*$/);
+                if (!match) {
+                    return null;
+                }
+                return {
+                    operator: match[1],
+                    value: Number(match[2])
+                };
+            }
+
+            function compareNumeric(value, operator, target) {
+                switch (operator) {
+                    case '<':
+                        return value < target;
+                    case '<=':
+                        return value <= target;
+                    case '>':
+                        return value > target;
+                    case '>=':
+                        return value >= target;
+                    case '=':
+                        return value === target;
+                    case '!=':
+                        return value !== target;
+                    default:
+                        return false;
+                }
+            }
+
             function removePeekRows(table) {
                 table.querySelectorAll('tr.peek-row-container').forEach(row => row.remove());
             }
@@ -3156,10 +3199,12 @@ export class SwatSingleTableViewerPanel {
                 removePeekRows(table);
                 const input = document.querySelector(\`.table-filter-input[data-table="\${escapeSelectorValue(tableName)}"]\`);
                 const select = document.querySelector(\`.table-filter-column[data-table="\${escapeSelectorValue(tableName)}"]\`);
-                const filterValue = (input && 'value' in input ? input.value : '').toString().trim().toLowerCase();
+                const rawFilterValue = (input && 'value' in input ? input.value : '').toString().trim();
+                const filterValue = rawFilterValue.toLowerCase();
                 const columnName = select && 'value' in select ? select.value : '__all';
                 const rows = Array.from(table.tBodies[0].rows);
                 const columnIndex = columnName === '__all' ? -1 : getColumnIndex(table, columnName);
+                const numericFilter = columnName !== '__all' ? parseNumericFilter(rawFilterValue) : null;
 
                 rows.forEach(row => {
                     if (row.classList.contains('peek-row-container')) {
@@ -3168,6 +3213,17 @@ export class SwatSingleTableViewerPanel {
                     }
                     if (!filterValue) {
                         row.hidden = false;
+                        return;
+                    }
+                    if (numericFilter && columnIndex !== -1) {
+                        const cell = row.cells[columnIndex];
+                        const valueText = cell ? (cell.textContent || '').trim() : '';
+                        const numericValue = Number(valueText);
+                        if (!Number.isFinite(numericValue)) {
+                            row.hidden = true;
+                            return;
+                        }
+                        row.hidden = !compareNumeric(numericValue, numericFilter.operator, numericFilter.value);
                         return;
                     }
                     let text = '';
