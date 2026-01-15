@@ -12,7 +12,6 @@ import { SwatIndexer } from './indexer';
 
 export class SwatSingleTableViewerPanel {
     private static panels: Map<string, SwatSingleTableViewerPanel> = new Map();
-    private static readonly MAX_ROWS_TO_DISPLAY = 1000; // Limit rows for performance
     private readonly _panel: vscode.WebviewPanel;
     private _disposables: vscode.Disposable[] = [];
     private highlightValue?: string; // Optional value to highlight/expand in hierarchical views
@@ -235,13 +234,11 @@ export class SwatSingleTableViewerPanel {
                     for (const row of sourceTableData.values()) {
                         if ((row.values?.[sourceColumn] || '') === fkValue) {
                             relatedTotal += 1;
-                            if (relatedRows.length < SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY) {
-                                relatedRows.push({
-                                    lineNumber: row.lineNumber,
-                                    file: row.file,
-                                    values: row.values
-                                });
-                            }
+                            relatedRows.push({
+                                lineNumber: row.lineNumber,
+                                file: row.file,
+                                values: row.values
+                            });
                         }
                     }
                     relatedTableName = sourceTable;
@@ -664,7 +661,7 @@ export class SwatSingleTableViewerPanel {
                     <tbody>
         `;
 
-        for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
+        for (const row of rows) {
             tableHtml += `<tr>`;
             tableHtml += `<td class="line-col"><a href="#" data-action="navigate" data-file="${this._escapeHtml(row.file)}" data-line="${row.lineNumber}">${row.lineNumber}</a></td>`;
             
@@ -741,16 +738,6 @@ export class SwatSingleTableViewerPanel {
             }
             
             tableHtml += `</tr>`;
-        }
-
-        if (rows.length > SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY) {
-            tableHtml += `
-                <tr>
-                    <td colspan="${columns.length + 1}" class="truncated-message">
-                        Showing first ${SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY} of ${rows.length} rows
-                    </td>
-                </tr>
-            `;
         }
 
         tableHtml += `
@@ -996,7 +983,7 @@ export class SwatSingleTableViewerPanel {
                            'July', 'August', 'September', 'October', 'November', 'December'];
 
         // Render each weather station as an expandable section
-        for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
+        for (const row of rows) {
             const stationName = row.values.name || 'Unknown Station';
             const lat = row.values.lat || 'N/A';
             const lon = row.values.lon || 'N/A';
@@ -1239,7 +1226,7 @@ export class SwatSingleTableViewerPanel {
             { key: 'ph', label: 'pH' }
         ];
 
-        for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
+        for (const row of rows) {
             const soilName = row.values.name || 'Unknown Soil';
             const hydGrp = row.values.hyd_grp || 'N/A';
             const dpTot = row.values.dp_tot || 'N/A';
@@ -1343,7 +1330,7 @@ export class SwatSingleTableViewerPanel {
         const plantFileName = 'plants.plt';
         const canOpenPlants = this.canOpenFile(plantFileName);
 
-        for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
+        for (const row of rows) {
             const communityName = row.values.name || 'Unknown Community';
             const plantCount = row.values.plnt_cnt || row.values.plt_cnt || 'N/A';
             const rotationYear = row.values.rot_yr_ini || 'N/A';
@@ -1459,7 +1446,7 @@ export class SwatSingleTableViewerPanel {
         const decisionTableFileName = 'lum.dtl';
         const canOpenDecisionTables = this.canOpenFile(decisionTableFileName);
 
-        for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
+        for (const row of rows) {
             const scheduleName = row.values.name || 'Unknown Schedule';
             const numbOps = row.values.numb_ops || '0';
             const numbAuto = row.values.numb_auto || '0';
@@ -1598,7 +1585,7 @@ export class SwatSingleTableViewerPanel {
 
         html += `<div class="dtl-subtables">`;
 
-        for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
+        for (const row of rows) {
             const tableName = row.values.name || 'Unknown Decision Table';
             const condCount = row.values.conds || '0';
             const altCountRaw = row.values.alts || '0';
@@ -1934,7 +1921,8 @@ export class SwatSingleTableViewerPanel {
                 overflow-x: auto;
             }
             .data-table {
-                width: 100%;
+                width: max-content;
+                min-width: 100%;
                 border-collapse: separate;
                 border-spacing: 0;
                 font-size: 0.9em;
@@ -2190,7 +2178,8 @@ export class SwatSingleTableViewerPanel {
                 padding: 0;
             }
             .monthly-data-table {
-                width: 100%;
+                width: max-content;
+                min-width: 100%;
                 border-collapse: separate;
                 border-spacing: 0;
                 font-size: 0.85em;
@@ -2382,7 +2371,8 @@ export class SwatSingleTableViewerPanel {
                 color: var(--vscode-descriptionForeground);
             }
             .soil-layer-table {
-                width: 100%;
+                width: max-content;
+                min-width: 100%;
                 border-collapse: separate;
                 border-spacing: 0;
                 font-size: 0.85em;
@@ -2530,7 +2520,8 @@ export class SwatSingleTableViewerPanel {
                 font-size: 0.95em;
             }
             .management-detail-table {
-                width: 100%;
+                width: max-content;
+                min-width: 100%;
                 border-collapse: separate;
                 border-spacing: 0;
                 font-size: 0.85em;
@@ -2635,7 +2626,8 @@ export class SwatSingleTableViewerPanel {
                 color: var(--vscode-descriptionForeground);
             }
             .plant-detail-table {
-                width: 100%;
+                width: max-content;
+                min-width: 100%;
                 border-collapse: separate;
                 border-spacing: 0;
                 font-size: 0.85em;
@@ -2645,7 +2637,8 @@ export class SwatSingleTableViewerPanel {
                 font-size: 0.95em;
             }
             .dtl-table {
-                width: 100%;
+                width: max-content;
+                min-width: 100%;
                 border-collapse: separate;
                 border-spacing: 0;
                 font-size: 0.85em;
@@ -2694,7 +2687,7 @@ export class SwatSingleTableViewerPanel {
                 font-size: 0.9em;
                 line-height: 1.5;
             }
-            .empty-message, .truncated-message {
+            .empty-message {
                 padding: 20px;
                 text-align: center;
                 color: var(--vscode-descriptionForeground);
@@ -2808,7 +2801,8 @@ export class SwatSingleTableViewerPanel {
                 opacity: 1;
             }
             .fk-peek-table {
-                width: 100%;
+                width: max-content;
+                min-width: 100%;
                 border-collapse: separate;
                 border-spacing: 0;
             }
