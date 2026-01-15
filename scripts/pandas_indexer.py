@@ -30,6 +30,13 @@ MAX_CHILD_LINES = 1000  # Sanity check limit to prevent excessive line skipping
 MANAGEMENT_SCH_OP_DATA1_INDEX = 6  # Position of op_data1 field in management schedule operation lines
 DTL_ACTION_FP_INDEX = 7  # Position of fp field in decision table action lines
 WEATHER_FILE_POINTER_FK_TABLES = {"pcp_cli", "tmp_cli", "slr_cli", "hmd_cli", "wnd_cli"}
+WEATHER_DATA_SCHEMA_FILES = {
+    ".pcp": "weather-pcp.pcp",
+    ".tmp": "weather-tmp.tmp",
+    ".slr": "weather-slr.slr",
+    ".hmd": "weather-hmd.hmd",
+    ".wnd": "weather-wnd.wnd",
+}
 
 
 def load_json(path: Path) -> dict:
@@ -279,6 +286,58 @@ def parse_lines_to_dataframe(
         record["pkValueLower"] = str(df.at[idx, "pkValueLower"])
 
     return df, child_line_info, columns, records
+
+
+def build_weather_data_rows(file_path: Path, table: dict) -> Tuple[List[dict], Dict[str, str]]:
+    """Build row payloads for weather data files with comment + header + station metadata."""
+    with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
+        lines = handle.readlines()
+
+    if not lines:
+        return [], {}
+
+    comment_line = lines[0].strip()
+    header_idx = None
+    station_idx = None
+    for idx in range(1, len(lines)):
+        if header_idx is None and lines[idx].strip():
+            header_idx = idx
+            continue
+        if header_idx is not None and lines[idx].strip():
+            station_idx = idx
+            break
+
+    if station_idx is None:
+        return [], {}
+
+    station_values = lines[station_idx].strip().split()
+    schema_columns = [
+        col["name"]
+        for col in table.get("columns", [])
+        if col.get("type") != "AutoField"
+    ]
+
+    values: Dict[str, str] = {col: "" for col in schema_columns}
+    name_value = comment_line or file_path.name
+    if "name" in values:
+        values["name"] = name_value
+
+    station_columns = [col for col in ("nbyr", "tstep", "lat", "lon", "elev") if col in values]
+    for idx, col in enumerate(station_columns):
+        if idx < len(station_values):
+            values[col] = station_values[idx]
+
+    pk_value = values.get("name") or file_path.name
+    row_payload = [{
+        "file": str(file_path),
+        "tableName": table["table_name"],
+        "lineNumber": station_idx + 1,
+        "pkValue": str(pk_value),
+        "pkValueLower": str(pk_value).lower(),
+        "values": values,
+    }]
+
+    return row_payload, {file_path.name.lower(): table["table_name"]}
 
 
 def build_fk_references(
@@ -860,6 +919,7 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
     tables_payload: Dict[str, List[dict]] = {}
     fk_references: List[dict] = []
     processed_files = set()
+    file_table_map: Dict[str, str] = {}
 
     for file_name, table in schema.get("tables", {}).items():
         file_path = dataset_path / file_name
@@ -924,10 +984,10 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
                     row_dict["childRows"] = child_rows
             
             # Special handling for atmo.cli: capture station deposition data
-            if file_name == 'atmo.cli':
-                child_rows = extract_atmo_details(row, lines)
-                if child_rows:
-                    row_dict["childRows"] = child_rows
+        if file_name == 'atmo.cli':
+            child_rows = extract_atmo_details(row, lines)
+            if child_rows:
+                row_dict["childRows"] = child_rows
             
             row_payload.append(row_dict)
 
@@ -955,6 +1015,21 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
                 )
                 fk_references.extend(child_refs)
 
+    for extension, schema_file in WEATHER_DATA_SCHEMA_FILES.items():
+        table = schema.get("tables", {}).get(schema_file)
+        if not table:
+            continue
+        for file_path in dataset_path.glob(f"*{extension}"):
+            if file_path.name.lower() in processed_files:
+                continue
+            row_payload, file_map = build_weather_data_rows(file_path, table)
+            if not row_payload:
+                continue
+            table_name = table["table_name"]
+            tables_payload.setdefault(table_name, []).extend(row_payload)
+            file_table_map.update(file_map)
+            processed_files.add(file_path.name.lower())
+
     # Process additional decision table files not covered by the schema
     for dtl_path in dataset_path.glob("*.dtl"):
         if dtl_path.name.lower() in processed_files:
@@ -969,6 +1044,7 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
     return {
         "tables": tables_payload,
         "fkReferences": fk_references,
+        "fileTableMap": file_table_map,
         "stats": {
             "tableCount": len(tables_payload),
             "fkCount": len(fk_references),
