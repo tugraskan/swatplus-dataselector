@@ -585,6 +585,16 @@ export class SwatSingleTableViewerPanel {
             });
         }
 
+        const filterableColumns = columns.filter(col => {
+            const colMeta = columnMetadata.get(col);
+            if (!colMeta || !colMeta.type) {
+                return true;
+            }
+            const type = String(colMeta.type).toLowerCase();
+            return type.includes('char') || type.includes('text') || type.includes('string');
+        });
+        const filterColumns = filterableColumns.length > 0 ? filterableColumns : columns;
+
         // Get FK columns and their targets
         const fkColumns = new Map<string, any>();
         // Skip FK detection for file.cio - it has a special format that doesn't match the database schema
@@ -617,7 +627,7 @@ export class SwatSingleTableViewerPanel {
                     <select class="table-filter-column" data-table="${this._escapeHtml(this.tableName)}">
                         <option value="__all">All columns</option>
                         <option value="__line">Line</option>
-                        ${columns.map((col, index) => `<option value="${this._escapeHtml(col)}"${index === 0 ? ' selected' : ''}>${this._escapeHtml(col)}</option>`).join('')}
+                        ${filterColumns.map((col, index) => `<option value="${this._escapeHtml(col)}"${index === 0 ? ' selected' : ''}>${this._escapeHtml(col)}</option>`).join('')}
                     </select>
                 </label>
                 <button type="button" class="table-filter-clear" data-action="clear-filter" data-table="${this._escapeHtml(this.tableName)}">Clear</button>
