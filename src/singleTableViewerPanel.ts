@@ -263,6 +263,8 @@ export class SwatSingleTableViewerPanel {
                 columns: columns,
                 rowData: targetRow.values,
                 lineNumber: targetRow.lineNumber,
+                isDecisionTable: tableName.includes('dtl'),
+                childRows: Array.isArray(targetRow.childRows) ? targetRow.childRows : [],
                 filePointers: filePointers,
                 fkColumns: fkColumns,
                 sourceFile: sourceFile,
@@ -3241,6 +3243,8 @@ export class SwatSingleTableViewerPanel {
                         message.columns,
                         message.rowData,
                         message.lineNumber,
+                        message.isDecisionTable,
+                        message.childRows,
                         message.filePointers,
                         message.fkColumns,
                         message.sourceFile,
@@ -3255,7 +3259,7 @@ export class SwatSingleTableViewerPanel {
                 }
             });
             
-            function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber, filePointers, fkColumns, sourceFile, sourceLine, showRelated, relatedRows, relatedColumns, relatedTotal, relatedTableName, relatedColumnName) {
+            function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber, isDecisionTable, childRows, filePointers, fkColumns, sourceFile, sourceLine, showRelated, relatedRows, relatedColumns, relatedTotal, relatedTableName, relatedColumnName) {
                 const sourceSelector = sourceFile ? \`[data-source-file="\${escapeSelectorValue(sourceFile)}"]\` : '';
                 const sourceLineSelector = sourceLine ? \`[data-source-line="\${escapeSelectorValue(sourceLine)}"]\` : '';
                 const selector = \`td.fk-cell[data-fk-table="\${escapeSelectorValue(tableName)}"][data-fk-value="\${escapeSelectorValue(fkValue)}"]\${sourceSelector}\${sourceLineSelector}\`;
@@ -3408,6 +3412,13 @@ export class SwatSingleTableViewerPanel {
                     table.appendChild(tbody);
                     
                     peekDiv.appendChild(table);
+
+                    if (isDecisionTable && Array.isArray(childRows) && childRows.length > 0) {
+                        const decisionDetails = buildDecisionTablePeekDetails(childRows, rowData, fileName);
+                        if (decisionDetails) {
+                            peekDiv.appendChild(decisionDetails);
+                        }
+                    }
                     
                     // Insert the peek row after the current row in the main table
                     const newRow = document.createElement('tr');
@@ -3418,6 +3429,140 @@ export class SwatSingleTableViewerPanel {
                     newRow.appendChild(newCell);
                     currentRow.after(newRow);
                 });
+            }
+
+            function buildDecisionTablePeekDetails(childRows, rowData, fileName) {
+                const conditionRows = childRows.filter((childRow) => childRow.values && childRow.values.section === 'condition');
+                const actionRows = childRows.filter((childRow) => childRow.values && childRow.values.section === 'action');
+                if (conditionRows.length === 0 && actionRows.length === 0) {
+                    return null;
+                }
+
+                const rawAltCount = rowData && rowData.alts ? rowData.alts : '0';
+                const parsedAltCount = Number.parseInt(String(rawAltCount), 10);
+                const altCount = Number.isFinite(parsedAltCount) && parsedAltCount > 0
+                    ? parsedAltCount
+                    : Math.max(
+                        conditionRows.reduce((max, childRow) => {
+                            const altKeys = Object.keys(childRow.values || {}).filter((key) => key.startsWith('alt'));
+                            return Math.max(max, altKeys.length);
+                        }, 0),
+                        actionRows.reduce((max, childRow) => {
+                            const outKeys = Object.keys(childRow.values || {}).filter((key) => key.startsWith('out'));
+                            return Math.max(max, outKeys.length);
+                        }, 0)
+                    );
+
+                const altColumns = Array.from({ length: altCount }, (_, idx) => `alt${idx + 1}`);
+                const outColumns = Array.from({ length: altCount }, (_, idx) => `out${idx + 1}`);
+
+                const container = document.createElement('div');
+
+                if (conditionRows.length > 0) {
+                    const conditionTitle = document.createElement('h4');
+                    conditionTitle.className = 'dtl-section-title';
+                    conditionTitle.textContent = 'Conditions';
+                    container.appendChild(conditionTitle);
+
+                    const conditionWrapper = document.createElement('div');
+                    conditionWrapper.className = 'table-wrapper';
+                    const conditionTable = document.createElement('table');
+                    conditionTable.className = 'dtl-table';
+                    const conditionHeader = document.createElement('thead');
+                    const conditionHeaderRow = document.createElement('tr');
+                    ['Line', 'Cond Var', 'Obj', 'Obj Num', 'Lim Var', 'Lim Op', 'Lim Const', ...altColumns.map((col) => col.toUpperCase())].forEach((label) => {
+                        const th = document.createElement('th');
+                        th.textContent = label;
+                        conditionHeaderRow.appendChild(th);
+                    });
+                    conditionHeader.appendChild(conditionHeaderRow);
+                    conditionTable.appendChild(conditionHeader);
+                    const conditionBody = document.createElement('tbody');
+                    conditionRows.forEach((childRow) => {
+                        const row = document.createElement('tr');
+                        const lineCell = document.createElement('td');
+                        const lineLink = document.createElement('a');
+                        lineLink.href = '#';
+                        lineLink.textContent = childRow.lineNumber;
+                        lineLink.addEventListener('click', (event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            navigateToFile(fileName, childRow.lineNumber);
+                        });
+                        lineCell.appendChild(lineLink);
+                        row.appendChild(lineCell);
+
+                        ['cond_var', 'obj', 'obj_num', 'lim_var', 'lim_op', 'lim_const'].forEach((key) => {
+                            const cell = document.createElement('td');
+                            cell.textContent = (childRow.values && childRow.values[key]) || '';
+                            row.appendChild(cell);
+                        });
+
+                        altColumns.forEach((altKey) => {
+                            const cell = document.createElement('td');
+                            cell.textContent = (childRow.values && childRow.values[altKey]) || '';
+                            row.appendChild(cell);
+                        });
+                        conditionBody.appendChild(row);
+                    });
+                    conditionTable.appendChild(conditionBody);
+                    conditionWrapper.appendChild(conditionTable);
+                    container.appendChild(conditionWrapper);
+                }
+
+                if (actionRows.length > 0) {
+                    const actionTitle = document.createElement('h4');
+                    actionTitle.className = 'dtl-section-title';
+                    actionTitle.textContent = 'Actions';
+                    container.appendChild(actionTitle);
+
+                    const actionWrapper = document.createElement('div');
+                    actionWrapper.className = 'table-wrapper';
+                    const actionTable = document.createElement('table');
+                    actionTable.className = 'dtl-table';
+                    const actionHeader = document.createElement('thead');
+                    const actionHeaderRow = document.createElement('tr');
+                    ['Line', 'Act Typ', 'Obj', 'Obj Num', 'Act Name', 'Option', 'Const', 'Const2', 'FP', ...outColumns.map((col) => col.toUpperCase())].forEach((label) => {
+                        const th = document.createElement('th');
+                        th.textContent = label;
+                        actionHeaderRow.appendChild(th);
+                    });
+                    actionHeader.appendChild(actionHeaderRow);
+                    actionTable.appendChild(actionHeader);
+                    const actionBody = document.createElement('tbody');
+                    actionRows.forEach((childRow) => {
+                        const row = document.createElement('tr');
+                        const lineCell = document.createElement('td');
+                        const lineLink = document.createElement('a');
+                        lineLink.href = '#';
+                        lineLink.textContent = childRow.lineNumber;
+                        lineLink.addEventListener('click', (event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            navigateToFile(fileName, childRow.lineNumber);
+                        });
+                        lineCell.appendChild(lineLink);
+                        row.appendChild(lineCell);
+
+                        ['act_typ', 'obj', 'obj_num', 'act_name', 'act_option', 'const', 'const2', 'fp'].forEach((key) => {
+                            const cell = document.createElement('td');
+                            cell.textContent = (childRow.values && childRow.values[key]) || '';
+                            row.appendChild(cell);
+                        });
+
+                        outColumns.forEach((outKey) => {
+                            const cell = document.createElement('td');
+                            cell.textContent = (childRow.values && childRow.values[outKey]) || '';
+                            row.appendChild(cell);
+                        });
+                        actionBody.appendChild(row);
+                    });
+                    actionTable.appendChild(actionBody);
+                    actionWrapper.appendChild(actionTable);
+                    container.appendChild(actionWrapper);
+                }
+
+                return container;
             }
             
             // Auto-expand and scroll to highlighted station for weather-wgn.cli
