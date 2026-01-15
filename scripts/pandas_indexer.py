@@ -207,11 +207,13 @@ def parse_lines_to_dataframe(
                             "plt_name": "plnt_name"
                         }
                         columns = [plant_header_map.get(col.lower(), col.lower()) for col in header_columns]
-                    elif all(col in schema_columns_all for col in header_columns):
-                        columns = header_columns
                     else:
                         header_lower = [col.lower() for col in header_columns]
-                        if all(col in schema_columns_all for col in header_lower):
+                        if all(col in schema_columns_all for col in header_columns):
+                            columns = header_columns
+                        elif all(col in schema_columns_all for col in header_lower):
+                            columns = header_lower
+                        elif any(col in schema_columns_all for col in header_lower):
                             columns = header_lower
     
     i = start_line

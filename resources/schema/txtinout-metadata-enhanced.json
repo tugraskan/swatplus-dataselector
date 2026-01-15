@@ -620,8 +620,8 @@
           "column": "nut",
           "is_fk": true,
           "is_pointer": true,
-          "target_file": "nutrients.cha",
-          "description": "Pointer to the channel nutrient file"
+          "target_file": "sed_nut.cha",
+          "description": "Pointer to the channel sediment and nutrient file"
         }
       ]
     },
