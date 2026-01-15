@@ -209,12 +209,8 @@ export class SwatIndexer {
             // Enhance table to file mapping with metadata
             if (this.metadata && this.metadata.table_name_to_file_name) {
                 for (const [tableName, fileName] of Object.entries(this.metadata.table_name_to_file_name)) {
-                    if (!this.tableToFileMap.has(tableName)) {
-                        this.tableToFileMap.set(tableName, fileName);
-                    }
-                    if (!this.fileToTableMap.has(fileName.toLowerCase())) {
-                        this.fileToTableMap.set(fileName.toLowerCase(), tableName);
-                    }
+                    this.tableToFileMap.set(tableName, fileName);
+                    this.fileToTableMap.set(fileName.toLowerCase(), tableName);
                 }
             }
         } catch (error) {

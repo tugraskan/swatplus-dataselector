@@ -1013,8 +1013,17 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
     processed_files = set()
     file_table_map: Dict[str, str] = {}
 
+    table_name_to_file = metadata.get("table_name_to_file_name", {}) if isinstance(metadata, dict) else {}
+
     for file_name, table in schema.get("tables", {}).items():
         file_path = dataset_path / file_name
+        if not file_path.exists():
+            mapped_name = table_name_to_file.get(table.get("table_name"))
+            if mapped_name:
+                mapped_path = dataset_path / mapped_name
+                if mapped_path.exists():
+                    file_path = mapped_path
+
         if not file_path.exists():
             alternate_names = set()
             if "-" in file_name:
