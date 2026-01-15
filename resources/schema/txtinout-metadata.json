@@ -43,6 +43,7 @@
     "management_sch": "management.sch",
     "cntable_lum": "cntable.lum",
     "cons_practice_lum": "cons_practice.lum",
+    "cons_prac_lum": "cons_practice.lum",
     "ovn_table_lum": "ovn_table.lum",
     "tiledrain_str": "tiledrain.str",
     "septic_str": "septic.str",
