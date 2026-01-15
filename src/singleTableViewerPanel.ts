@@ -3453,8 +3453,8 @@ export class SwatSingleTableViewerPanel {
                         }, 0)
                     );
 
-                const altColumns = Array.from({ length: altCount }, (_, idx) => `alt${idx + 1}`);
-                const outColumns = Array.from({ length: altCount }, (_, idx) => `out${idx + 1}`);
+                const altColumns = Array.from({ length: altCount }, (_, idx) => 'alt' + (idx + 1));
+                const outColumns = Array.from({ length: altCount }, (_, idx) => 'out' + (idx + 1));
 
                 const container = document.createElement('div');
 
