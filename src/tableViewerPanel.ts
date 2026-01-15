@@ -417,7 +417,7 @@ export class SwatTableViewerPanel {
                     <tbody>
         `;
 
-        for (const row of rows.slice(0, 1000)) { // Limit to 1000 rows for performance
+        for (const row of rows) {
             tableHtml += `<tr>`;
             tableHtml += `<td class="line-col"><a href="#" data-action="navigate" data-file="${this._escapeHtml(row.file)}" data-line="${row.lineNumber}">${row.lineNumber}</a></td>`;
             
@@ -447,16 +447,6 @@ export class SwatTableViewerPanel {
             }
             
             tableHtml += `</tr>`;
-        }
-
-        if (rows.length > 1000) {
-            tableHtml += `
-                <tr>
-                    <td colspan="${columns.length + 1}" class="truncated-message">
-                        Showing first 1000 of ${rows.length} rows
-                    </td>
-                </tr>
-            `;
         }
 
         tableHtml += `
@@ -650,7 +640,8 @@ export class SwatTableViewerPanel {
                 overflow-x: auto;
             }
             .data-table {
-                width: 100%;
+                width: max-content;
+                min-width: 100%;
                 border-collapse: separate;
                 border-spacing: 0;
                 font-size: 0.9em;
@@ -738,7 +729,7 @@ export class SwatTableViewerPanel {
                 font-size: 0.9em;
                 line-height: 1.5;
             }
-            .empty-message, .truncated-message {
+            .empty-message {
                 padding: 20px;
                 text-align: center;
                 color: var(--vscode-descriptionForeground);
@@ -815,7 +806,8 @@ export class SwatTableViewerPanel {
                 opacity: 1;
             }
             .fk-peek-table {
-                width: 100%;
+                width: max-content;
+                min-width: 100%;
                 border-collapse: separate;
                 border-spacing: 0;
             }
