@@ -142,6 +142,7 @@ export class SwatIndexer {
     private txtInOutPath: string | null = null;
     private tableToFileMap: Map<string, string> = new Map(); // table_name -> file_name
     private fileToTableMap: Map<string, string> = new Map(); // file_name -> table_name (lowercase)
+    private dynamicFileToTableMap: Map<string, string> = new Map(); // runtime file_name -> table_name
     private fkNullValues: string[] = ['null', '0', '']; // Default, can be overridden by metadata
     // file.cio data indexed by classification
     // Structure: classification -> { files: string[], isDefault: boolean[] }
@@ -457,6 +458,15 @@ export class SwatIndexer {
             this.fkReferences = [];
             this.reverseIndex.clear();
             this.decisionTableIndex.clear();
+            this.dynamicFileToTableMap.clear();
+
+            if (payload.fileTableMap && typeof payload.fileTableMap === 'object') {
+                for (const [fileName, tableName] of Object.entries(payload.fileTableMap)) {
+                    if (typeof fileName === 'string' && typeof tableName === 'string') {
+                        this.dynamicFileToTableMap.set(fileName.toLowerCase(), tableName);
+                    }
+                }
+            }
 
             for (const [tableName, rows] of Object.entries(payload.tables || {})) {
                 const tableIndex = new Map<string, IndexedRow>();
@@ -720,7 +730,7 @@ export class SwatIndexer {
      */
     public getTableNameFromFile(filePath: string): string | undefined {
         const fileName = path.basename(filePath).toLowerCase();
-        return this.fileToTableMap.get(fileName);
+        return this.dynamicFileToTableMap.get(fileName) || this.fileToTableMap.get(fileName);
     }
 
     /**
