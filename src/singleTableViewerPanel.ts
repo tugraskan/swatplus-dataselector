@@ -194,13 +194,7 @@ export class SwatSingleTableViewerPanel {
             if (!schema || !indexData) {
                 return;
             }
-            
-            // Get the target table data
-            const targetTableData = indexData.get(tableName);
-            if (!targetTableData) {
-                return;
-            }
-            
+
             // Find the row with the matching FK value
             const targetRow = this.indexer.resolveFKTarget(tableName, fkValue);
             if (!targetRow) {
@@ -208,8 +202,9 @@ export class SwatSingleTableViewerPanel {
             }
             
             // Get schema for the target table to get column names
-            const fileName = this.indexer.getFileNameForTable(tableName);
-            const schemaTable = fileName && schema.tables[fileName] ? schema.tables[fileName] : undefined;
+            const resolvedTableName = targetRow.tableName || tableName;
+            const fileName = this.indexer.getFileNameForTable(resolvedTableName) || resolvedTableName;
+            const schemaTable = schema.tables[fileName];
             const metadata = this.indexer.getMetadata();
             const filePointers = metadata?.file_pointer_columns?.[fileName || ''] || {};
             const fkColumns: Record<string, { targetTable: string; targetFile: string }> = {};

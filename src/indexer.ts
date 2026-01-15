@@ -698,6 +698,13 @@ export class SwatIndexer {
      * Look up a FK target location
      */
     public resolveFKTarget(tableName: string, pkValue: string): IndexedRow | undefined {
+        if (tableName.includes('dtl')) {
+            const decisionRow = this.resolveDecisionTable(pkValue);
+            if (decisionRow) {
+                return decisionRow;
+            }
+        }
+
         const tableIndex = this.index.get(tableName);
         return tableIndex?.get(pkValue.toLowerCase());
     }
