@@ -604,26 +604,29 @@ def process_dtl_file(
             current_line += 1
     
     # Process each decision table
-    for table_idx in range(num_tables):
-        if current_line >= len(lines):
-            break
-        
+    processed_tables = 0
+    while processed_tables < num_tables and current_line < len(lines):
         # Skip blank lines before decision table
         while current_line < len(lines) and not lines[current_line].strip():
             current_line += 1
-        
+
         if current_line >= len(lines):
             break
-        
+
         header_line = lines[current_line].strip()
         if not header_line:
             break
-        
+
+        header_upper = header_line.upper()
+        if header_upper.startswith('NAME') or header_upper.startswith('DTBL_NAME'):
+            current_line += 1
+            continue
+
         header_values = header_line.split()
         if len(header_values) < 4:
             current_line += 1
             continue
-        
+
         dtbl_name = header_values[0]
         try:
             conds = int(header_values[1])
@@ -651,6 +654,7 @@ def process_dtl_file(
         })
         
         current_line += 1  # Move past decision table header
+        processed_tables += 1
         
         # Skip conditions section header line
         while current_line < len(lines) and not lines[current_line].strip():
