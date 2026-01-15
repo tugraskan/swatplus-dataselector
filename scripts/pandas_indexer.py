@@ -924,16 +924,31 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
     for file_name, table in schema.get("tables", {}).items():
         file_path = dataset_path / file_name
         if not file_path.exists():
-            continue
-        processed_files.add(file_name.lower())
+            alternate_names = set()
+            if "-" in file_name:
+                alternate_names.add(file_name.replace("-", "_"))
+            if "_" in file_name:
+                alternate_names.add(file_name.replace("_", "-"))
+            alternate_names.add(file_name.replace("-", "_").replace("_", "-"))
+            for alternate_name in alternate_names:
+                candidate_path = dataset_path / alternate_name
+                if candidate_path.exists():
+                    file_path = candidate_path
+                    break
+            if not file_path.exists():
+                continue
+
+        actual_file_name = file_path.name
+        processed_files.add(actual_file_name.lower())
+        file_table_map[actual_file_name.lower()] = table["table_name"]
         
         # Skip file.cio - it has a special classification-based format that is handled
         # separately in the TypeScript parseFileCio() method
-        if file_name.lower() == 'file.cio':
+        if actual_file_name.lower() == 'file.cio':
             continue
         
         # Special handling for decision table files (*.dtl)
-        if file_name.endswith('.dtl'):
+        if actual_file_name.endswith('.dtl'):
             row_payload, dtl_fk_refs = process_dtl_file(file_path, table, fk_null_values)
             if row_payload:
                 tables_payload[table["table_name"]] = row_payload
@@ -962,7 +977,7 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
             }
 
             # Special handling for soils.sol: capture layer data lines
-            if file_name == 'soils.sol' and lines:
+            if actual_file_name == 'soils.sol' and lines:
                 value_updates, child_rows = extract_soils_details(row, lines)
                 if value_updates:
                     row_dict["values"].update(value_updates)
@@ -970,7 +985,7 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
                     row_dict["childRows"] = child_rows
 
             # Special handling for plant.ini: capture plant community member lines
-            if file_name == 'plant.ini' and lines:
+            if actual_file_name == 'plant.ini' and lines:
                 value_updates, child_rows = extract_plant_details(lines, child_line_info, idx)
                 if value_updates:
                     row_dict["values"].update(value_updates)
@@ -978,17 +993,17 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
                     row_dict["childRows"] = child_rows
             
             # Special handling for weather-wgn.cli: capture monthly data child lines
-            if file_name == 'weather-wgn.cli':
+            if actual_file_name == 'weather-wgn.cli':
                 child_rows = extract_weather_wgn_details(lines, child_line_info, idx)
                 if child_rows:
                     row_dict["childRows"] = child_rows
             
             # Special handling for atmo.cli: capture station deposition data
-        if file_name == 'atmo.cli':
-            child_rows = extract_atmo_details(row, lines)
-            if child_rows:
-                row_dict["childRows"] = child_rows
-            
+            if actual_file_name == 'atmo.cli':
+                child_rows = extract_atmo_details(row, lines)
+                if child_rows:
+                    row_dict["childRows"] = child_rows
+
             row_payload.append(row_dict)
 
         tables_payload[table["table_name"]] = row_payload
@@ -997,7 +1012,7 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
         fk_references.extend(build_fk_references(df, table, file_path, fk_null_values, metadata))
         
         # Special handling for management.sch child lines
-        if file_name == 'management.sch' and child_line_info:
+        if actual_file_name == 'management.sch' and child_line_info:
             # Process child lines for each main record
             for idx, (line_num, _) in enumerate(child_line_info):
                 # Get the main record to extract numb_auto and numb_ops
