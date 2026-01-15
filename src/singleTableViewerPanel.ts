@@ -56,7 +56,7 @@ export class SwatSingleTableViewerPanel {
                         break;
                     case 'getFKRowData':
                         if (message.tableName && message.fkValue) {
-                            this.sendFKRowData(message.tableName, message.fkValue);
+                            this.sendFKRowData(message.tableName, message.fkValue, message.sourceFile, message.sourceLine);
                         }
                         break;
                     case 'openTableInNewTab':
@@ -152,7 +152,7 @@ export class SwatSingleTableViewerPanel {
         }
     }
 
-    private sendFKRowData(tableName: string, fkValue: string) {
+    private sendFKRowData(tableName: string, fkValue: string, sourceFile?: string, sourceLine?: number) {
         try {
             const schema = this.indexer.getSchema();
             const indexData = this.indexer.getIndexData();
@@ -201,7 +201,9 @@ export class SwatSingleTableViewerPanel {
                 rowData: targetRow.values,
                 lineNumber: targetRow.lineNumber,
                 filePointers: filePointers,
-                fkColumns: fkColumns
+                fkColumns: fkColumns,
+                sourceFile: sourceFile,
+                sourceLine: sourceLine
             });
         } catch (error) {
             console.error('Failed to get FK row data', error);
@@ -616,7 +618,7 @@ export class SwatSingleTableViewerPanel {
                         // Embed the FK row data as JSON in data attributes
                         const fkRowDataJson = JSON.stringify(targetRow.values).replace(/"/g, '&quot;');
                         const fileName = this.indexer.getFileNameForTable(fkInfo.references.table) || fkInfo.references.table;
-                        tableHtml += `<td class="fk-cell" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" onclick="toggleFKPeek(this, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" oncontextmenu="showFKContextMenu(event, '${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber}, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
+                        tableHtml += `<td class="fk-cell" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}" data-source-file="${this._escapeHtml(row.file)}" data-source-line="${row.lineNumber}"><a href="#" onclick="toggleFKPeek(this, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" oncontextmenu="showFKContextMenu(event, '${this._escapeJs(targetRow.file)}', ${targetRow.lineNumber}, '${this._escapeJs(fkInfo.references.table)}', '${this._escapeJs(value)}'); return false;" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
                     } else {
                         tableHtml += `<td class="fk-cell unresolved" title="Unresolved FK to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</td>`;
                     }
@@ -1421,9 +1423,9 @@ export class SwatSingleTableViewerPanel {
                                 ? `Peek plant row from ${plantFileName}`
                                 : `${plantFileName} - Not indexed (may not exist in dataset)`;
                             if (canOpenPlants) {
-                                html += `<td class="fk-cell" data-fk-table="plants_plt" data-fk-value="${this._escapeHtml(value)}"><a href="#" onclick="toggleFKPeek(this, 'plants_plt', '${this._escapeJs(value)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                                html += `<td class="fk-cell" data-fk-table="plants_plt" data-fk-value="${this._escapeHtml(value)}" data-source-file="${this._escapeHtml(file)}" data-source-line="${childRow.lineNumber}"><a href="#" onclick="toggleFKPeek(this, 'plants_plt', '${this._escapeJs(value)}'); return false;" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
                             } else {
-                                html += `<td class="fk-cell unresolved" data-fk-table="plants_plt" data-fk-value="${this._escapeHtml(value)}"><span class="${linkClass}" title="${title}">${this._escapeHtml(value)}</span></td>`;
+                                html += `<td class="fk-cell unresolved" data-fk-table="plants_plt" data-fk-value="${this._escapeHtml(value)}" data-source-file="${this._escapeHtml(file)}" data-source-line="${childRow.lineNumber}"><span class="${linkClass}" title="${title}">${this._escapeHtml(value)}</span></td>`;
                             }
                         } else {
                             html += `<td>${this._escapeHtml(value)}</td>`;
@@ -2555,10 +2557,14 @@ export class SwatSingleTableViewerPanel {
                     nextRow.remove();
                 } else {
                     // Request FK row data from extension
+                    const sourceFile = cell.dataset.sourceFile || '';
+                    const sourceLine = Number(cell.dataset.sourceLine || 0);
                     vscode.postMessage({
                         command: 'getFKRowData',
                         tableName: tableName,
-                        fkValue: fkValue
+                        fkValue: fkValue,
+                        sourceFile: sourceFile,
+                        sourceLine: sourceLine
                     });
                 }
             }
@@ -2639,13 +2645,15 @@ export class SwatSingleTableViewerPanel {
             window.addEventListener('message', event => {
                 const message = event.data;
                 if (message.command === 'showFKRowData') {
-                    displayFKPeek(message.tableName, message.fkValue, message.fileName, message.columns, message.rowData, message.lineNumber, message.filePointers, message.fkColumns);
+                    displayFKPeek(message.tableName, message.fkValue, message.fileName, message.columns, message.rowData, message.lineNumber, message.filePointers, message.fkColumns, message.sourceFile, message.sourceLine);
                 }
             });
             
-            function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber, filePointers, fkColumns) {
-                // Find the specific FK cell that matches both table name AND FK value
-                const fkCells = document.querySelectorAll(\`td.fk-cell[data-fk-table="\${tableName}"][data-fk-value="\${fkValue}"]\`);
+            function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber, filePointers, fkColumns, sourceFile, sourceLine) {
+                const sourceSelector = sourceFile ? \`[data-source-file="\${sourceFile}"]\` : '';
+                const sourceLineSelector = sourceLine ? \`[data-source-line="\${sourceLine}"]\` : '';
+                const selector = \`td.fk-cell[data-fk-table="\${tableName}"][data-fk-value="\${fkValue}"]\${sourceSelector}\${sourceLineSelector}\`;
+                const fkCells = document.querySelectorAll(selector);
                 
                 fkCells.forEach(cell => {
                     const currentRow = cell.closest('tr');
