@@ -836,6 +836,92 @@ def extract_plant_details(
     return value_updates, child_rows
 
 
+def get_management_sch_counts(lines: List[str], record: dict) -> Tuple[int, int, Dict[str, str]]:
+    value_updates: Dict[str, str] = {}
+    line_num = int(record.get("lineNumber", 0))
+    line_idx = line_num - 1
+    main_tokens: List[str] = []
+    if 0 <= line_idx < len(lines):
+        main_tokens = lines[line_idx].strip().split()
+
+    if len(main_tokens) >= 3:
+        if not record.get("numb_ops"):
+            value_updates["numb_ops"] = main_tokens[1]
+        if not record.get("numb_auto"):
+            value_updates["numb_auto"] = main_tokens[2]
+
+    def parse_int(value: Optional[str]) -> int:
+        try:
+            return int(value) if value not in (None, "") else 0
+        except (ValueError, TypeError):
+            return 0
+
+    numb_ops = parse_int(value_updates.get("numb_ops") or record.get("numb_ops"))
+    numb_auto = parse_int(value_updates.get("numb_auto") or record.get("numb_auto"))
+    return numb_auto, numb_ops, value_updates
+
+
+def extract_management_sch_details(lines: List[str], record: dict) -> Tuple[Dict[str, str], List[dict]]:
+    value_updates: Dict[str, str] = {}
+    child_rows: List[dict] = []
+
+    line_num = int(record.get("lineNumber", 0))
+    if line_num <= 0:
+        return value_updates, child_rows
+
+    numb_auto, numb_ops, value_updates = get_management_sch_counts(lines, record)
+
+    start_idx = line_num
+
+    for auto_idx in range(numb_auto):
+        child_line_idx = start_idx + auto_idx
+        if child_line_idx >= len(lines):
+            break
+        child_line = lines[child_line_idx].strip()
+        if not child_line:
+            continue
+        tokens = child_line.split()
+        if not tokens:
+            continue
+        child_rows.append({
+            "lineNumber": child_line_idx + 1,
+            "values": {
+                "section": "auto",
+                "name": tokens[0],
+                "d_table": tokens[0],
+                "plant1": tokens[1] if len(tokens) > 1 else "",
+                "plant2": tokens[2] if len(tokens) > 2 else "",
+            }
+        })
+
+    op_start_idx = start_idx + numb_auto
+    for op_idx in range(numb_ops):
+        child_line_idx = op_start_idx + op_idx
+        if child_line_idx >= len(lines):
+            break
+        child_line = lines[child_line_idx].strip()
+        if not child_line:
+            continue
+        tokens = child_line.split()
+        if not tokens:
+            continue
+        child_rows.append({
+            "lineNumber": child_line_idx + 1,
+            "values": {
+                "section": "op",
+                "op_typ": tokens[0],
+                "mon": tokens[1] if len(tokens) > 1 else "",
+                "day": tokens[2] if len(tokens) > 2 else "",
+                "hu_sch": tokens[3] if len(tokens) > 3 else "",
+                "op_data1": tokens[4] if len(tokens) > 4 else "",
+                "op_data2": tokens[5] if len(tokens) > 5 else "",
+                "op_data3": tokens[6] if len(tokens) > 6 else "",
+            }
+        })
+
+    return value_updates, child_rows
+
+
 def extract_weather_wgn_details(
     lines: List[str],
     child_line_info: List[Tuple[int, int]],
@@ -991,6 +1077,14 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
                     row_dict["values"].update(value_updates)
                 if child_rows:
                     row_dict["childRows"] = child_rows
+
+            # Special handling for management.sch: capture auto/op detail lines
+            if actual_file_name == 'management.sch' and lines:
+                value_updates, child_rows = extract_management_sch_details(lines, row)
+                if value_updates:
+                    row_dict["values"].update(value_updates)
+                if child_rows:
+                    row_dict["childRows"] = child_rows
             
             # Special handling for weather-wgn.cli: capture monthly data child lines
             if actual_file_name == 'weather-wgn.cli':
@@ -1012,19 +1106,14 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
         fk_references.extend(build_fk_references(df, table, file_path, fk_null_values, metadata))
         
         # Special handling for management.sch child lines
-        if actual_file_name == 'management.sch' and child_line_info:
-            # Process child lines for each main record
-            for idx, (line_num, _) in enumerate(child_line_info):
-                # Get the main record to extract numb_auto and numb_ops
-                main_record = records[idx]
-                try:
-                    numb_auto = int(main_record.get('numb_auto', 0))
-                    numb_ops = int(main_record.get('numb_ops', 0))
-                except (ValueError, TypeError):
-                    numb_auto = 0
-                    numb_ops = 0
-                
-                # Process child lines starting from the line after the main record
+        if actual_file_name == 'management.sch' and lines:
+            for main_record in records:
+                line_num = int(main_record.get("lineNumber", 0))
+                if line_num <= 0:
+                    continue
+                numb_auto, numb_ops, _ = get_management_sch_counts(lines, main_record)
+                if numb_auto <= 0 and numb_ops <= 0:
+                    continue
                 child_refs = process_management_sch_child_lines(
                     file_path, table, lines, line_num, numb_auto, numb_ops, fk_null_values
                 )

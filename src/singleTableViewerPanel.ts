@@ -552,6 +552,14 @@ export class SwatSingleTableViewerPanel {
             }
             return this._getPlantIniSubTableHtml(rows);
         }
+
+        // Special rendering for management.sch - use schedule-based sub-table view with auto/op detail data
+        if (this.tableName === 'management_sch') {
+            if (rows.length === 0) {
+                return '<p class="empty-message">No data</p>';
+            }
+            return this._getManagementSchSubTableHtml(rows);
+        }
         // Special rendering for decision table files (*.dtl) - use profile-based sub-table view
         if (resolvedFileName.endsWith('.dtl')) {
             if (rows.length === 0) {
@@ -1411,6 +1419,162 @@ export class SwatSingleTableViewerPanel {
             } else {
                 html += `<p class="empty-message">No plant data available</p>`;
             }
+
+            html += `
+                    </div>
+                </div>
+            `;
+        }
+
+        html += `</div>`;
+
+        return html;
+    }
+
+    private _getManagementSchSubTableHtml(rows: any[]): string {
+        const metadata = this.indexer.getMetadata();
+        const fileMetadata = metadata?.file_metadata?.['management.sch'];
+        let html = '';
+
+        if (fileMetadata && fileMetadata.description) {
+            html += `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
+        }
+
+        html += `<div class="management-sch-subtables">`;
+
+        const autoColumns = [
+            { key: 'name', label: 'Decision Table' },
+            { key: 'plant1', label: 'Plant 1' },
+            { key: 'plant2', label: 'Plant 2' }
+        ];
+        const opColumns = [
+            { key: 'op_typ', label: 'Op Type' },
+            { key: 'mon', label: 'Month' },
+            { key: 'day', label: 'Day' },
+            { key: 'hu_sch', label: 'HU Sch' },
+            { key: 'op_data1', label: 'Op Data 1' },
+            { key: 'op_data2', label: 'Op Data 2' },
+            { key: 'op_data3', label: 'Op Data 3' }
+        ];
+
+        const decisionTableFileName = 'lum.dtl';
+        const canOpenDecisionTables = this.canOpenFile(decisionTableFileName);
+
+        for (const row of rows.slice(0, SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY)) {
+            const scheduleName = row.values.name || 'Unknown Schedule';
+            const numbOps = row.values.numb_ops || '0';
+            const numbAuto = row.values.numb_auto || '0';
+            const lineNumber = row.lineNumber || 0;
+            const file = row.file || 'management.sch';
+
+            const isHighlighted = this.highlightValue && scheduleName && scheduleName.toLowerCase() === this.highlightValue.toLowerCase();
+            const highlightClass = isHighlighted ? ' highlighted-schedule' : '';
+            const highlightId = isHighlighted ? ` id="highlighted-schedule"` : '';
+
+            const childRows = Array.isArray(row.childRows) ? row.childRows : [];
+            const autoRows = childRows.filter((childRow: any) => childRow.values?.section === 'auto');
+            const opRows = childRows.filter((childRow: any) => childRow.values?.section === 'op');
+
+            html += `
+                <div class="management-schedule-section${highlightClass}" data-schedule="${this._escapeHtml(scheduleName)}"${highlightId}>
+                    <div class="management-schedule-header" data-action="toggle-management-schedule" data-schedule="${this._escapeHtml(scheduleName)}">
+                        <span class="toggle-icon">▼</span>
+                        <span class="schedule-name">
+                            <a href="#" data-action="navigate" data-file="${this._escapeHtml(file)}" data-line="${lineNumber}" class="line-link" title="Go to line ${lineNumber}">${this._escapeHtml(scheduleName)}</a>
+                        </span>
+                        <span class="schedule-info">
+                            Auto: ${this._escapeHtml(numbAuto)}, Ops: ${this._escapeHtml(numbOps)}
+                        </span>
+                    </div>
+                    <div class="management-schedule-content">
+                        <div class="schedule-meta">
+                            <span><strong>Auto Tables:</strong> ${this._escapeHtml(numbAuto)}</span>
+                            <span><strong>Scheduled Ops:</strong> ${this._escapeHtml(numbOps)}</span>
+                        </div>
+            `;
+
+            html += `<div class="management-subsection">`;
+            html += `<h4>Automatic Decision Tables</h4>`;
+            if (autoRows.length > 0) {
+                html += `
+                        <div class="table-wrapper">
+                            <table class="management-detail-table">
+                                <thead>
+                                    <tr>
+                                        <th class="line-col">Line</th>
+                                        ${autoColumns.map(col => `<th title="${this._escapeHtml(col.label)}">${this._escapeHtml(col.label)}</th>`).join('')}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                `;
+
+                autoRows.forEach((childRow: any) => {
+                    html += `<tr>`;
+                    html += `<td class="line-col"><a href="#" data-action="navigate" data-file="${this._escapeHtml(file)}" data-line="${childRow.lineNumber}">${childRow.lineNumber}</a></td>`;
+                    autoColumns.forEach((col) => {
+                        const rawValue = childRow.values[col.key] || '';
+                        const value = col.key === 'name' && !rawValue ? (childRow.values.d_table || '') : rawValue;
+                        if (col.key === 'name' && value) {
+                            const linkClass = canOpenDecisionTables ? 'fk-link' : 'fk-link broken-link';
+                            const title = canOpenDecisionTables
+                                ? `Peek decision table row from ${decisionTableFileName}`
+                                : `${decisionTableFileName} - Not indexed (may not exist in dataset)`;
+                            if (canOpenDecisionTables) {
+                                html += `<td class="fk-cell" data-fk-table="lum_dtl" data-fk-value="${this._escapeHtml(value)}" data-source-table="${this._escapeHtml(this.tableName)}" data-source-column="${this._escapeHtml(col.key)}" data-source-file="${this._escapeHtml(file)}" data-source-line="${childRow.lineNumber}"><a href="#" data-action="toggle-fk" data-fk-table="lum_dtl" data-fk-value="${this._escapeHtml(value)}" data-source-table="${this._escapeHtml(this.tableName)}" data-source-column="${this._escapeHtml(col.key)}" data-source-file="${this._escapeHtml(file)}" data-source-line="${childRow.lineNumber}" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                            } else {
+                                html += `<td class="fk-cell unresolved" data-fk-table="lum_dtl" data-fk-value="${this._escapeHtml(value)}"><span class="${linkClass}" title="${title}">${this._escapeHtml(value)}</span></td>`;
+                            }
+                        } else {
+                            html += `<td>${this._escapeHtml(value)}</td>`;
+                        }
+                    });
+                    html += `</tr>`;
+                });
+
+                html += `
+                                </tbody>
+                            </table>
+                        </div>
+                `;
+            } else {
+                html += `<p class="empty-message">No automatic decision tables</p>`;
+            }
+            html += `</div>`;
+
+            html += `<div class="management-subsection">`;
+            html += `<h4>Scheduled Operations</h4>`;
+            if (opRows.length > 0) {
+                html += `
+                        <div class="table-wrapper">
+                            <table class="management-detail-table">
+                                <thead>
+                                    <tr>
+                                        <th class="line-col">Line</th>
+                                        ${opColumns.map(col => `<th title="${this._escapeHtml(col.label)}">${this._escapeHtml(col.label)}</th>`).join('')}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                `;
+
+                opRows.forEach((childRow: any) => {
+                    html += `<tr>`;
+                    html += `<td class="line-col"><a href="#" data-action="navigate" data-file="${this._escapeHtml(file)}" data-line="${childRow.lineNumber}">${childRow.lineNumber}</a></td>`;
+                    opColumns.forEach((col) => {
+                        const value = childRow.values[col.key] || '';
+                        html += `<td>${this._escapeHtml(value)}</td>`;
+                    });
+                    html += `</tr>`;
+                });
+
+                html += `
+                                </tbody>
+                            </table>
+                        </div>
+                `;
+            } else {
+                html += `<p class="empty-message">No scheduled operations</p>`;
+            }
+            html += `</div>`;
 
             html += `
                     </div>
@@ -2285,6 +2449,107 @@ export class SwatSingleTableViewerPanel {
                 color: var(--vscode-descriptionForeground);
                 flex: 1;
             }
+            /* management.sch schedule-based sub-table view */
+            .management-sch-subtables {
+                margin: 16px 0;
+            }
+            .management-schedule-section {
+                margin-bottom: 12px;
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                overflow: hidden;
+            }
+            .management-schedule-section.highlighted-schedule {
+                border: 2px solid var(--vscode-focusBorder);
+                box-shadow: 0 0 8px var(--vscode-focusBorder);
+            }
+            .management-schedule-header {
+                padding: 12px 16px;
+                background-color: var(--vscode-editor-background);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                user-select: none;
+                transition: background-color 0.2s;
+            }
+            .management-schedule-header:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            .management-schedule-header.collapsed .toggle-icon {
+                transform: rotate(-90deg);
+            }
+            .schedule-name {
+                font-weight: 600;
+                flex: 0 0 auto;
+            }
+            .schedule-name .line-link {
+                color: var(--vscode-foreground);
+                text-decoration: none;
+            }
+            .schedule-name .line-link:hover {
+                color: var(--vscode-textLink-activeForeground);
+                text-decoration: underline;
+            }
+            .schedule-info {
+                font-size: 0.85em;
+                color: var(--vscode-descriptionForeground);
+                flex: 1;
+            }
+            .management-schedule-content {
+                max-height: 2000px;
+                overflow-y: auto;
+                transition: max-height 0.3s ease-out;
+                padding: 12px 16px;
+            }
+            .management-schedule-content.collapsed {
+                max-height: 0;
+                overflow: hidden;
+                padding: 0;
+            }
+            .schedule-meta {
+                display: flex;
+                gap: 16px;
+                flex-wrap: wrap;
+                margin-bottom: 12px;
+                font-size: 0.9em;
+            }
+            .schedule-meta span {
+                color: var(--vscode-descriptionForeground);
+            }
+            .management-subsection {
+                margin-bottom: 16px;
+            }
+            .management-subsection h4 {
+                margin: 0 0 8px 0;
+                font-size: 0.95em;
+            }
+            .management-detail-table {
+                width: 100%;
+                border-collapse: separate;
+                border-spacing: 0;
+                font-size: 0.85em;
+            }
+            .management-detail-table th {
+                background-color: var(--vscode-editor-background);
+                padding: 8px 6px;
+                text-align: left;
+                border: 1px solid var(--vscode-panel-border);
+                font-weight: 600;
+                white-space: nowrap;
+                font-size: 0.75em;
+            }
+            .management-detail-table td {
+                padding: 6px;
+                border: 1px solid var(--vscode-panel-border);
+                background-color: var(--vscode-editor-background);
+            }
+            .management-detail-table tr:hover {
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            .management-detail-table tr:hover td {
+                background-color: var(--vscode-list-hoverBackground);
+            }
             /* Decision table profile-based sub-table view */
             .dtl-subtables {
                 margin: 16px 0;
@@ -2639,6 +2904,10 @@ export class SwatSingleTableViewerPanel {
                         event.preventDefault();
                         togglePlantCommunitySection(target.getAttribute('data-community'));
                         break;
+                    case 'toggle-management-schedule':
+                        event.preventDefault();
+                        toggleManagementScheduleSection(target.getAttribute('data-schedule'));
+                        break;
                     case 'toggle-decision-table':
                         event.preventDefault();
                         toggleDecisionTableSection(target.getAttribute('data-dtl'));
@@ -2796,6 +3065,22 @@ export class SwatSingleTableViewerPanel {
                 const header = section.querySelector('.plant-community-header');
                 const content = section.querySelector('.plant-community-content');
                 
+                if (content.classList.contains('collapsed')) {
+                    content.classList.remove('collapsed');
+                    header.classList.remove('collapsed');
+                } else {
+                    content.classList.add('collapsed');
+                    header.classList.add('collapsed');
+                }
+            }
+            function toggleManagementScheduleSection(scheduleName) {
+                const escapedSchedule = scheduleName.replace(/"/g, '\\"');
+                const section = document.querySelector('[data-schedule="' + escapedSchedule + '"]');
+                if (!section) return;
+
+                const header = section.querySelector('.management-schedule-header');
+                const content = section.querySelector('.management-schedule-content');
+
                 if (content.classList.contains('collapsed')) {
                     content.classList.remove('collapsed');
                     header.classList.remove('collapsed');
