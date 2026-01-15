@@ -56,7 +56,14 @@ export class SwatSingleTableViewerPanel {
                         break;
                     case 'getFKRowData':
                         if (message.tableName && message.fkValue) {
-                            this.sendFKRowData(message.tableName, message.fkValue, message.sourceFile, message.sourceLine);
+                            this.sendFKRowData(
+                                message.tableName,
+                                message.fkValue,
+                                message.sourceFile,
+                                message.sourceLine,
+                                message.sourceTable,
+                                message.sourceColumn
+                            );
                         }
                         break;
                     case 'openTableInNewTab':
@@ -172,7 +179,14 @@ export class SwatSingleTableViewerPanel {
         }
     }
 
-    private sendFKRowData(tableName: string, fkValue: string, sourceFile?: string, sourceLine?: number) {
+    private sendFKRowData(
+        tableName: string,
+        fkValue: string,
+        sourceFile?: string,
+        sourceLine?: number,
+        sourceTable?: string,
+        sourceColumn?: string
+    ) {
         try {
             const schema = this.indexer.getSchema();
             const indexData = this.indexer.getIndexData();
@@ -211,6 +225,34 @@ export class SwatSingleTableViewerPanel {
             let columns: string[] = [];
             columns = Object.keys(targetRow.values || {});
             
+            const relatedRows: Array<{ lineNumber: number; file: string; values: Record<string, string> }> = [];
+            let relatedColumns: string[] = [];
+            let relatedTotal = 0;
+            let relatedTableName: string | undefined;
+            let relatedColumnName: string | undefined;
+
+            if (sourceTable && sourceColumn) {
+                const sourceTableData = indexData.get(sourceTable);
+                if (sourceTableData) {
+                    const firstRow = sourceTableData.values().next().value;
+                    relatedColumns = firstRow?.values ? Object.keys(firstRow.values) : [];
+                    for (const row of sourceTableData.values()) {
+                        if ((row.values?.[sourceColumn] || '') === fkValue) {
+                            relatedTotal += 1;
+                            if (relatedRows.length < SwatSingleTableViewerPanel.MAX_ROWS_TO_DISPLAY) {
+                                relatedRows.push({
+                                    lineNumber: row.lineNumber,
+                                    file: row.file,
+                                    values: row.values
+                                });
+                            }
+                        }
+                    }
+                    relatedTableName = sourceTable;
+                    relatedColumnName = sourceColumn;
+                }
+            }
+
             // Send the row data back to the webview
             this._panel.webview.postMessage({
                 command: 'showFKRowData',
@@ -223,7 +265,12 @@ export class SwatSingleTableViewerPanel {
                 filePointers: filePointers,
                 fkColumns: fkColumns,
                 sourceFile: sourceFile,
-                sourceLine: sourceLine
+                sourceLine: sourceLine,
+                relatedRows: relatedRows,
+                relatedColumns: relatedColumns,
+                relatedTotal: relatedTotal,
+                relatedTableName: relatedTableName,
+                relatedColumnName: relatedColumnName
             });
         } catch (error) {
             console.error('Failed to get FK row data', error);
@@ -651,7 +698,7 @@ export class SwatSingleTableViewerPanel {
                         // Embed the FK row data as JSON in data attributes
                         const fkRowDataJson = JSON.stringify(targetRow.values).replace(/"/g, '&quot;');
                         const fileName = this.indexer.getFileNameForTable(fkInfo.references.table) || fkInfo.references.table;
-                        tableHtml += `<td class="fk-cell" data-fk-context="true" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" data-action="toggle-fk" data-fk-context="true" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
+                        tableHtml += `<td class="fk-cell" data-fk-context="true" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}" data-source-table="${this._escapeHtml(this.tableName)}" data-source-column="${this._escapeHtml(col)}" data-source-file="${this._escapeHtml(row.file)}" data-source-line="${row.lineNumber}"><a href="#" data-action="toggle-fk" data-fk-context="true" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-source-table="${this._escapeHtml(this.tableName)}" data-source-column="${this._escapeHtml(col)}" data-source-file="${this._escapeHtml(row.file)}" data-source-line="${row.lineNumber}" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
                     } else {
                         tableHtml += `<td class="fk-cell unresolved" title="Unresolved FK to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</td>`;
                     }
@@ -1345,7 +1392,7 @@ export class SwatSingleTableViewerPanel {
                                 ? `Peek plant row from ${plantFileName}`
                                 : `${plantFileName} - Not indexed (may not exist in dataset)`;
                             if (canOpenPlants) {
-                                html += `<td class="fk-cell" data-fk-table="plants_plt" data-fk-value="${this._escapeHtml(value)}"><a href="#" data-action="toggle-fk" data-fk-table="plants_plt" data-fk-value="${this._escapeHtml(value)}" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                                html += `<td class="fk-cell" data-fk-table="plants_plt" data-fk-value="${this._escapeHtml(value)}" data-source-table="${this._escapeHtml(this.tableName)}" data-source-column="${this._escapeHtml(col.key)}" data-source-file="${this._escapeHtml(file)}" data-source-line="${childRow.lineNumber}"><a href="#" data-action="toggle-fk" data-fk-table="plants_plt" data-fk-value="${this._escapeHtml(value)}" data-source-table="${this._escapeHtml(this.tableName)}" data-source-column="${this._escapeHtml(col.key)}" data-source-file="${this._escapeHtml(file)}" data-source-line="${childRow.lineNumber}" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
                             } else {
                                 html += `<td class="fk-cell unresolved" data-fk-table="plants_plt" data-fk-value="${this._escapeHtml(value)}"><span class="${linkClass}" title="${title}">${this._escapeHtml(value)}</span></td>`;
                             }
@@ -2794,12 +2841,16 @@ export class SwatSingleTableViewerPanel {
                     // Request FK row data from extension
                     const sourceFile = cell.dataset.sourceFile || '';
                     const sourceLine = Number(cell.dataset.sourceLine || 0);
+                    const sourceTable = cell.dataset.sourceTable || '';
+                    const sourceColumn = cell.dataset.sourceColumn || '';
                     vscode.postMessage({
                         command: 'getFKRowData',
                         tableName: tableName,
                         fkValue: fkValue,
                         sourceFile: sourceFile,
-                        sourceLine: sourceLine
+                        sourceLine: sourceLine,
+                        sourceTable: sourceTable,
+                        sourceColumn: sourceColumn
                     });
                 }
             }
@@ -2880,11 +2931,27 @@ export class SwatSingleTableViewerPanel {
             window.addEventListener('message', event => {
                 const message = event.data;
                 if (message.command === 'showFKRowData') {
-                    displayFKPeek(message.tableName, message.fkValue, message.fileName, message.columns, message.rowData, message.lineNumber, message.filePointers, message.fkColumns, message.sourceFile, message.sourceLine);
+                    displayFKPeek(
+                        message.tableName,
+                        message.fkValue,
+                        message.fileName,
+                        message.columns,
+                        message.rowData,
+                        message.lineNumber,
+                        message.filePointers,
+                        message.fkColumns,
+                        message.sourceFile,
+                        message.sourceLine,
+                        message.relatedRows,
+                        message.relatedColumns,
+                        message.relatedTotal,
+                        message.relatedTableName,
+                        message.relatedColumnName
+                    );
                 }
             });
             
-            function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber, filePointers, fkColumns, sourceFile, sourceLine) {
+            function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber, filePointers, fkColumns, sourceFile, sourceLine, relatedRows, relatedColumns, relatedTotal, relatedTableName, relatedColumnName) {
                 const sourceSelector = sourceFile ? \`[data-source-file="\${sourceFile}"]\` : '';
                 const sourceLineSelector = sourceLine ? \`[data-source-line="\${sourceLine}"]\` : '';
                 const selector = \`td.fk-cell[data-fk-table="\${tableName}"][data-fk-value="\${fkValue}"]\${sourceSelector}\${sourceLineSelector}\`;
@@ -2907,23 +2974,32 @@ export class SwatSingleTableViewerPanel {
                     header.className = 'fk-peek-header';
                     const headerText = document.createElement('span');
                     headerText.className = 'fk-peek-header-text';
-                    const headerLabel = document.createElement('span');
-                    headerLabel.textContent = \`\${tableName} (File: \`;
-                    const fileLink = document.createElement('a');
-                    fileLink.href = '#';
-                    fileLink.className = 'file-link';
-                    fileLink.textContent = fileName;
-                    fileLink.title = \`Click to open \${fileName}\`;
-                    fileLink.addEventListener('click', (event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        openFileByName(fileName);
-                    });
-                    const headerSuffix = document.createElement('span');
-                    headerSuffix.textContent = \`, Line: \${lineNumber})\`;
-                    headerText.appendChild(headerLabel);
-                    headerText.appendChild(fileLink);
-                    headerText.appendChild(headerSuffix);
+                    if (Array.isArray(relatedRows) && relatedTableName && relatedColumnName) {
+                        const summaryText = document.createElement('span');
+                        const totalCount = typeof relatedTotal === 'number' ? relatedTotal : relatedRows.length;
+                        const shownCount = relatedRows.length;
+                        const countSuffix = totalCount > shownCount ? \` (showing \${shownCount} of \${totalCount})\` : \` (\${shownCount})\`;
+                        summaryText.textContent = \`\${relatedTableName} rows where \${relatedColumnName} = \${fkValue}\${countSuffix}\`;
+                        headerText.appendChild(summaryText);
+                    } else {
+                        const headerLabel = document.createElement('span');
+                        headerLabel.textContent = \`\${tableName} (File: \`;
+                        const fileLink = document.createElement('a');
+                        fileLink.href = '#';
+                        fileLink.className = 'file-link';
+                        fileLink.textContent = fileName;
+                        fileLink.title = \`Click to open \${fileName}\`;
+                        fileLink.addEventListener('click', (event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            openFileByName(fileName);
+                        });
+                        const headerSuffix = document.createElement('span');
+                        headerSuffix.textContent = \`, Line: \${lineNumber})\`;
+                        headerText.appendChild(headerLabel);
+                        headerText.appendChild(fileLink);
+                        headerText.appendChild(headerSuffix);
+                    }
                     header.appendChild(headerText);
                     
                     // Add close button to header
@@ -2946,7 +3022,9 @@ export class SwatSingleTableViewerPanel {
                     
                     const thead = document.createElement('thead');
                     const headerRow = document.createElement('tr');
-                    columns.forEach(col => {
+                    const showRelated = Array.isArray(relatedRows) && relatedTableName && relatedColumnName;
+                    const displayColumns = showRelated ? ['Line', ...(relatedColumns || [])] : columns;
+                    displayColumns.forEach(col => {
                         const th = document.createElement('th');
                         th.textContent = col;
                         headerRow.appendChild(th);
@@ -2955,41 +3033,74 @@ export class SwatSingleTableViewerPanel {
                     table.appendChild(thead);
                     
                     const tbody = document.createElement('tbody');
-                    const dataRow = document.createElement('tr');
-                    columns.forEach(col => {
-                        const td = document.createElement('td');
-                        const value = rowData[col] || '';
-                        if (fkColumns && Object.prototype.hasOwnProperty.call(fkColumns, col) && value && value !== 'null') {
-                            const fkInfo = fkColumns[col];
-                            const link = document.createElement('a');
-                            link.href = '#';
-                            link.className = 'fk-link';
-                            link.textContent = value;
-                            link.title = 'Open ' + fkInfo.targetTable + ' for ' + value;
-                            link.addEventListener('click', (event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                openTableInNewTab(fkInfo.targetTable, value);
-                            });
-                            td.appendChild(link);
-                        } else if (filePointers && Object.prototype.hasOwnProperty.call(filePointers, col) && value && value !== 'null') {
-                            const link = document.createElement('a');
-                            link.href = '#';
-                            link.className = 'file-link';
-                            link.textContent = value;
-                            link.title = 'Click to open ' + value;
-                            link.addEventListener('click', (event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                openFilePointer(value);
-                            });
-                            td.appendChild(link);
+                    if (showRelated) {
+                        if (relatedRows.length === 0) {
+                            const emptyRow = document.createElement('tr');
+                            const emptyCell = document.createElement('td');
+                            emptyCell.colSpan = displayColumns.length;
+                            emptyCell.textContent = 'No related rows found.';
+                            emptyRow.appendChild(emptyCell);
+                            tbody.appendChild(emptyRow);
                         } else {
-                            td.textContent = value;
+                            relatedRows.forEach(relatedRow => {
+                                const dataRow = document.createElement('tr');
+                                displayColumns.forEach(col => {
+                                    const td = document.createElement('td');
+                                    if (col === 'Line') {
+                                        const link = document.createElement('a');
+                                        link.href = '#';
+                                        link.textContent = relatedRow.lineNumber;
+                                        link.addEventListener('click', (event) => {
+                                            event.preventDefault();
+                                            event.stopPropagation();
+                                            navigateToFile(relatedRow.file, relatedRow.lineNumber);
+                                        });
+                                        td.appendChild(link);
+                                    } else {
+                                        td.textContent = (relatedRow.values && relatedRow.values[col]) || '';
+                                    }
+                                    dataRow.appendChild(td);
+                                });
+                                tbody.appendChild(dataRow);
+                            });
                         }
-                        dataRow.appendChild(td);
-                    });
-                    tbody.appendChild(dataRow);
+                    } else {
+                        const dataRow = document.createElement('tr');
+                        columns.forEach(col => {
+                            const td = document.createElement('td');
+                            const value = rowData[col] || '';
+                            if (fkColumns && Object.prototype.hasOwnProperty.call(fkColumns, col) && value && value !== 'null') {
+                                const fkInfo = fkColumns[col];
+                                const link = document.createElement('a');
+                                link.href = '#';
+                                link.className = 'fk-link';
+                                link.textContent = value;
+                                link.title = 'Open ' + fkInfo.targetTable + ' for ' + value;
+                                link.addEventListener('click', (event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    openTableInNewTab(fkInfo.targetTable, value);
+                                });
+                                td.appendChild(link);
+                            } else if (filePointers && Object.prototype.hasOwnProperty.call(filePointers, col) && value && value !== 'null') {
+                                const link = document.createElement('a');
+                                link.href = '#';
+                                link.className = 'file-link';
+                                link.textContent = value;
+                                link.title = 'Click to open ' + value;
+                                link.addEventListener('click', (event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    openFilePointer(value);
+                                });
+                                td.appendChild(link);
+                            } else {
+                                td.textContent = value;
+                            }
+                            dataRow.appendChild(td);
+                        });
+                        tbody.appendChild(dataRow);
+                    }
                     table.appendChild(tbody);
                     
                     peekDiv.appendChild(table);
