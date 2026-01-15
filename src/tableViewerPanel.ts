@@ -865,6 +865,16 @@ export class SwatTableViewerPanel {
     private _getScript(): string {
         return `
             const vscode = acquireVsCodeApi();
+            const escapeSelectorValue = (value) => {
+                if (value === null || value === undefined) {
+                    return '';
+                }
+                const text = String(value);
+                if (typeof CSS !== 'undefined' && CSS.escape) {
+                    return CSS.escape(text);
+                }
+                return text.replace(/["\\\\]/g, '\\\\$&');
+            };
 
             document.addEventListener('click', event => {
                 const target = event.target.closest('[data-action]');
@@ -1051,9 +1061,9 @@ export class SwatTableViewerPanel {
             });
 
             function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber, sourceFile, sourceLine) {
-                const sourceSelector = sourceFile ? \`[data-source-file="\${sourceFile}"]\` : '';
-                const sourceLineSelector = sourceLine ? \`[data-source-line="\${sourceLine}"]\` : '';
-                const selector = \`td.fk-cell[data-fk-table="\${tableName}"][data-fk-value="\${fkValue}"]\${sourceSelector}\${sourceLineSelector}\`;
+                const sourceSelector = sourceFile ? \`[data-source-file="\${escapeSelectorValue(sourceFile)}"]\` : '';
+                const sourceLineSelector = sourceLine ? \`[data-source-line="\${escapeSelectorValue(sourceLine)}"]\` : '';
+                const selector = \`td.fk-cell[data-fk-table="\${escapeSelectorValue(tableName)}"][data-fk-value="\${escapeSelectorValue(fkValue)}"]\${sourceSelector}\${sourceLineSelector}\`;
                 const fkCells = document.querySelectorAll(selector);
                 
                 fkCells.forEach(cell => {
