@@ -3615,7 +3615,7 @@
           "is_primary_key": false,
           "is_foreign_key": true,
           "fk_target": {
-            "table": "sed_nut_cha",
+            "table": "nutrients_cha",
             "column": "name"
           }
         },
@@ -3660,7 +3660,7 @@
           "column": "cha_nut",
           "db_column": "cha_nut_id",
           "references": {
-            "table": "sed_nut_cha",
+            "table": "nutrients_cha",
             "column": "name"
           }
         }
