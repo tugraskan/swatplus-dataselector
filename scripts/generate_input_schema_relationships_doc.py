@@ -24,6 +24,27 @@ def build_fk_target_label(table_name: str, target_table: str, metadata: dict) ->
     return target_table
 
 
+def get_txtinout_key_column(schema_table: dict, metadata: dict) -> Optional[str]:
+    default_key = metadata.get("txtinout_fk_behavior", {}).get("default_target_column")
+    if not default_key:
+        return None
+    for column in schema_table.get("columns", []):
+        if column.get("name") == default_key:
+            return default_key
+    return None
+
+
+def get_target_key_column(target_file: str, schema: dict, metadata: dict) -> str:
+    default_key = metadata.get("txtinout_fk_behavior", {}).get("default_target_column")
+    if target_file in schema.get("tables", {}):
+        txt_key = get_txtinout_key_column(schema["tables"][target_file], metadata)
+        if txt_key:
+            return txt_key
+    if default_key:
+        return default_key
+    return "id"
+
+
 def get_file_description(file_name: str, metadata: dict) -> str:
     file_metadata = metadata.get("file_metadata", {}).get(file_name, {})
     if file_metadata.get("description"):
@@ -78,11 +99,13 @@ def render_file_section(
     file_name: str,
     schema_table: dict,
     metadata: dict,
+    schema: dict,
     reverse_relationships: Dict[str, List[dict]],
 ) -> List[str]:
     description = get_file_description(file_name, metadata)
     table_name = schema_table.get("table_name", "")
     rel_map = build_relationship_map(file_name, schema_table, metadata)
+    txtinout_key = get_txtinout_key_column(schema_table, metadata)
 
     lines: List[str] = []
     lines.append(f"## {file_name}")
@@ -93,14 +116,16 @@ def render_file_section(
     primary_keys = schema_table.get("primary_keys") or []
     if primary_keys:
         lines.append(f"- **Primary keys**: {', '.join(f'`{pk}`' for pk in primary_keys)}")
+    if txtinout_key:
+        lines.append(f"- **TxtInOut key**: `{txtinout_key}`")
     fk_cols = [col for col, rel in rel_map.items() if rel.get("is_fk")]
     fp_cols = [col for col, rel in rel_map.items() if rel.get("is_pointer")]
     lines.append(
         f"- **Relationships**: {len(fk_cols)} FK column(s), {len(fp_cols)} file pointer column(s)"
     )
     lines.append("")
-    lines.append("| Column | Type | FK Target | File Pointer | Notes |")
-    lines.append("| --- | --- | --- | --- | --- |")
+    lines.append("| Column | Type | Key / References | FK Target | File Pointer | Notes |")
+    lines.append("| --- | --- | --- | --- | --- | --- |")
 
     schema_column_list = schema_table.get("columns", [])
     schema_columns = {col["name"]: col for col in schema_column_list if col.get("name")}
@@ -122,9 +147,27 @@ def render_file_section(
         fp_target = ""
         if rel.get("is_pointer") and rel.get("target_file"):
             fp_target = str(rel.get("target_file"))
+        key_refs = ""
+        if col and col.get("is_primary_key"):
+            key_refs = "PK"
+        if txtinout_key and col_name == txtinout_key:
+            key_refs = "Key"
+        if rel.get("is_fk") or rel.get("is_pointer"):
+            target_file = rel.get("target_file")
+            if not target_file and rel.get("fk_target"):
+                target_file = metadata.get("table_name_to_file_name", {}).get(
+                    rel["fk_target"]
+                )
+            if target_file:
+                target_key = get_target_key_column(target_file, schema, metadata)
+                relationship_label = "FK" if rel.get("is_fk") else "File Pointer"
+                key_refs = f"{relationship_label} → {target_file}.{target_key}"
         notes: List[str] = []
-        if rel.get("pointer_description"):
-            notes.append(str(rel["pointer_description"]))
+        pointer_description = rel.get("pointer_description")
+        if isinstance(pointer_description, dict):
+            pointer_description = pointer_description.get("description")
+        if pointer_description:
+            notes.append(str(pointer_description))
         if col and col.get("nullable"):
             notes.append("nullable")
         if col and col.get("is_primary_key"):
@@ -132,9 +175,35 @@ def render_file_section(
         if col and col.get("type") == "AutoField":
             notes.append("schema-only (not in raw file)")
         lines.append(
-            f"| `{col_name}` | {col_type} | {fk_target} | {fp_target} | {'; '.join(notes)} |"
+            f"| `{col_name}` | {col_type} | {key_refs} | {fk_target} | {fp_target} | {'; '.join(notes)} |"
         )
     lines.append("")
+    relationship_entries: List[str] = []
+    for col_name in ordered_columns:
+        rel = rel_map.get(col_name, {})
+        if not (rel.get("is_fk") or rel.get("is_pointer")):
+            continue
+        target_file = rel.get("target_file")
+        if not target_file and rel.get("fk_target"):
+            target_file = metadata.get("table_name_to_file_name", {}).get(rel["fk_target"])
+        if not target_file:
+            continue
+        target_key = get_target_key_column(target_file, schema, metadata)
+        rel_type = "FK" if rel.get("is_fk") else "File Pointer"
+        cardinality = "many-to-one"
+        constraint = "optional"
+        col = schema_columns.get(col_name)
+        if col and not col.get("nullable"):
+            constraint = "required"
+        relationship_entries.append(
+            f"- `{file_name}.{col_name}` (many) {rel_type} → `{target_file}.{target_key}` (one) "
+            f"(cardinality: {cardinality}, constraint: {constraint})"
+        )
+    if relationship_entries:
+        lines.append("**Relationships**")
+        lines.append("")
+        lines.extend(relationship_entries)
+        lines.append("")
     reverse_entries = reverse_relationships.get(file_name, [])
     if reverse_entries:
         lines.append("**Referenced by**")
@@ -238,6 +307,7 @@ def main() -> None:
                 file_name,
                 schema["tables"][file_name],
                 metadata,
+                schema,
                 reverse_relationship_list,
             )
         )
