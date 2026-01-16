@@ -22,6 +22,7 @@ A VS Code extension for SWAT+ development that allows you to browse and select d
 - **[Schema Enhancement](docs/SCHEMA_ENHANCEMENT.md)** - How markdown documentation enhances FK and pointer detection
 - **[Extension File Schema](docs/EXTENSION_FILE_SCHEMA.md)** - Detailed schema for all SWAT+ files
 - **[Dependency Analysis](docs/DEPENDENCY_ANALYSIS.md)** - Comprehensive FK and file relationships
+- **[Input Schema Relationships Guide](docs/INPUT_SCHEMA_RELATIONSHIPS.md)** - Where to find FK and file pointer relationships
 - **[Quick Reference](docs/QUICK_REFERENCE.md)** - Quick lookup for common patterns
 - **[Troubleshooting Guide](TROUBLESHOOTING.md)** - Solutions for common issues
 
