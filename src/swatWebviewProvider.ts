@@ -163,6 +163,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         case 'rebuildIndex':
                             vscode.commands.executeCommand('swat-dataset-selector.rebuildIndex');
                             break;
+                        case 'loadIndex':
+                            vscode.commands.executeCommand('swat-dataset-selector.loadIndex');
+                            break;
                         default:
                             console.warn('swat webview unknown message', data);
                     }
@@ -224,8 +227,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             folderOpened: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 5h4l2 2h6v6H2z" fill="currentColor"/></svg>`,
             database: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="12" cy="5" rx="9" ry="3" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>`,
             file: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="currentColor" stroke-width="1" fill="none"/></svg>`,
-            star: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 .587l3.668 7.431L23 9.75l-5.5 5.367L18.335 24 12 20.202 5.665 24l1.835-8.883L1 9.75l7.332-1.732L12 .587z" fill="currentColor"/></svg>`
+            star: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 .587l3.668 7.431L23 9.75l-5.5 5.367L18.335 24 12 20.202 5.665 24l1.835-8.883L1 9.75l7.332-1.732L12 .587z" fill="currentColor"/></svg>`,
+            refresh: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4v6h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 20v-6h-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 10a8 8 0 0 0-14.14-4.95L4 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 14a8 8 0 0 0 14.14 4.95L20 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
         };
+        const cachePath = this.selectedDataset ? path.join(this.selectedDataset, 'index.json') : undefined;
+        const hasCachedIndex = cachePath ? fs.existsSync(cachePath) : false;
         let combinedHtml = '';
         if (!this.selectedDataset) {
             combinedHtml = `<div class="section">
@@ -274,6 +280,16 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                             <button class="action-button primary" id="buildIndexBtn">
                                 ${svgs.database}
                                 Build Index
+                            </button>
+                            ${hasCachedIndex ? `
+                            <button class="action-button secondary" id="loadIndexBtn">
+                                ${svgs.file}
+                                Load Cached Index
+                            </button>
+                            ` : ''}
+                            <button class="action-button secondary" id="rebuildIndexBtn">
+                                ${svgs.refresh}
+                                Rebuild Index
                             </button>
                         </div>
                         <div class="selected-window-body">
@@ -1270,6 +1286,16 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 ${svgs.database}
                 Build Index
             </button>
+            ${hasCachedIndex ? `
+            <button class="action-button secondary" id="loadIndexBtn" style="width: 100%; margin-top: 8px;">
+                ${svgs.file}
+                Load Cached Index
+            </button>
+            ` : ''}
+            <button class="action-button secondary" id="rebuildIndexBtn" style="width: 100%; margin-top: 8px;">
+                ${svgs.refresh}
+                Rebuild Index
+            </button>
         </div>
 
         <div class="help-text">
@@ -1363,6 +1389,16 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             const buildIndexBtn = $('buildIndexBtn');
             if (buildIndexBtn) buildIndexBtn.addEventListener('click', () => {
                 swatHost.postMessage({ type: 'buildIndex' });
+            });
+
+            const loadIndexBtn = $('loadIndexBtn');
+            if (loadIndexBtn) loadIndexBtn.addEventListener('click', () => {
+                swatHost.postMessage({ type: 'loadIndex' });
+            });
+
+            const rebuildIndexBtn = $('rebuildIndexBtn');
+            if (rebuildIndexBtn) rebuildIndexBtn.addEventListener('click', () => {
+                swatHost.postMessage({ type: 'rebuildIndex' });
             });
 
             // Recent dataset click handlers
@@ -1500,6 +1536,16 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     if (closest && closest('#buildIndexBtn')) {
                         try { console.log('SWAT webview: delegated buildIndex click'); } catch (e) {}
                         swatHost.postMessage({ type: 'buildIndex' });
+                        return;
+                    }
+                    if (closest && closest('#loadIndexBtn')) {
+                        try { console.log('SWAT webview: delegated loadIndex click'); } catch (e) {}
+                        swatHost.postMessage({ type: 'loadIndex' });
+                        return;
+                    }
+                    if (closest && closest('#rebuildIndexBtn')) {
+                        try { console.log('SWAT webview: delegated rebuildIndex click'); } catch (e) {}
+                        swatHost.postMessage({ type: 'rebuildIndex' });
                         return;
                     }
                     if (closest && closest('.remove-btn')) {

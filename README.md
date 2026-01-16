@@ -44,6 +44,7 @@ This extension provides the following commands:
 - `SWAT+: Select Dataset and Debug` - Browse for a dataset folder and immediately launch debug session
 - `SWAT+: Debug with Selected Dataset` - Launch debug with previously selected dataset folder
 - `SWAT+: Build Inputs Index` - Build an index of all SWAT+ input files in the selected dataset
+- `SWAT+: Load Cached Index` - Load a cached index from the dataset folder (index.json)
 - `SWAT+: Rebuild Inputs Index` - Rebuild the index for the currently selected dataset
 
 ## Usage
