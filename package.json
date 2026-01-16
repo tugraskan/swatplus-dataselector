@@ -88,7 +88,20 @@
         "title": "SWAT+: Export Index to JSON",
         "icon": "$(cloud-download)"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "SWAT+ Dataset Selector",
+      "properties": {
+        "swatplus.schemaDirectories": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "Additional directories to scan for SWAT+ schema JSON files. Supports ${workspaceFolder}."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",

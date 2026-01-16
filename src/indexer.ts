@@ -106,6 +106,13 @@ export interface Schema {
     tables: { [fileName: string]: SchemaTable };
 }
 
+export interface FileCioHeaderInfo {
+    editorVersion?: string;
+    swatRevision?: string;
+    generatedOn?: string;
+    raw?: string;
+}
+
 export interface IndexedRow {
     file: string;
     tableName: string;
@@ -149,8 +156,12 @@ export class SwatIndexer {
     private fileCioData: Map<string, { files: string[], isDefault: boolean[] }> = new Map();
     private decisionTableIndex: Map<string, IndexedRow> = new Map(); // dtl name (lowercase) -> row
     private readonly indexCacheFileName = 'index.json';
+    private schemaPathOverride: string | null = null;
+    private fileCioHeader: FileCioHeaderInfo | null = null;
 
     constructor(private context: vscode.ExtensionContext) {
+        const storedSchemaPath = this.context.workspaceState.get<string>('swatplus.schemaPath');
+        this.schemaPathOverride = storedSchemaPath || null;
         this.loadSchema();
         this.loadMetadata();
         this.loadGitbookUrls();
@@ -158,12 +169,7 @@ export class SwatIndexer {
 
     private loadSchema(): void {
         try {
-            const schemaPath = path.join(
-                this.context.extensionPath,
-                'resources',
-                'schema',
-                'swatplus-editor-schema.json'
-            );
+            const schemaPath = this.resolveSchemaPath();
             
             if (!fs.existsSync(schemaPath)) {
                 vscode.window.showErrorMessage('SWAT+ schema file not found');
@@ -183,6 +189,28 @@ export class SwatIndexer {
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to load SWAT+ schema: ${error}`);
         }
+    }
+
+    private resolveSchemaPath(): string {
+        if (this.schemaPathOverride) {
+            return this.schemaPathOverride;
+        }
+        return path.join(
+            this.context.extensionPath,
+            'resources',
+            'schema',
+            'swatplus-editor-schema.json'
+        );
+    }
+
+    public setSchemaPath(schemaPath: string | null): void {
+        this.schemaPathOverride = schemaPath || null;
+        this.context.workspaceState.update('swatplus.schemaPath', this.schemaPathOverride);
+        this.loadSchema();
+    }
+
+    public getSchemaPath(): string {
+        return this.resolveSchemaPath();
     }
 
     private loadMetadata(): void {
@@ -286,6 +314,7 @@ export class SwatIndexer {
         try {
             const content = fs.readFileSync(fileCioPath, 'utf-8');
             const lines = content.split('\n');
+            this.fileCioHeader = this.parseFileCioHeader(lines[0] || '');
             
             // file.cio actual format:
             // Line 0: Title/description (metadata line)
@@ -378,6 +407,53 @@ export class SwatIndexer {
         }
     }
 
+    public updateFileCioHeader(datasetPath: string): void {
+        const fileCioPath = path.join(datasetPath, 'file.cio');
+        if (!fs.existsSync(fileCioPath)) {
+            this.fileCioHeader = null;
+            return;
+        }
+
+        try {
+            const content = fs.readFileSync(fileCioPath, 'utf-8');
+            const lines = content.split('\n');
+            this.fileCioHeader = this.parseFileCioHeader(lines[0] || '');
+        } catch (error) {
+            console.error(`Error reading file.cio header: ${error}`);
+            this.fileCioHeader = null;
+        }
+    }
+
+    public getFileCioHeaderInfo(): FileCioHeaderInfo | null {
+        return this.fileCioHeader;
+    }
+
+    private parseFileCioHeader(headerLine: string): FileCioHeaderInfo {
+        const info: FileCioHeaderInfo = {
+            raw: headerLine.trim() || undefined
+        };
+        if (!headerLine) {
+            return info;
+        }
+
+        const editorMatch = headerLine.match(/written\s+by\s+SWAT\+\s*editor\s*v?([0-9.]+)/i);
+        if (editorMatch) {
+            info.editorVersion = editorMatch[1];
+        }
+
+        const revisionMatch = headerLine.match(/for\s+SWAT\+\s*rev\.?([0-9.]+)/i);
+        if (revisionMatch) {
+            info.swatRevision = revisionMatch[1];
+        }
+
+        const dateMatch = headerLine.match(/on\s+([0-9]{4}-[0-9]{2}-[0-9]{2}\s+[0-9:]{2,5})/i);
+        if (dateMatch) {
+            info.generatedOn = dateMatch[1];
+        }
+
+        return info;
+    }
+
     /**
      * Build the index using the pandas helper script for tabular processing
      */
@@ -388,7 +464,7 @@ export class SwatIndexer {
             return { success: false, tableCount: 0, fkCount: 0, error: 'Indexer script not found' };
         }
 
-        const schemaPath = path.join(this.context.extensionPath, 'resources', 'schema', 'swatplus-editor-schema.json');
+        const schemaPath = this.resolveSchemaPath();
         const metadataPath = path.join(this.context.extensionPath, 'resources', 'schema', 'txtinout-metadata.json');
         const txtInOutPath = this.txtInOutPath ?? datasetPath;
 
