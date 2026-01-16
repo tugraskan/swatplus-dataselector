@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -75,7 +75,10 @@ def build_relationship_map(file_name: str, schema_table: dict, metadata: dict) -
 
 
 def render_file_section(
-    file_name: str, schema_table: dict, metadata: dict
+    file_name: str,
+    schema_table: dict,
+    metadata: dict,
+    reverse_relationships: Dict[str, List[dict]],
 ) -> List[str]:
     description = get_file_description(file_name, metadata)
     table_name = schema_table.get("table_name", "")
@@ -132,6 +135,17 @@ def render_file_section(
             f"| `{col_name}` | {col_type} | {fk_target} | {fp_target} | {'; '.join(notes)} |"
         )
     lines.append("")
+    reverse_entries = reverse_relationships.get(file_name, [])
+    if reverse_entries:
+        lines.append("**Referenced by**")
+        lines.append("")
+        lines.append("| Source file | Column | Relationship |")
+        lines.append("| --- | --- | --- |")
+        for entry in reverse_entries:
+            lines.append(
+                f"| `{entry['source_file']}` | `{entry['column']}` | {entry['relationship']} |"
+            )
+        lines.append("")
     return lines
 
 
@@ -141,6 +155,52 @@ def main() -> None:
     input_files = set()
     for files in metadata.get("file_categories", {}).values():
         input_files.update(files)
+    reverse_relationships: Dict[str, Dict[Tuple[str, str], set]] = {}
+
+    table_to_file = metadata.get("table_name_to_file_name", {})
+    for file_name, table in schema.get("tables", {}).items():
+        for column in table.get("columns", []):
+            if column.get("is_foreign_key") and column.get("fk_target"):
+                target_table = column["fk_target"].get("table")
+                target_file = table_to_file.get(target_table)
+                if not target_file:
+                    continue
+                key = (file_name, column.get("name", ""))
+                reverse_relationships.setdefault(target_file, {}).setdefault(
+                    key, set()
+                ).add("FK")
+
+    for file_name, rel_block in metadata.get("foreign_key_relationships", {}).items():
+        for rel in rel_block.get("relationships", []):
+            if not rel.get("target_file"):
+                continue
+            if not rel.get("column"):
+                continue
+            relationship_types: List[str] = []
+            if rel.get("is_fk"):
+                relationship_types.append("FK")
+            if rel.get("is_pointer"):
+                relationship_types.append("File Pointer")
+            if not relationship_types:
+                continue
+            key = (file_name, rel["column"])
+            reverse_relationships.setdefault(rel["target_file"], {}).setdefault(
+                key, set()
+            ).update(relationship_types)
+
+    reverse_relationship_list: Dict[str, List[dict]] = {}
+    for target_file, entries in reverse_relationships.items():
+        deduped: List[dict] = []
+        for (source_file, column), relationships in entries.items():
+            deduped.append(
+                {
+                    "source_file": source_file,
+                    "column": column,
+                    "relationship": ", ".join(sorted(relationships)),
+                }
+            )
+        deduped.sort(key=lambda item: (item["source_file"], item["column"]))
+        reverse_relationship_list[target_file] = deduped
 
     lines: List[str] = []
     lines.append("# SWAT+ Input Schema Relationships")
@@ -173,7 +233,14 @@ def main() -> None:
     for file_name in sorted(schema.get("tables", {}).keys()):
         if file_name not in input_files:
             continue
-        lines.extend(render_file_section(file_name, schema["tables"][file_name], metadata))
+        lines.extend(
+            render_file_section(
+                file_name,
+                schema["tables"][file_name],
+                metadata,
+                reverse_relationship_list,
+            )
+        )
 
     OUTPUT_PATH.write_text("\n".join(lines).rstrip() + "\n")
 
