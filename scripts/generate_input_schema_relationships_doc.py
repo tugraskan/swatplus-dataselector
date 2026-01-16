@@ -126,6 +126,8 @@ def render_file_section(
             notes.append("nullable")
         if col and col.get("is_primary_key"):
             notes.append("primary key")
+        if col and col.get("type") == "AutoField":
+            notes.append("schema-only (not in raw file)")
         lines.append(
             f"| `{col_name}` | {col_type} | {fk_target} | {fp_target} | {'; '.join(notes)} |"
         )
