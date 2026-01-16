@@ -347,16 +347,6 @@ export class SwatTableViewerPanel {
             });
         }
 
-        const filterableColumns = columns.filter(col => {
-            const colMeta = columnMetadata.get(col);
-            if (!colMeta || !colMeta.type) {
-                return true;
-            }
-            const type = String(colMeta.type).toLowerCase();
-            return type.includes('char') || type.includes('text') || type.includes('string');
-        });
-        const filterColumns = filterableColumns.length > 0 ? filterableColumns : columns;
-
         // Get FK columns and their targets
         const fkColumns = new Map<string, any>();
         // Skip FK detection for file.cio - it has a special format that doesn't match the database schema
@@ -365,6 +355,19 @@ export class SwatTableViewerPanel {
                 fkColumns.set(fk.column, fk);
             });
         }
+
+        const numericTypeIndicators = ['int', 'integer', 'num', 'numeric', 'decimal', 'float', 'double', 'real', 'dbl'];
+        const filterableColumns = columns.filter(col => {
+            const colMeta = columnMetadata.get(col);
+            if (!colMeta || !colMeta.type) {
+                return true;
+            }
+            const type = String(colMeta.type).toLowerCase();
+            const isText = type.includes('char') || type.includes('text') || type.includes('string');
+            const isNumeric = numericTypeIndicators.some(indicator => type.includes(indicator));
+            return isText || isNumeric || fkColumns.has(col);
+        });
+        const filterColumns = filterableColumns.length > 0 ? filterableColumns : columns;
 
         // Get file pointer columns from metadata
         const metadata = this.indexer.getMetadata();
