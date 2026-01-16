@@ -32,34 +32,15 @@ export function activate(context: vscode.ExtensionContext) {
 	const fkDiagnostics = new SwatFKDiagnosticsProvider(indexer, context);
 	const fkDecorations = new SwatFKDecorationProvider(indexer, context);
 
-	const promptForIndexAction = async (datasetPath: string): Promise<void> => {
+	const tryAutoLoadIndex = async (datasetPath: string): Promise<void> => {
 		if (!indexer.hasIndexCache(datasetPath)) {
 			return;
 		}
 
-		const choice = await vscode.window.showInformationMessage(
-			`Cached index found for ${path.basename(datasetPath)}.`,
-			'Load Cached Index',
-			'Build Index',
-			'Dismiss'
-		);
-
-		if (choice === 'Load Cached Index') {
-			const success = await indexer.loadIndexFromCache(datasetPath);
-			if (success) {
-				fkDiagnostics.updateDiagnostics();
-				fkDecorations.refresh();
-				SwatTableViewerPanel.createOrShow(indexer);
-				SwatSingleTableViewerPanel.createOrShow(indexer, 'file_cio');
-			}
-		} else if (choice === 'Build Index') {
-			const success = await indexer.buildIndex(datasetPath);
-			if (success) {
-				fkDiagnostics.updateDiagnostics();
-				fkDecorations.refresh();
-				SwatTableViewerPanel.createOrShow(indexer);
-				SwatSingleTableViewerPanel.createOrShow(indexer, 'file_cio');
-			}
+		const success = await indexer.loadIndexFromCache(datasetPath);
+		if (success) {
+			fkDiagnostics.updateDiagnostics();
+			fkDecorations.refresh();
 		}
 	};
 
@@ -111,7 +92,7 @@ export function activate(context: vscode.ExtensionContext) {
 			const selectedPath = result[0].fsPath;
 			swatProvider.setSelectedDataset(selectedPath);
 			vscode.window.showInformationMessage(`SWAT+ Dataset folder selected: ${selectedPath}`);
-			await promptForIndexAction(selectedPath);
+			await tryAutoLoadIndex(selectedPath);
 		}
 	});
 
@@ -134,7 +115,7 @@ export function activate(context: vscode.ExtensionContext) {
 		const selectedPath = result[0].fsPath;
 		swatProvider.setSelectedDataset(selectedPath);
 		vscode.window.showInformationMessage(`Selected dataset: ${selectedPath}`);
-		await promptForIndexAction(selectedPath);
+		await tryAutoLoadIndex(selectedPath);
 
 		// Launch debug session with the selected folder
 		await launchDebugSession(selectedPath);
@@ -160,7 +141,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const selectRecentDataset = vscode.commands.registerCommand('swat-dataset-selector.selectRecentDataset', async (datasetPath: string) => {
 		swatProvider.setSelectedDataset(datasetPath);
 		vscode.window.showInformationMessage(`SWAT+ Dataset folder selected: ${datasetPath}`);
-		await promptForIndexAction(datasetPath);
+		await tryAutoLoadIndex(datasetPath);
 	});
 
 	// Command to show dataset info

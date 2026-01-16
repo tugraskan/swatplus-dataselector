@@ -279,7 +279,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         <div class="selected-window-actions">
                             <button class="action-button primary" id="buildIndexBtn">
                                 ${svgs.database}
-                                Build Index
+                                Build / Rebuild Index
                             </button>
                             ${hasCachedIndex ? `
                             <button class="action-button secondary" id="loadIndexBtn">
@@ -1284,7 +1284,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         <div class="build-index-section" id="build-index-section" style="display: ${this.selectedDataset ? 'block' : 'none'};">
             <button class="action-button primary" id="buildIndexBtn" style="width: 100%; margin-top: 12px;">
                 ${svgs.database}
-                Build Index
+                Build / Rebuild Index
             </button>
             ${hasCachedIndex ? `
             <button class="action-button secondary" id="loadIndexBtn" style="width: 100%; margin-top: 8px;">
