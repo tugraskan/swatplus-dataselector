@@ -136,6 +136,9 @@ def render_file_section(
 def main() -> None:
     schema = load_json(SCHEMA_PATH)
     metadata = load_json(METADATA_PATH)
+    input_files = set()
+    for files in metadata.get("file_categories", {}).values():
+        input_files.update(files)
 
     lines: List[str] = []
     lines.append("# SWAT+ Input Schema Relationships")
@@ -166,6 +169,8 @@ def main() -> None:
     lines.append("")
 
     for file_name in sorted(schema.get("tables", {}).keys()):
+        if file_name not in input_files:
+            continue
         lines.extend(render_file_section(file_name, schema["tables"][file_name], metadata))
 
     OUTPUT_PATH.write_text("\n".join(lines).rstrip() + "\n")
