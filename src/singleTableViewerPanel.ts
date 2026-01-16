@@ -2904,6 +2904,13 @@ export class SwatSingleTableViewerPanel {
                 border: 1px solid var(--vscode-panel-border);
                 background-color: var(--vscode-editor-background);
             }
+            .fk-peek-subtable {
+                margin-top: 10px;
+            }
+            .fk-peek-subtable-title {
+                font-weight: 600;
+                margin-bottom: 6px;
+            }
             /* FK Context Menu Styles */
             .fk-context-menu {
                 position: fixed;
@@ -3067,6 +3074,14 @@ export class SwatSingleTableViewerPanel {
                 if (!(event.target instanceof Element)) {
                     return;
                 }
+                const fileTarget = event.target.closest('[data-file-context]');
+                if (fileTarget) {
+                    showFileContextMenu(
+                        event,
+                        fileTarget.getAttribute('data-file')
+                    );
+                    return;
+                }
                 const target = event.target.closest('[data-fk-context]');
                 if (!target) {
                     return;
@@ -3109,6 +3124,20 @@ export class SwatSingleTableViewerPanel {
                     fileName: fileName,
                     highlightValue: highlightValue
                 });
+            }
+
+            function shouldOpenFileWithHighlight(tableName) {
+                if (!tableName) {
+                    return false;
+                }
+                const normalized = tableName.toLowerCase();
+                return normalized === 'file_cio'
+                    || normalized === 'weather_wgn'
+                    || normalized === 'atmo_cli'
+                    || normalized === 'soils_sol'
+                    || normalized === 'plant_ini'
+                    || normalized === 'management_sch'
+                    || normalized.includes('dtl');
             }
 
             function openTableInNewTab(tableName, fkValue) {
@@ -3451,11 +3480,7 @@ export class SwatSingleTableViewerPanel {
                 event.preventDefault();
                 event.stopPropagation();
                 
-                // Remove any existing context menu
-                const existing = document.getElementById('fk-context-menu');
-                if (existing) {
-                    existing.remove();
-                }
+                removeExistingContextMenus();
                 
                 const menu = document.createElement('div');
                 menu.id = 'fk-context-menu';
@@ -3519,6 +3544,72 @@ export class SwatSingleTableViewerPanel {
                 }, 0);
             }
 
+            function showFileContextMenu(event, fileName) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                removeExistingContextMenus();
+
+                const menu = document.createElement('div');
+                menu.id = 'file-context-menu';
+                menu.className = 'fk-context-menu';
+                menu.style.left = event.clientX + 'px';
+                menu.style.top = event.clientY + 'px';
+
+                const menuItems = [
+                    {
+                        label: 'Open Raw File',
+                        action: () => {
+                            if (fileName) {
+                                openFilePointer(fileName);
+                            }
+                            menu.remove();
+                        }
+                    },
+                    {
+                        label: 'Open Table (default)',
+                        action: () => {
+                            const link = event.target.closest('a');
+                            if (link) {
+                                link.click();
+                            }
+                            menu.remove();
+                        }
+                    }
+                ];
+
+                menuItems.forEach(item => {
+                    const menuItem = document.createElement('div');
+                    menuItem.className = 'fk-context-menu-item';
+                    menuItem.textContent = item.label;
+                    menuItem.addEventListener('click', item.action);
+                    menu.appendChild(menuItem);
+                });
+
+                document.body.appendChild(menu);
+
+                const closeMenu = (e) => {
+                    if (!menu.contains(e.target)) {
+                        menu.remove();
+                        document.removeEventListener('click', closeMenu);
+                    }
+                };
+                setTimeout(() => {
+                    document.addEventListener('click', closeMenu);
+                }, 0);
+            }
+
+            function removeExistingContextMenus() {
+                const existingFK = document.getElementById('fk-context-menu');
+                if (existingFK) {
+                    existingFK.remove();
+                }
+                const existingFile = document.getElementById('file-context-menu');
+                if (existingFile) {
+                    existingFile.remove();
+                }
+            }
+
             // Listen for FK row data from extension
             window.addEventListener('message', event => {
                 const message = event.data;
@@ -3546,6 +3637,69 @@ export class SwatSingleTableViewerPanel {
                 }
             });
             
+            function buildChildRowsTable(childRows, fileName) {
+                if (!Array.isArray(childRows) || childRows.length === 0) {
+                    return null;
+                }
+
+                const firstRow = childRows.find(row => row && row.values) || childRows[0];
+                const childColumns = firstRow && firstRow.values ? Object.keys(firstRow.values) : [];
+                if (childColumns.length === 0) {
+                    return null;
+                }
+
+                const wrapper = document.createElement('div');
+                wrapper.className = 'fk-peek-subtable';
+
+                const title = document.createElement('div');
+                title.className = 'fk-peek-subtable-title';
+                title.textContent = 'Subtable rows';
+                wrapper.appendChild(title);
+
+                const table = document.createElement('table');
+                table.className = 'fk-peek-table';
+                const thead = document.createElement('thead');
+                const headerRow = document.createElement('tr');
+                const lineHeader = document.createElement('th');
+                lineHeader.textContent = 'Line';
+                headerRow.appendChild(lineHeader);
+                childColumns.forEach(col => {
+                    const th = document.createElement('th');
+                    th.textContent = col;
+                    headerRow.appendChild(th);
+                });
+                thead.appendChild(headerRow);
+                table.appendChild(thead);
+
+                const tbody = document.createElement('tbody');
+                childRows.forEach(childRow => {
+                    const dataRow = document.createElement('tr');
+                    const lineCell = document.createElement('td');
+                    if (childRow && childRow.lineNumber) {
+                        const link = document.createElement('a');
+                        link.href = '#';
+                        link.textContent = childRow.lineNumber;
+                        link.addEventListener('click', (event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            navigateToFile(childRow.file || fileName, childRow.lineNumber);
+                        });
+                        lineCell.appendChild(link);
+                    }
+                    dataRow.appendChild(lineCell);
+                    childColumns.forEach(col => {
+                        const td = document.createElement('td');
+                        td.textContent = (childRow.values && childRow.values[col]) || '';
+                        dataRow.appendChild(td);
+                    });
+                    tbody.appendChild(dataRow);
+                });
+                table.appendChild(tbody);
+                wrapper.appendChild(table);
+
+                return wrapper;
+            }
+
             function displayFKPeek(tableName, fkValue, fileName, columns, rowData, lineNumber, isDecisionTable, childRows, filePointers, fkColumns, sourceFile, sourceLine, showRelated, relatedRows, relatedColumns, relatedTotal, relatedTableName, relatedColumnName) {
                 const sourceSelector = sourceFile ? \`[data-source-file="\${escapeSelectorValue(sourceFile)}"]\` : '';
                 const sourceLineSelector = sourceLine ? \`[data-source-line="\${escapeSelectorValue(sourceLine)}"]\` : '';
@@ -3587,7 +3741,11 @@ export class SwatSingleTableViewerPanel {
                         fileLink.addEventListener('click', (event) => {
                             event.preventDefault();
                             event.stopPropagation();
-                            openFileByName(fileName);
+                            if (shouldOpenFileWithHighlight(tableName) && fkValue && fkValue !== 'null') {
+                                openFileByNameWithHighlight(fileName, fkValue);
+                            } else {
+                                openFileByName(fileName);
+                            }
                         });
                         const headerSuffix = document.createElement('span');
                         headerSuffix.textContent = \`, Line: \${lineNumber})\`;
@@ -3704,6 +3862,11 @@ export class SwatSingleTableViewerPanel {
                         const decisionDetails = buildDecisionTablePeekDetails(childRows, rowData, fileName);
                         if (decisionDetails) {
                             peekDiv.appendChild(decisionDetails);
+                        }
+                    } else {
+                        const childTable = buildChildRowsTable(childRows, fileName);
+                        if (childTable) {
+                            peekDiv.appendChild(childTable);
                         }
                     }
                     
