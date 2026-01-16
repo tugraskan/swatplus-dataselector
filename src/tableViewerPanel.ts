@@ -368,6 +368,13 @@ export class SwatTableViewerPanel {
             return isText || isNumeric || fkColumns.has(col);
         });
         const filterColumns = filterableColumns.length > 0 ? filterableColumns : columns;
+        const getFilterMode = (colName: string) => {
+            const colMeta = columnMetadata.get(colName);
+            const type = colMeta && colMeta.type ? String(colMeta.type).toLowerCase() : '';
+            const isText = type.includes('char') || type.includes('text') || type.includes('string');
+            const isNumeric = numericTypeIndicators.some(indicator => type.includes(indicator));
+            return fkColumns.has(colName) || isText ? 'text' : 'numeric';
+        };
 
         // Get file pointer columns from metadata
         const metadata = this.indexer.getMetadata();
@@ -386,16 +393,27 @@ export class SwatTableViewerPanel {
         const controlsHtml = `
             <div class="table-controls" data-table="${this._escapeHtml(tableName)}">
                 <label>
-                    Filter
-                    <input type="text" class="table-filter-input" data-table="${this._escapeHtml(tableName)}" placeholder="Type to filter rows" />
-                </label>
-                <label>
                     Column
                     <select class="table-filter-column" data-table="${this._escapeHtml(tableName)}">
-                        <option value="__all">All columns</option>
-                        <option value="__line">Line</option>
-                        ${filterColumns.map((col, index) => `<option value="${this._escapeHtml(col)}"${index === 0 ? ' selected' : ''}>${this._escapeHtml(col)}</option>`).join('')}
+                        <option value="__all" data-filter-mode="text">All columns</option>
+                        <option value="__line" data-filter-mode="numeric">Line</option>
+                        ${filterColumns.map((col, index) => `<option value="${this._escapeHtml(col)}" data-filter-mode="${getFilterMode(col)}"${index === 0 ? ' selected' : ''}>${this._escapeHtml(col)}</option>`).join('')}
                     </select>
+                </label>
+                <label class="table-filter-operator" data-table="${this._escapeHtml(tableName)}">
+                    Operator
+                    <select class="table-filter-operator-select" data-table="${this._escapeHtml(tableName)}">
+                        <option value="=" selected>=</option>
+                        <option value="!=">!=</option>
+                        <option value=">">></option>
+                        <option value=">=">>=</option>
+                        <option value="<"><</option>
+                        <option value="<="><=</option>
+                    </select>
+                </label>
+                <label>
+                    Filter
+                    <input type="text" class="table-filter-input" data-table="${this._escapeHtml(tableName)}" placeholder="Type to filter rows" />
                 </label>
                 <button type="button" class="table-filter-clear" data-action="clear-filter" data-table="${this._escapeHtml(tableName)}">Clear</button>
             </div>
@@ -1092,6 +1110,13 @@ export class SwatTableViewerPanel {
                 if (event.target.matches('.table-filter-column')) {
                     const tableName = event.target.getAttribute('data-table') || '';
                     if (tableName) {
+                        syncFilterMode(tableName);
+                        applyFilter(tableName);
+                    }
+                }
+                if (event.target.matches('.table-filter-operator-select')) {
+                    const tableName = event.target.getAttribute('data-table') || '';
+                    if (tableName) {
                         applyFilter(tableName);
                     }
                 }
@@ -1152,12 +1177,17 @@ export class SwatTableViewerPanel {
             function clearFilter(tableName) {
                 const input = document.querySelector(\`.table-filter-input[data-table="\${escapeSelectorValue(tableName)}"]\`);
                 const select = document.querySelector(\`.table-filter-column[data-table="\${escapeSelectorValue(tableName)}"]\`);
+                const operatorSelect = document.querySelector(\`.table-filter-operator-select[data-table="\${escapeSelectorValue(tableName)}"]\`);
                 if (input) {
                     input.value = '';
                 }
                 if (select) {
                     select.value = '__all';
                 }
+                if (operatorSelect) {
+                    operatorSelect.value = '=';
+                }
+                syncFilterMode(tableName);
                 applyFilter(tableName);
             }
 
@@ -1170,17 +1200,6 @@ export class SwatTableViewerPanel {
                     applyFilter(tableName);
                 }, 250);
                 filterTimers.set(tableName, timer);
-            }
-
-            function parseNumericFilter(text) {
-                const match = text.match(/^\\s*(<=|>=|!=|=|<|>)\\s*(-?\\d+(?:\\.\\d+)?)\\s*$/);
-                if (!match) {
-                    return null;
-                }
-                return {
-                    operator: match[1],
-                    value: Number(match[2])
-                };
             }
 
             function compareNumeric(value, operator, target) {
@@ -1217,6 +1236,27 @@ export class SwatTableViewerPanel {
                 return -1;
             }
 
+            function getSelectedFilterMode(tableName) {
+                const select = document.querySelector(\`.table-filter-column[data-table="\${escapeSelectorValue(tableName)}"]\`);
+                if (!select || !('selectedOptions' in select)) {
+                    return 'text';
+                }
+                const option = select.selectedOptions[0];
+                return option && option.dataset ? option.dataset.filterMode || 'text' : 'text';
+            }
+
+            function syncFilterMode(tableName) {
+                const mode = getSelectedFilterMode(tableName);
+                const operatorWrap = document.querySelector(\`.table-filter-operator[data-table="\${escapeSelectorValue(tableName)}"]\`);
+                if (operatorWrap) {
+                    operatorWrap.style.display = mode === 'numeric' ? 'inline-flex' : 'none';
+                }
+                const input = document.querySelector(\`.table-filter-input[data-table="\${escapeSelectorValue(tableName)}"]\`);
+                if (input && 'placeholder' in input) {
+                    input.placeholder = mode === 'numeric' ? 'Enter numeric value' : 'Type to filter rows';
+                }
+            }
+
             function applyFilter(tableName) {
                 const table = document.querySelector(\`table[data-table-name="\${escapeSelectorValue(tableName)}"]\`);
                 if (!table || !table.tBodies[0]) {
@@ -1225,12 +1265,15 @@ export class SwatTableViewerPanel {
                 removePeekRows(table);
                 const input = document.querySelector(\`.table-filter-input[data-table="\${escapeSelectorValue(tableName)}"]\`);
                 const select = document.querySelector(\`.table-filter-column[data-table="\${escapeSelectorValue(tableName)}"]\`);
+                const operatorSelect = document.querySelector(\`.table-filter-operator-select[data-table="\${escapeSelectorValue(tableName)}"]\`);
                 const rawFilterValue = (input && 'value' in input ? input.value : '').toString().trim();
                 const filterValue = rawFilterValue.toLowerCase();
                 const columnName = select && 'value' in select ? select.value : '__all';
                 const rows = Array.from(table.tBodies[0].rows);
                 const columnIndex = columnName === '__all' ? -1 : getColumnIndex(table, columnName);
-                const numericFilter = columnName !== '__all' ? parseNumericFilter(rawFilterValue) : null;
+                const filterMode = getSelectedFilterMode(tableName);
+                const numericOperator = operatorSelect && 'value' in operatorSelect ? operatorSelect.value : '=';
+                const filterNumericValue = Number(rawFilterValue);
 
                 rows.forEach(row => {
                     if (row.classList.contains('peek-row-container')) {
@@ -1241,15 +1284,19 @@ export class SwatTableViewerPanel {
                         row.hidden = false;
                         return;
                     }
-                    if (numericFilter && columnIndex !== -1) {
-                        const cell = row.cells[columnIndex];
-                        const valueText = cell ? (cell.textContent || '').trim() : '';
-                        const numericValue = Number(valueText);
-                        if (!Number.isFinite(numericValue)) {
+                    if (filterMode === 'numeric' && columnIndex !== -1) {
+                        if (!Number.isFinite(filterNumericValue)) {
                             row.hidden = true;
                             return;
                         }
-                        row.hidden = !compareNumeric(numericValue, numericFilter.operator, numericFilter.value);
+                        const cell = row.cells[columnIndex];
+                        const valueText = cell ? (cell.textContent || '').trim() : '';
+                        const cellNumericValue = Number(valueText);
+                        if (!Number.isFinite(cellNumericValue)) {
+                            row.hidden = true;
+                            return;
+                        }
+                        row.hidden = !compareNumeric(cellNumericValue, numericOperator, filterNumericValue);
                         return;
                     }
                     let text = '';
@@ -1610,6 +1657,12 @@ export class SwatTableViewerPanel {
             // Scroll to focused table on load
             document.addEventListener('DOMContentLoaded', function() {
                 const focusedTable = document.getElementById('focused-table');
+                document.querySelectorAll('.table-controls').forEach(control => {
+                    const tableName = control.getAttribute('data-table') || '';
+                    if (tableName) {
+                        syncFilterMode(tableName);
+                    }
+                });
                 if (focusedTable) {
                     // Use setTimeout to ensure rendering is complete
                     setTimeout(function() {
