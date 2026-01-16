@@ -288,6 +288,13 @@ export class SwatTableViewerPanel {
             const isFocused = this._focusedTable && tableName === this._focusedTable;
             const collapsedClass = isFocused ? '' : 'collapsed';
             const fileName = this.indexer.getFileNameForTable(tableName) || '';
+            const txtInOutPath = this.indexer.getTxtInOutPath();
+            const filePath = fileName && txtInOutPath ? path.join(txtInOutPath, fileName) : '';
+            const fileBadge = schemaTable
+                ? (filePath
+                    ? `<a href="#" class="file-badge file-badge-link" data-action="open-input-file" data-file-path="${this._escapeHtml(filePath)}" title="Open ${this._escapeHtml(fileName)}">${this._escapeHtml(schemaTable.file_name)}</a>`
+                    : `<span class="file-badge">${this._escapeHtml(schemaTable.file_name)}</span>`)
+                : '';
             
             tablesHtml += `
                 <div class="table-section" ${isFocused ? 'id="focused-table"' : ''}>
@@ -295,7 +302,7 @@ export class SwatTableViewerPanel {
                         <span class="toggle-icon">▼</span>
                         ${tableName}
                         <span class="badge">${rowCount} rows</span>
-                        ${schemaTable ? `<span class="file-badge">${schemaTable.file_name}</span>` : ''}
+                        ${fileBadge}
                         ${this._getGitbookLink(fileName)}
                     </h3>
                     <div id="${tableName}" class="table-content ${collapsedClass}">
@@ -718,6 +725,14 @@ export class SwatTableViewerPanel {
                 border-radius: 3px;
                 font-weight: normal;
             }
+            .file-badge-link {
+                text-decoration: none;
+                display: inline-flex;
+                align-items: center;
+            }
+            .file-badge-link:hover {
+                background-color: var(--vscode-button-hoverBackground);
+            }
             .gitbook-link {
                 color: var(--vscode-textLink-foreground);
                 text-decoration: none;
@@ -1056,6 +1071,10 @@ export class SwatTableViewerPanel {
                         event.preventDefault();
                         navigateToFile(target.getAttribute('data-file'), Number(target.getAttribute('data-line')));
                         break;
+                    case 'open-input-file':
+                        event.preventDefault();
+                        openInputFile(target.getAttribute('data-file-path'));
+                        break;
                     case 'open-file':
                         event.preventDefault();
                         openFileByName(target.getAttribute('data-file'));
@@ -1177,6 +1196,16 @@ export class SwatTableViewerPanel {
                 vscode.postMessage({
                     command: 'openFile',
                     fileName: fileName
+                });
+            }
+
+            function openInputFile(filePath) {
+                if (!filePath) {
+                    return;
+                }
+                vscode.postMessage({
+                    command: 'openInputFile',
+                    file: filePath
                 });
             }
 
@@ -1362,6 +1391,7 @@ export class SwatTableViewerPanel {
                 });
 
                 applyFilter(tableName);
+            }
             function openFileByNameWithHighlight(fileName, highlightValue) {
                 vscode.postMessage({
                     command: 'openFileWithHighlight',
