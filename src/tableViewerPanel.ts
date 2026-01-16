@@ -419,10 +419,10 @@ export class SwatTableViewerPanel {
                         <div><strong>Relationships:</strong> ${fkColumns.size} FK column(s), ${pointerColumns.length} file pointer column(s)</div>
                     ` : ''}
                 </div>
-                ${fileMetadata?.format ? `
+                ${(fileMetadata as any)?.format ? `
                     <div class="relationship-meta">
-                        <div><strong>Format:</strong> ${this._escapeHtml(fileMetadata.format.type || 'Standard')}</div>
-                        ${fileMetadata.format.description ? `<div>${this._escapeHtml(fileMetadata.format.description)}</div>` : ''}
+                        <div><strong>Format:</strong> ${this._escapeHtml(((fileMetadata as any).format?.type) || 'Standard')}</div>
+                        ${((fileMetadata as any).format?.description) ? `<div>${this._escapeHtml((fileMetadata as any).format.description)}</div>` : ''}
                     </div>
                 ` : ''}
             </div>
