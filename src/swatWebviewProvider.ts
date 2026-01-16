@@ -665,18 +665,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                             </div>
                         </div>
 
-                        <div class="schema-toolbar">
-                            <label for="schema-select">
-                                Schema Version
-                                <select id="schema-select"${availableSchemas.length === 0 ? ' disabled' : ''}>
-                                    ${schemaOptionsHtml}
-                                </select>
-                            </label>
-                            <div class="schema-version">
-                                <span class="schema-version-label">file.cio:</span>
-                                <span>${escapeHtml(fileCioVersionText)}</span>
-                            </div>
-                        </div>
                        </div>`;
                 }
             } catch (e) {
@@ -1262,36 +1250,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             color: var(--vscode-foreground);
         }
 
-        .schema-toolbar {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            padding: 10px 12px;
-            border-top: 1px solid var(--vscode-panel-border);
-            background-color: var(--vscode-editor-background);
-        }
-
-        .schema-toolbar label {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            font-size: 11px;
-            color: var(--vscode-descriptionForeground);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            font-weight: 600;
-        }
-
-        .schema-toolbar select {
-            background-color: var(--vscode-input-background);
-            color: var(--vscode-input-foreground);
-            border: 1px solid var(--vscode-input-border);
-            border-radius: 4px;
-            padding: 4px 8px;
-            font-size: 12px;
-            text-transform: none;
-        }
-
         .schema-version {
             display: flex;
             align-items: center;
@@ -1300,9 +1258,39 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             color: var(--vscode-descriptionForeground);
         }
 
+        .schema-version-inline {
+            margin-top: 6px;
+            padding-left: 4px;
+        }
+
         .schema-version-label {
             font-weight: 600;
             color: var(--vscode-foreground);
+        }
+
+        .build-index-button {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .build-index-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .build-index-select {
+            background-color: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 12px;
+            min-width: 120px;
+            max-width: 55%;
+            text-transform: none;
         }
 
         .filter-toggle {
@@ -1444,10 +1432,21 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         <!-- Build Index button placed outside selected dataset section -->
         <div class="build-index-section" id="build-index-section" style="display: ${this.selectedDataset ? 'block' : 'none'};">
-            <button class="action-button primary${hasFileCio ? '' : ' disabled'}" id="buildIndexBtn" style="width: 100%; margin-top: 12px;" ${hasFileCio ? '' : 'disabled'}>
-                ${svgs.database}
-                ${buildIndexLabel}
+            <button class="action-button primary build-index-button${hasFileCio ? '' : ' disabled'}" id="buildIndexBtn" style="width: 100%; margin-top: 12px;" ${hasFileCio ? '' : 'disabled'}>
+                <span class="build-index-label">
+                    ${svgs.database}
+                    ${buildIndexLabel}
+                </span>
+                <select id="schema-select" class="build-index-select"${availableSchemas.length === 0 ? ' disabled' : ''}>
+                    ${schemaOptionsHtml}
+                </select>
             </button>
+            ${hasCachedIndex ? `
+                <div class="schema-version schema-version-inline">
+                    <span class="schema-version-label">file.cio:</span>
+                    <span>${escapeHtml(fileCioVersionText)}</span>
+                </div>
+            ` : ''}
         </div>
 
         <div class="help-text">
@@ -1559,6 +1558,12 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     const target = event.target;
                     const value = target && target.value ? target.value : '';
                     swatHost.postMessage({ type: 'schemaSelectionChanged', path: value });
+                });
+                schemaSelect.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                });
+                schemaSelect.addEventListener('mousedown', (event) => {
+                    event.stopPropagation();
                 });
             }
 
