@@ -1294,8 +1294,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         .build-index-select {
             appearance: none;
-            background-color: var(--vscode-input-background);
-            color: var(--vscode-input-foreground);
+            background-color: #ffffff;
+            color: #1e1e1e;
             border: 1px solid var(--vscode-input-border);
             border-radius: 4px;
             padding: 0 22px 0 6px;
@@ -1311,6 +1311,10 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             background-repeat: no-repeat;
             background-position: center;
             color: transparent;
+        }
+
+        .build-index-select:hover {
+            background-color: #f4f4f4;
         }
 
         .build-index-select:focus {
@@ -1467,7 +1471,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     <span class="build-index-icon">${svgs.database}</span>
                     <span class="build-index-label">${buildIndexLabel}</span>
                 </button>
-                <select id="schema-select" class="build-index-select"${availableSchemas.length === 0 ? ' disabled' : ''} aria-label="Schema version">
+                <select id="schema-select" class="build-index-select"${availableSchemas.length === 0 ? ' disabled' : ''} aria-label="Schema version" title="Select schema version">
                     ${schemaOptionsHtml}
                 </select>
             </div>
