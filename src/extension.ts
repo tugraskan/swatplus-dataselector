@@ -32,6 +32,18 @@ export function activate(context: vscode.ExtensionContext) {
 	const fkDiagnostics = new SwatFKDiagnosticsProvider(indexer, context);
 	const fkDecorations = new SwatFKDecorationProvider(indexer, context);
 
+	const tryAutoLoadIndex = async (datasetPath: string): Promise<void> => {
+		if (!indexer.hasIndexCache(datasetPath)) {
+			return;
+		}
+
+		const success = await indexer.loadIndexFromCache(datasetPath);
+		if (success) {
+			fkDiagnostics.updateDiagnostics();
+			fkDecorations.refresh();
+		}
+	};
+
 	// Register FK definition provider for SWAT+ files
 	// Use a more flexible document selector that matches all files in TxtInOut
 	// and all SWAT+ file extensions found in the schema and documentation
@@ -80,6 +92,7 @@ export function activate(context: vscode.ExtensionContext) {
 			const selectedPath = result[0].fsPath;
 			swatProvider.setSelectedDataset(selectedPath);
 			vscode.window.showInformationMessage(`SWAT+ Dataset folder selected: ${selectedPath}`);
+			await tryAutoLoadIndex(selectedPath);
 		}
 	});
 
@@ -102,6 +115,7 @@ export function activate(context: vscode.ExtensionContext) {
 		const selectedPath = result[0].fsPath;
 		swatProvider.setSelectedDataset(selectedPath);
 		vscode.window.showInformationMessage(`Selected dataset: ${selectedPath}`);
+		await tryAutoLoadIndex(selectedPath);
 
 		// Launch debug session with the selected folder
 		await launchDebugSession(selectedPath);
@@ -127,6 +141,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const selectRecentDataset = vscode.commands.registerCommand('swat-dataset-selector.selectRecentDataset', async (datasetPath: string) => {
 		swatProvider.setSelectedDataset(datasetPath);
 		vscode.window.showInformationMessage(`SWAT+ Dataset folder selected: ${datasetPath}`);
+		await tryAutoLoadIndex(datasetPath);
 	});
 
 	// Command to show dataset info
@@ -186,6 +201,9 @@ export function activate(context: vscode.ExtensionContext) {
 		} catch (err) {
 			console.error('Failed to close dataset files', err);
 		}
+
+		SwatTableViewerPanel.closeAll();
+		SwatSingleTableViewerPanel.closeAll();
 	});
 
 	// Command: Build Inputs Index (builds or rebuilds)
@@ -204,6 +222,29 @@ export function activate(context: vscode.ExtensionContext) {
 			// Open the full table viewer first so file_cio is the last (active) tab
 			SwatTableViewerPanel.createOrShow(indexer);
 			// Automatically open file_cio table after successful index build
+			SwatSingleTableViewerPanel.createOrShow(indexer, 'file_cio');
+		}
+	});
+
+	// Command: Load cached index
+	const loadIndex = vscode.commands.registerCommand('swat-dataset-selector.loadIndex', async () => {
+		const selectedPath = swatProvider.getSelectedDataset();
+		if (!selectedPath) {
+			vscode.window.showWarningMessage('No dataset folder selected. Please select a folder first.');
+			return;
+		}
+
+		if (!indexer.hasIndexCache(selectedPath)) {
+			vscode.window.showWarningMessage('No cached index found in the selected dataset.');
+			return;
+		}
+
+		const success = await indexer.loadIndexFromCache(selectedPath);
+		if (success) {
+			// Update diagnostics and decorations
+			fkDiagnostics.updateDiagnostics();
+			fkDecorations.refresh();
+			SwatTableViewerPanel.createOrShow(indexer);
 			SwatSingleTableViewerPanel.createOrShow(indexer, 'file_cio');
 		}
 	});
@@ -309,6 +350,7 @@ export function activate(context: vscode.ExtensionContext) {
 		closeFile,
 		closeAllDatasetFiles,
 		buildIndex,
+		loadIndex,
 		rebuildIndex,
 		showFKReferences,
 		showTableViewer,

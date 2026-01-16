@@ -163,6 +163,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         case 'rebuildIndex':
                             vscode.commands.executeCommand('swat-dataset-selector.rebuildIndex');
                             break;
+                        case 'loadIndex':
+                            vscode.commands.executeCommand('swat-dataset-selector.loadIndex');
+                            break;
                         default:
                             console.warn('swat webview unknown message', data);
                     }
@@ -226,6 +229,10 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             file: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="currentColor" stroke-width="1" fill="none"/></svg>`,
             star: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 .587l3.668 7.431L23 9.75l-5.5 5.367L18.335 24 12 20.202 5.665 24l1.835-8.883L1 9.75l7.332-1.732L12 .587z" fill="currentColor"/></svg>`
         };
+        const cachePath = this.selectedDataset ? path.join(this.selectedDataset, 'index.json') : undefined;
+        const hasCachedIndex = cachePath ? fs.existsSync(cachePath) : false;
+        const hasFileCio = this.selectedDataset ? fs.existsSync(path.join(this.selectedDataset, 'File.cio')) : false;
+        const buildIndexLabel = hasCachedIndex ? 'Rebuild Index' : 'Build Index';
         let combinedHtml = '';
         if (!this.selectedDataset) {
             combinedHtml = `<div class="section">
@@ -271,9 +278,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                             <div class="dataset-header-path">${escapeHtml(this.selectedDataset)}</div>
                         </div>
                         <div class="selected-window-actions">
-                            <button class="action-button primary" id="buildIndexBtn">
+                            <button class="action-button primary disabled" id="buildIndexBtn" disabled>
                                 ${svgs.database}
-                                Build Index
+                                ${buildIndexLabel}
                             </button>
                         </div>
                         <div class="selected-window-body">
@@ -1266,9 +1273,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         <!-- Build Index button placed outside selected dataset section -->
         <div class="build-index-section" id="build-index-section" style="display: ${this.selectedDataset ? 'block' : 'none'};">
-            <button class="action-button primary" id="buildIndexBtn" style="width: 100%; margin-top: 12px;">
+            <button class="action-button primary${hasFileCio ? '' : ' disabled'}" id="buildIndexBtn" style="width: 100%; margin-top: 12px;" ${hasFileCio ? '' : 'disabled'}>
                 ${svgs.database}
-                Build Index
+                ${buildIndexLabel}
             </button>
         </div>
 
