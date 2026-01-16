@@ -201,6 +201,9 @@ export function activate(context: vscode.ExtensionContext) {
 		} catch (err) {
 			console.error('Failed to close dataset files', err);
 		}
+
+		SwatTableViewerPanel.closeAll();
+		SwatSingleTableViewerPanel.closeAll();
 	});
 
 	// Command: Build Inputs Index (builds or rebuilds)

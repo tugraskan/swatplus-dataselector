@@ -124,6 +124,13 @@ export class SwatSingleTableViewerPanel {
         SwatSingleTableViewerPanel.panels.set(resolvedTableName, newPanel);
     }
 
+    public static closeAll(): void {
+        for (const panel of SwatSingleTableViewerPanel.panels.values()) {
+            panel.dispose();
+        }
+        SwatSingleTableViewerPanel.panels.clear();
+    }
+
     private static resolveTableName(indexer: SwatIndexer, tableName: string): string {
         if (indexer.isTableIndexed(tableName)) {
             return tableName;

@@ -101,6 +101,12 @@ export class SwatTableViewerPanel {
         SwatTableViewerPanel.currentPanel = new SwatTableViewerPanel(panel, indexer, focusedTable);
     }
 
+    public static closeAll(): void {
+        if (SwatTableViewerPanel.currentPanel) {
+            SwatTableViewerPanel.currentPanel.dispose();
+        }
+    }
+
     public dispose() {
         SwatTableViewerPanel.currentPanel = undefined;
 

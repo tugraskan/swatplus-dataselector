@@ -232,6 +232,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         };
         const cachePath = this.selectedDataset ? path.join(this.selectedDataset, 'index.json') : undefined;
         const hasCachedIndex = cachePath ? fs.existsSync(cachePath) : false;
+        const hasFileCio = this.selectedDataset ? fs.existsSync(path.join(this.selectedDataset, 'File.cio')) : false;
+        const buildIndexLabel = hasCachedIndex ? 'Rebuild Index' : 'Build Index';
         let combinedHtml = '';
         if (!this.selectedDataset) {
             combinedHtml = `<div class="section">
@@ -277,19 +279,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                             <div class="dataset-header-path">${escapeHtml(this.selectedDataset)}</div>
                         </div>
                         <div class="selected-window-actions">
-                            <button class="action-button primary" id="buildIndexBtn">
+                            <button class="action-button primary disabled" id="buildIndexBtn" disabled>
                                 ${svgs.database}
-                                Build / Rebuild Index
-                            </button>
-                            ${hasCachedIndex ? `
-                            <button class="action-button secondary" id="loadIndexBtn">
-                                ${svgs.file}
-                                Load Cached Index
-                            </button>
-                            ` : ''}
-                            <button class="action-button secondary" id="rebuildIndexBtn">
-                                ${svgs.refresh}
-                                Rebuild Index
+                                ${buildIndexLabel}
                             </button>
                         </div>
                         <div class="selected-window-body">
@@ -1282,19 +1274,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         <!-- Build Index button placed outside selected dataset section -->
         <div class="build-index-section" id="build-index-section" style="display: ${this.selectedDataset ? 'block' : 'none'};">
-            <button class="action-button primary" id="buildIndexBtn" style="width: 100%; margin-top: 12px;">
+            <button class="action-button primary${hasFileCio ? '' : ' disabled'}" id="buildIndexBtn" style="width: 100%; margin-top: 12px;" ${hasFileCio ? '' : 'disabled'}>
                 ${svgs.database}
-                Build / Rebuild Index
-            </button>
-            ${hasCachedIndex ? `
-            <button class="action-button secondary" id="loadIndexBtn" style="width: 100%; margin-top: 8px;">
-                ${svgs.file}
-                Load Cached Index
-            </button>
-            ` : ''}
-            <button class="action-button secondary" id="rebuildIndexBtn" style="width: 100%; margin-top: 8px;">
-                ${svgs.refresh}
-                Rebuild Index
+                ${buildIndexLabel}
             </button>
         </div>
 
