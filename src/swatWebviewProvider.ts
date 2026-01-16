@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
+import { SwatIndexer } from './indexer';
 
 /**
  * Escapes HTML special characters to prevent XSS attacks
@@ -30,6 +31,12 @@ function normalizeToPath(value: any): string | undefined {
     return String(value);
 }
 
+interface SchemaOption {
+    path: string;
+    label: string;
+    version?: string;
+}
+
 export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'swatDatasetView';
 
@@ -39,7 +46,10 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
     private currentDirectoryOutputs: string | undefined; // Current directory being viewed in outputs section
     private recentDatasets: string[] = [];
 
-    constructor(private readonly context: vscode.ExtensionContext) {
+    constructor(
+        private readonly context: vscode.ExtensionContext,
+        private readonly indexer: SwatIndexer
+    ) {
         // Load recent datasets from storage
         const raw = this.context.globalState.get('recentDatasets', []) || [];
         try {
@@ -166,6 +176,13 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         case 'loadIndex':
                             vscode.commands.executeCommand('swat-dataset-selector.loadIndex');
                             break;
+                        case 'schemaSelectionChanged':
+                            if (typeof data.path === 'string') {
+                                this.indexer.setSchemaPath(data.path || null);
+                                vscode.window.showInformationMessage(`SWAT+ schema set to: ${data.path || 'default'}`);
+                                this._updateWebview();
+                            }
+                            break;
                         default:
                             console.warn('swat webview unknown message', data);
                     }
@@ -186,6 +203,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             return;
         }
         this.selectedDataset = p;
+        this.indexer.updateFileCioHeader(p);
         this.currentDirectoryInputs = undefined; // Reset to root when selecting new dataset
         this.currentDirectoryOutputs = undefined; // Reset to root when selecting new dataset
 
@@ -212,6 +230,78 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         }
     }
 
+    private getSchemaDirectories(): string[] {
+        const config = vscode.workspace.getConfiguration('swatplus');
+        const configured = config.get<string[]>('schemaDirectories', []);
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const normalized = configured
+            .map(dir => {
+                if (!dir) {
+                    return '';
+                }
+                if (workspaceFolder) {
+                    return dir.replace(/\$\{workspaceFolder\}/g, workspaceFolder);
+                }
+                return dir;
+            })
+            .filter(Boolean);
+
+        const unique = new Set<string>();
+        for (const dir of normalized) {
+            unique.add(dir);
+        }
+
+        return Array.from(unique);
+    }
+
+    private getAvailableSchemas(): SchemaOption[] {
+        const schemaOptions: SchemaOption[] = [];
+        const seen = new Set<string>();
+        const schemaDirs = [
+            path.join(this.context.extensionPath, 'resources', 'schema'),
+            ...this.getSchemaDirectories()
+        ];
+
+        for (const dir of schemaDirs) {
+            if (!dir || !fs.existsSync(dir)) {
+                continue;
+            }
+            let entries: string[] = [];
+            try {
+                entries = fs.readdirSync(dir);
+            } catch (error) {
+                console.warn(`Failed to read schema directory ${dir}:`, error);
+                continue;
+            }
+
+            for (const entry of entries) {
+                if (!entry.toLowerCase().endsWith('.json')) {
+                    continue;
+                }
+                const filePath = path.join(dir, entry);
+                if (seen.has(filePath)) {
+                    continue;
+                }
+                try {
+                    const content = fs.readFileSync(filePath, 'utf-8');
+                    const data = JSON.parse(content);
+                    if (!data || !data.schema_version || !data.tables) {
+                        continue;
+                    }
+                    const version = String(data.schema_version);
+                    const label = version ? `v${version} (${entry})` : entry;
+                    schemaOptions.push({ path: filePath, label, version });
+                    seen.add(filePath);
+                } catch (error) {
+                    console.warn(`Skipping invalid schema file ${filePath}:`, error);
+                }
+            }
+        }
+
+        schemaOptions.sort((a, b) => a.label.localeCompare(b.label));
+        return schemaOptions;
+    }
+
     private _getHtmlForWebview(webview: vscode.Webview): string {
         // Generate nonce for CSP
         const nonce = crypto.randomBytes(16).toString('base64');
@@ -230,6 +320,30 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             star: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 .587l3.668 7.431L23 9.75l-5.5 5.367L18.335 24 12 20.202 5.665 24l1.835-8.883L1 9.75l7.332-1.732L12 .587z" fill="currentColor"/></svg>`,
             refresh: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4v6h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 20v-6h-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 10a8 8 0 0 0-14.14-4.95L4 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 14a8 8 0 0 0 14.14 4.95L20 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
         };
+        const availableSchemas = this.getAvailableSchemas();
+        const selectedSchemaPath = this.indexer.getSchemaPath();
+        if (selectedSchemaPath) {
+            const listed = new Set(availableSchemas.map(option => option.path));
+            if (!listed.has(selectedSchemaPath) && fs.existsSync(selectedSchemaPath)) {
+                availableSchemas.push({
+                    path: selectedSchemaPath,
+                    label: `Custom (${path.basename(selectedSchemaPath)})`
+                });
+            }
+        }
+        const schemaOptionsHtml = availableSchemas.length > 0
+            ? availableSchemas.map(option => `
+                <option value="${escapeHtml(option.path)}"${option.path === selectedSchemaPath ? ' selected' : ''}>
+                    ${escapeHtml(option.label)}
+                </option>
+            `).join('')
+            : `<option value="" disabled selected>No schemas found</option>`;
+
+        const fileCioInfo = this.indexer.getFileCioHeaderInfo();
+        const fileCioVersionText = fileCioInfo?.editorVersion || fileCioInfo?.swatRevision
+            ? `v${fileCioInfo?.editorVersion || 'unknown'} / rev.${fileCioInfo?.swatRevision || 'unknown'}`
+            : 'Unknown';
+
         const cachePath = this.selectedDataset ? path.join(this.selectedDataset, 'index.json') : undefined;
         const hasCachedIndex = cachePath ? fs.existsSync(cachePath) : false;
         const hasFileCio = this.selectedDataset ? fs.existsSync(path.join(this.selectedDataset, 'File.cio')) : false;
@@ -550,6 +664,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                 </div>
                             </div>
                         </div>
+
                        </div>`;
                 }
             } catch (e) {
@@ -1135,6 +1250,83 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             color: var(--vscode-foreground);
         }
 
+        .schema-version {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--vscode-descriptionForeground);
+        }
+
+        .schema-version-inline {
+            margin-top: 6px;
+            padding-left: 4px;
+        }
+
+        .schema-version-label {
+            font-weight: 600;
+            color: var(--vscode-foreground);
+        }
+
+        .build-index-button {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding-left: 48px;
+            position: relative;
+        }
+
+        .build-index-row {
+            position: relative;
+        }
+
+        .build-index-icon {
+            display: inline-flex;
+            align-items: center;
+            position: absolute;
+            left: 14px;
+        }
+
+        .build-index-label {
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .build-index-select {
+            appearance: none;
+            background-color: #ffffff;
+            color: #1e1e1e;
+            border: 1px solid var(--vscode-input-border);
+            border-radius: 4px;
+            padding: 0 22px 0 6px;
+            font-size: 12px;
+            width: 28px;
+            height: 28px;
+            position: absolute;
+            top: 50%;
+            left: 32px;
+            transform: translateY(-50%);
+            text-transform: none;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23c5c5c5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+            background-repeat: no-repeat;
+            background-position: center;
+            color: transparent;
+        }
+
+        .build-index-select:hover {
+            background-color: #f4f4f4;
+        }
+
+        .build-index-select:focus {
+            outline: 1px solid var(--vscode-focusBorder);
+        }
+
+        .build-index-button.disabled + .build-index-select,
+        .build-index-select:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
         .filter-toggle {
             display: flex;
             align-items: center;
@@ -1274,10 +1466,21 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         <!-- Build Index button placed outside selected dataset section -->
         <div class="build-index-section" id="build-index-section" style="display: ${this.selectedDataset ? 'block' : 'none'};">
-            <button class="action-button primary${hasFileCio ? '' : ' disabled'}" id="buildIndexBtn" style="width: 100%; margin-top: 12px;" ${hasFileCio ? '' : 'disabled'}>
-                ${svgs.database}
-                ${buildIndexLabel}
-            </button>
+            <div class="build-index-row">
+                <button class="action-button primary build-index-button${hasFileCio ? '' : ' disabled'}" id="buildIndexBtn" style="width: 100%; margin-top: 12px;" ${hasFileCio ? '' : 'disabled'}>
+                    <span class="build-index-icon">${svgs.database}</span>
+                    <span class="build-index-label">${buildIndexLabel}</span>
+                </button>
+                <select id="schema-select" class="build-index-select"${availableSchemas.length === 0 ? ' disabled' : ''} aria-label="Schema version" title="Select schema version">
+                    ${schemaOptionsHtml}
+                </select>
+            </div>
+            ${hasCachedIndex ? `
+                <div class="schema-version schema-version-inline">
+                    <span class="schema-version-label">file.cio:</span>
+                    <span>${escapeHtml(fileCioVersionText)}</span>
+                </div>
+            ` : ''}
         </div>
 
         <div class="help-text">
@@ -1382,6 +1585,21 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             if (rebuildIndexBtn) rebuildIndexBtn.addEventListener('click', () => {
                 swatHost.postMessage({ type: 'rebuildIndex' });
             });
+
+            const schemaSelect = $('schema-select');
+            if (schemaSelect) {
+                schemaSelect.addEventListener('change', (event) => {
+                    const target = event.target;
+                    const value = target && target.value ? target.value : '';
+                    swatHost.postMessage({ type: 'schemaSelectionChanged', path: value });
+                });
+                schemaSelect.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                });
+                schemaSelect.addEventListener('mousedown', (event) => {
+                    event.stopPropagation();
+                });
+            }
 
             // Recent dataset click handlers
             document.querySelectorAll('.recent-item').forEach(item => {
