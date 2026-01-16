@@ -1293,9 +1293,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         }
 
         .build-index-select {
+            -webkit-appearance: none;
+            -moz-appearance: none;
             appearance: none;
-            background-color: transparent;
-            color: var(--vscode-foreground);
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
             border: 1px solid var(--vscode-input-border);
             border-radius: 4px;
             padding: 0 22px 0 6px;
@@ -1310,6 +1312,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23c5c5c5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
             background-repeat: no-repeat;
             background-position: center;
+            cursor: pointer;
         }
 
         .build-index-select:hover {
