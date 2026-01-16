@@ -201,10 +201,10 @@ export function activate(context: vscode.ExtensionContext) {
 			// Update diagnostics and decorations
 			fkDiagnostics.updateDiagnostics();
 			fkDecorations.refresh();
+			// Open the full table viewer first so file_cio is the last (active) tab
+			SwatTableViewerPanel.createOrShow(indexer);
 			// Automatically open file_cio table after successful index build
 			SwatSingleTableViewerPanel.createOrShow(indexer, 'file_cio');
-			// Open the full table viewer as the last tab
-			SwatTableViewerPanel.createOrShow(indexer);
 		}
 	});
 
@@ -220,10 +220,10 @@ export function activate(context: vscode.ExtensionContext) {
 			// Update diagnostics and decorations
 			fkDiagnostics.updateDiagnostics();
 			fkDecorations.refresh();
+			// Open the full table viewer first so file_cio is the last (active) tab
+			SwatTableViewerPanel.createOrShow(indexer);
 			// Automatically open file_cio table after successful index rebuild
 			SwatSingleTableViewerPanel.createOrShow(indexer, 'file_cio');
-			// Open the full table viewer as the last tab
-			SwatTableViewerPanel.createOrShow(indexer);
 		}
 	});
 
