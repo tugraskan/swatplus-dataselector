@@ -45,6 +45,10 @@ def get_target_key_column(target_file: str, schema: dict, metadata: dict) -> str
     return "id"
 
 
+def is_schema_only_column(column: dict) -> bool:
+    return column.get("type") == "AutoField"
+
+
 def get_file_description(file_name: str, metadata: dict) -> str:
     file_metadata = metadata.get("file_metadata", {}).get(file_name, {})
     if file_metadata.get("description"):
@@ -103,6 +107,7 @@ def render_file_section(
     reverse_relationships: Dict[str, List[dict]],
 ) -> List[str]:
     description = get_file_description(file_name, metadata)
+    file_metadata = metadata.get("file_metadata", {}).get(file_name, {})
     table_name = schema_table.get("table_name", "")
     rel_map = build_relationship_map(file_name, schema_table, metadata)
     txtinout_key = get_txtinout_key_column(schema_table, metadata)
@@ -111,9 +116,38 @@ def render_file_section(
     lines.append(f"## {file_name}")
     lines.append("")
     lines.append(f"- **Description**: {description}")
+    if file_metadata.get("metadata_structure"):
+        lines.append(f"- **Structure**: {file_metadata['metadata_structure']}")
+    if file_metadata.get("special_structure") is True:
+        lines.append("- **Format**: Non-standard")
+    elif file_metadata.get("special_structure") is False:
+        lines.append("- **Format**: Standard")
+    if schema_table.get("has_metadata_line") is not None:
+        lines.append(
+            f"- **Title line**: {'Yes' if schema_table.get('has_metadata_line') else 'No'}"
+        )
+    if schema_table.get("has_header_line") is not None:
+        lines.append(
+            f"- **Header line**: {'Yes' if schema_table.get('has_header_line') else 'No'}"
+        )
+    if schema_table.get("data_starts_after") is not None:
+        lines.append(f"- **Data starts after line**: {schema_table['data_starts_after']}")
     if table_name:
         lines.append(f"- **Table name**: `{table_name}`")
-    primary_keys = schema_table.get("primary_keys") or []
+    primary_keys = [
+        pk
+        for pk in (schema_table.get("primary_keys") or [])
+        if not (
+            pk in {col.get("name") for col in schema_table.get("columns", [])}
+            and is_schema_only_column(
+                next(
+                    col
+                    for col in schema_table.get("columns", [])
+                    if col.get("name") == pk
+                )
+            )
+        )
+    ]
     if primary_keys:
         lines.append(f"- **Primary keys**: {', '.join(f'`{pk}`' for pk in primary_keys)}")
     if txtinout_key:
@@ -127,9 +161,13 @@ def render_file_section(
     lines.append("| Column | Type | Key / References | FK Target | File Pointer | Notes |")
     lines.append("| --- | --- | --- | --- | --- | --- |")
 
-    schema_column_list = schema_table.get("columns", [])
+    schema_column_list = [
+        col for col in schema_table.get("columns", []) if not is_schema_only_column(col)
+    ]
     schema_columns = {col["name"]: col for col in schema_column_list if col.get("name")}
-    ordered_columns: List[str] = [col["name"] for col in schema_column_list if col.get("name")]
+    ordered_columns: List[str] = [
+        col["name"] for col in schema_column_list if col.get("name")
+    ]
     for col_name in sorted(set(rel_map) - set(schema_columns)):
         ordered_columns.append(col_name)
     for col_name in ordered_columns:
@@ -172,8 +210,6 @@ def render_file_section(
             notes.append("nullable")
         if col and col.get("is_primary_key"):
             notes.append("primary key")
-        if col and col.get("type") == "AutoField":
-            notes.append("schema-only (not in raw file)")
         lines.append(
             f"| `{col_name}` | {col_type} | {key_refs} | {fk_target} | {fp_target} | {'; '.join(notes)} |"
         )
