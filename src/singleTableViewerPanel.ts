@@ -4137,6 +4137,20 @@ export class SwatSingleTableViewerPanel {
                     }, 100);
                 }
 
+                const highlightedSchedule = document.getElementById('highlighted-schedule');
+                if (highlightedSchedule) {
+                    const header = highlightedSchedule.querySelector('.management-schedule-header');
+                    const content = highlightedSchedule.querySelector('.management-schedule-content');
+                    if (header && content && content.classList.contains('collapsed')) {
+                        content.classList.remove('collapsed');
+                        header.classList.remove('collapsed');
+                    }
+
+                    setTimeout(function() {
+                        highlightedSchedule.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                }
+
                 const highlightedDecisionTable = document.getElementById('highlighted-dtl');
                 if (highlightedDecisionTable) {
                     const header = highlightedDecisionTable.querySelector('.dtl-header');
