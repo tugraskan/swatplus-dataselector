@@ -163,6 +163,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         case 'rebuildIndex':
                             vscode.commands.executeCommand('swat-dataset-selector.rebuildIndex');
                             break;
+                        case 'loadIndex':
+                            vscode.commands.executeCommand('swat-dataset-selector.loadIndex');
+                            break;
                         default:
                             console.warn('swat webview unknown message', data);
                     }
@@ -273,7 +276,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         <div class="selected-window-actions">
                             <button class="action-button primary" id="buildIndexBtn">
                                 ${svgs.database}
-                                Build Index
+                                Build / Rebuild Index
                             </button>
                         </div>
                         <div class="selected-window-body">
@@ -1268,7 +1271,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         <div class="build-index-section" id="build-index-section" style="display: ${this.selectedDataset ? 'block' : 'none'};">
             <button class="action-button primary" id="buildIndexBtn" style="width: 100%; margin-top: 12px;">
                 ${svgs.database}
-                Build Index
+                Build / Rebuild Index
             </button>
         </div>
 

@@ -18,6 +18,7 @@
   "activationEvents": [
     "onLanguage:plaintext",
     "onCommand:swat-dataset-selector.buildIndex",
+    "onCommand:swat-dataset-selector.loadIndex",
     "onCommand:swat-dataset-selector.rebuildIndex"
   ],
   "main": "./dist/extension.js",
@@ -66,6 +67,11 @@
         "command": "swat-dataset-selector.rebuildIndex",
         "title": "SWAT+: Rebuild Inputs Index",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "swat-dataset-selector.loadIndex",
+        "title": "SWAT+: Load Cached Index",
+        "icon": "$(database)"
       },
       {
         "command": "swat-dataset-selector.showFKReferences",

@@ -148,6 +148,7 @@ export class SwatIndexer {
     // Structure: classification -> { files: string[], isDefault: boolean[] }
     private fileCioData: Map<string, { files: string[], isDefault: boolean[] }> = new Map();
     private decisionTableIndex: Map<string, IndexedRow> = new Map(); // dtl name (lowercase) -> row
+    private readonly indexCacheFileName = 'index.json';
 
     constructor(private context: vscode.ExtensionContext) {
         this.loadSchema();
@@ -216,6 +217,27 @@ export class SwatIndexer {
         } catch (error) {
             console.log(`Failed to load TxtInOut metadata: ${error}`);
         }
+    }
+
+    private setDatasetPaths(datasetPath: string): boolean {
+        this.datasetPath = datasetPath;
+
+        const txtInOutSubdir = path.join(datasetPath, 'TxtInOut');
+        if (fs.existsSync(txtInOutSubdir)) {
+            this.txtInOutPath = txtInOutSubdir;
+            return true;
+        }
+
+        if (fs.existsSync(path.join(datasetPath, 'file.cio'))) {
+            this.txtInOutPath = datasetPath;
+            return true;
+        }
+
+        vscode.window.showErrorMessage(
+            `No SWAT+ input files found in ${datasetPath}. ` +
+            'Please ensure this is a valid SWAT+ dataset folder (should contain file.cio).'
+        );
+        return false;
     }
 
     private loadGitbookUrls(): void {
@@ -508,20 +530,7 @@ export class SwatIndexer {
             return false;
         }
 
-        this.datasetPath = datasetPath;
-        
-        // Check for TxtInOut subdirectory first, then fall back to direct folder
-        const txtInOutSubdir = path.join(datasetPath, 'TxtInOut');
-        if (fs.existsSync(txtInOutSubdir)) {
-            this.txtInOutPath = txtInOutSubdir;
-        } else if (fs.existsSync(path.join(datasetPath, 'file.cio'))) {
-            // Files are directly in the dataset folder (common SWAT+ layout)
-            this.txtInOutPath = datasetPath;
-        } else {
-            vscode.window.showErrorMessage(
-                `No SWAT+ input files found in ${datasetPath}. ` +
-                'Please ensure this is a valid SWAT+ dataset folder (should contain file.cio).'
-            );
+        if (!this.setDatasetPaths(datasetPath)) {
             return false;
         }
 
@@ -557,6 +566,8 @@ export class SwatIndexer {
 
             progress.report({ message: 'Resolving foreign key references...', increment: 20 });
             this.resolveFKReferences();
+
+            this.saveIndexCache(datasetPath);
 
             vscode.window.showInformationMessage(
                 `Index built successfully: ${pandasResult.tableCount} tables, ${this.fkReferences.length} FK references`
@@ -665,6 +676,146 @@ export class SwatIndexer {
     public async hasIndex(datasetPath: string): Promise<boolean> {
         const indexState = this.context.workspaceState.get(`index:${datasetPath}`);
         return indexState !== undefined;
+    }
+
+    /**
+     * Get the on-disk cache path for a dataset index.
+     */
+    public getIndexCachePath(datasetPath?: string): string | undefined {
+        const resolvedPath = datasetPath ?? this.datasetPath;
+        if (!resolvedPath) {
+            return undefined;
+        }
+        return path.join(resolvedPath, this.indexCacheFileName);
+    }
+
+    /**
+     * Check if a cached index exists on disk for the dataset.
+     */
+    public hasIndexCache(datasetPath: string): boolean {
+        const cachePath = this.getIndexCachePath(datasetPath);
+        return cachePath ? fs.existsSync(cachePath) : false;
+    }
+
+    /**
+     * Load an index from a cached JSON file on disk.
+     */
+    public async loadIndexFromCache(datasetPath: string): Promise<boolean> {
+        if (!this.schema) {
+            vscode.window.showErrorMessage('Schema not loaded');
+            return false;
+        }
+
+        if (!this.setDatasetPaths(datasetPath)) {
+            return false;
+        }
+
+        const cachePath = this.getIndexCachePath(datasetPath);
+        if (!cachePath || !fs.existsSync(cachePath)) {
+            vscode.window.showWarningMessage('No cached index found for this dataset.');
+            return false;
+        }
+
+        try {
+            const payloadContent = fs.readFileSync(cachePath, 'utf-8');
+            const payload = JSON.parse(payloadContent);
+
+            this.index.clear();
+            this.fkReferences = [];
+            this.reverseIndex.clear();
+            this.decisionTableIndex.clear();
+            this.dynamicFileToTableMap.clear();
+            this.fileCioData.clear();
+
+            if (payload.fileTableMap && typeof payload.fileTableMap === 'object') {
+                for (const [fileName, tableName] of Object.entries(payload.fileTableMap)) {
+                    if (typeof fileName === 'string' && typeof tableName === 'string') {
+                        this.dynamicFileToTableMap.set(fileName.toLowerCase(), tableName);
+                    }
+                }
+            }
+
+            for (const [tableName, rows] of Object.entries(payload.tables || {})) {
+                const tableIndex = new Map<string, IndexedRow>();
+                const isDecisionTable = tableName.includes('dtl');
+                (rows as IndexedRow[]).forEach((row) => {
+                    const pkValueLower = row.pkValueLower ?? row.pkValue.toLowerCase();
+                    tableIndex.set(pkValueLower, row);
+                    if (isDecisionTable) {
+                        this.decisionTableIndex.set(pkValueLower, row);
+                    }
+                });
+                this.index.set(tableName, tableIndex);
+            }
+
+            this.fkReferences = (payload.fkReferences || []) as FKReference[];
+
+            if (payload.fileCioData && typeof payload.fileCioData === 'object') {
+                for (const [classification, data] of Object.entries(payload.fileCioData)) {
+                    const payloadData = data as { files?: string[]; isDefault?: boolean[] };
+                    if (payloadData.files && payloadData.isDefault) {
+                        this.fileCioData.set(classification.toLowerCase(), {
+                            files: payloadData.files,
+                            isDefault: payloadData.isDefault
+                        });
+                    }
+                }
+            } else {
+                this.parseFileCio();
+            }
+
+            this.resolveFKReferences();
+
+            await this.context.workspaceState.update(`index:${datasetPath}`, {
+                built: true,
+                timestamp: new Date().toISOString(),
+                tableCount: this.index.size,
+                fkCount: this.fkReferences.length
+            });
+
+            vscode.window.showInformationMessage(
+                `Index loaded from cache: ${this.index.size} tables, ${this.fkReferences.length} FK references`
+            );
+            return true;
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.warn(`[Indexer] Failed to load cached index: ${errorMsg}`);
+            vscode.window.showErrorMessage(`Failed to load cached index: ${errorMsg}`);
+            return false;
+        }
+    }
+
+    /**
+     * Persist the current index to disk for reuse.
+     */
+    public saveIndexCache(datasetPath?: string): void {
+        const cachePath = this.getIndexCachePath(datasetPath);
+        if (!cachePath) {
+            return;
+        }
+
+        try {
+            const cachePayload: any = {
+                version: 1,
+                createdAt: new Date().toISOString(),
+                tables: {},
+                fkReferences: this.fkReferences,
+                fileTableMap: Object.fromEntries(this.dynamicFileToTableMap),
+                fileCioData: Object.fromEntries(this.fileCioData)
+            };
+
+            for (const [tableName, tableIndex] of this.index.entries()) {
+                cachePayload.tables[tableName] = [];
+                for (const row of tableIndex.values()) {
+                    cachePayload.tables[tableName].push(row);
+                }
+            }
+
+            fs.writeFileSync(cachePath, JSON.stringify(cachePayload, null, 2), { encoding: 'utf-8' });
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.warn(`[Indexer] Failed to save cached index: ${errorMsg}`);
+        }
     }
 
     /**
