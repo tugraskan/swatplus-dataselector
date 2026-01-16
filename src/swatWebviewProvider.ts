@@ -1271,26 +1271,56 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         .build-index-button {
             display: flex;
             align-items: center;
-            justify-content: space-between;
             gap: 10px;
+            padding-left: 48px;
+            position: relative;
+        }
+
+        .build-index-row {
+            position: relative;
+        }
+
+        .build-index-icon {
+            display: inline-flex;
+            align-items: center;
+            position: absolute;
+            left: 14px;
         }
 
         .build-index-label {
             display: inline-flex;
             align-items: center;
-            gap: 8px;
         }
 
         .build-index-select {
+            appearance: none;
             background-color: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
             border: 1px solid var(--vscode-input-border);
             border-radius: 4px;
-            padding: 4px 8px;
+            padding: 0 22px 0 6px;
             font-size: 12px;
-            min-width: 120px;
-            max-width: 55%;
+            width: 28px;
+            height: 28px;
+            position: absolute;
+            top: 50%;
+            left: 32px;
+            transform: translateY(-50%);
             text-transform: none;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23c5c5c5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+            background-repeat: no-repeat;
+            background-position: center;
+            color: transparent;
+        }
+
+        .build-index-select:focus {
+            outline: 1px solid var(--vscode-focusBorder);
+        }
+
+        .build-index-button.disabled + .build-index-select,
+        .build-index-select:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
 
         .filter-toggle {
@@ -1432,15 +1462,15 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         <!-- Build Index button placed outside selected dataset section -->
         <div class="build-index-section" id="build-index-section" style="display: ${this.selectedDataset ? 'block' : 'none'};">
-            <button class="action-button primary build-index-button${hasFileCio ? '' : ' disabled'}" id="buildIndexBtn" style="width: 100%; margin-top: 12px;" ${hasFileCio ? '' : 'disabled'}>
-                <span class="build-index-label">
-                    ${svgs.database}
-                    ${buildIndexLabel}
-                </span>
-                <select id="schema-select" class="build-index-select"${availableSchemas.length === 0 ? ' disabled' : ''}>
+            <div class="build-index-row">
+                <button class="action-button primary build-index-button${hasFileCio ? '' : ' disabled'}" id="buildIndexBtn" style="width: 100%; margin-top: 12px;" ${hasFileCio ? '' : 'disabled'}>
+                    <span class="build-index-icon">${svgs.database}</span>
+                    <span class="build-index-label">${buildIndexLabel}</span>
+                </button>
+                <select id="schema-select" class="build-index-select"${availableSchemas.length === 0 ? ' disabled' : ''} aria-label="Schema version">
                     ${schemaOptionsHtml}
                 </select>
-            </button>
+            </div>
             ${hasCachedIndex ? `
                 <div class="schema-version schema-version-inline">
                     <span class="schema-version-label">file.cio:</span>
