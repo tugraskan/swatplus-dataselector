@@ -14,8 +14,9 @@ We implemented a comprehensive solution that:
 
 1. **Parses markdown documentation** to extract FK and file pointer information
 2. **Merges** this information with existing database-derived schema
-3. **Enhances** the pandas indexer to use both sources of information
-4. **Maintains** backward compatibility with existing functionality
+3. **Updates** the main schema JSON with markdown-derived FK relationships
+4. **Enhances** the pandas indexer to use the schema and enhanced metadata
+5. **Maintains** backward compatibility with existing functionality
 
 ## Implementation Details
 
@@ -57,38 +58,36 @@ Extracted 20 files with file pointer columns
 **Output**:
 - `resources/schema/txtinout-metadata-enhanced.json`
 - Updated `resources/schema/txtinout-metadata.json` (with backup)
+- Updated `resources/schema/swatplus-editor-schema.json` (with markdown-derived FKs)
 
 **New Metadata Sections**:
 1. `foreign_key_relationships` - FK info for 13 files
 2. `file_pointer_columns` - File pointers for 20 files
 3. `file_metadata` - Descriptions and metadata for 69 files
 
-### 3. Enhanced Pandas Indexer
+### 3. Schema FK Merge
 
-**Purpose**: Use markdown-derived information to improve FK detection
+**Purpose**: Fold markdown-derived FK relationships into the main schema JSON
 
-**Key Changes**:
-```python
-# Before: Only used schema-based FKs
-for fk in table.get("foreign_keys", []):
-    # Process FK...
-
-# After: Uses both schema and markdown-derived FKs
-for fk in table.get("foreign_keys", []):
-    # Process schema FK...
-
-# NEW: Process markdown-derived FKs
-md_fk_relationships = metadata.get("foreign_key_relationships", {})
-for md_fk in md_fk_relationships:
-    # Process markdown FK...
-    # Mark with "from_markdown": True
-```
+**Key Change**:
+- `resources/schema/swatplus-editor-schema.json` now contains the markdown-derived FK relationships
 
 **Benefits**:
-- Captures FKs documented in markdown but not in database schema
-- Properly identifies and skips file pointer columns
+- Eliminates the extra FK scan at index time
+- Keeps FK relationships in a single schema source
+
+### 4. Enhanced Pandas Indexer
+
+**Purpose**: Use schema-based FK relationships and enhanced metadata for file pointer detection
+
+**Key Changes**:
+- Continue using schema `foreign_keys`
+- Use metadata to skip file pointer columns
+
+**Benefits**:
+- Captures the merged markdown FKs via the schema
+- Avoids duplicate FK scans
 - Provides more accurate FK navigation
-- Reduces false FK diagnostics
 
 ### 4. Test Suite (`test_enhanced_schema.py`)
 
@@ -165,9 +164,10 @@ for md_fk in md_fk_relationships:
 6. `resources/schema/txtinout-metadata-enhanced.json` - Enhanced metadata
 
 ### Modified Files
-1. `scripts/pandas_indexer.py` - Added markdown FK processing
+1. `scripts/pandas_indexer.py` - Uses schema-based FK processing
 2. `resources/schema/txtinout-metadata.json` - Enhanced with markdown info
-3. `README.md` - Added reference to schema enhancement
+3. `resources/schema/swatplus-editor-schema.json` - Includes markdown-derived FKs
+4. `README.md` - Added reference to schema enhancement
 
 ### Backup Files
 1. `resources/schema/txtinout-metadata.json.backup` - Original preserved
@@ -177,7 +177,7 @@ for md_fk in md_fk_relationships:
 ### For End Users
 
 The enhancement works automatically - no user action required. The indexer will:
-- Use both schema and markdown-derived FK information
+- Use schema-based FK information (including markdown-derived FKs merged into the schema)
 - Properly skip file pointer columns when detecting FKs
 - Provide better navigation and diagnostics
 

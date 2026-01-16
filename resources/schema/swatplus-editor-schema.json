@@ -337,6 +337,14 @@
             "table": "initial_aqu",
             "column": "id"
           }
+        },
+        {
+          "column": "aqu_init",
+          "db_column": "aqu_init",
+          "references": {
+            "table": "initial_aqu",
+            "column": "name"
+          }
         }
       ],
       "notes": "Auto-generated via dynamic scan"
@@ -3661,6 +3669,30 @@
           "db_column": "cha_nut_id",
           "references": {
             "table": "nutrients_cha",
+            "column": "name"
+          }
+        },
+        {
+          "column": "ini",
+          "db_column": "ini",
+          "references": {
+            "table": "initial_cha",
+            "column": "name"
+          }
+        },
+        {
+          "column": "hyd",
+          "db_column": "hyd",
+          "references": {
+            "table": "hyd_sed_lte_cha",
+            "column": "name"
+          }
+        },
+        {
+          "column": "nut",
+          "db_column": "nut",
+          "references": {
+            "table": "sed_nut_cha",
             "column": "name"
           }
         }
@@ -11739,7 +11771,16 @@
       "primary_keys": [
         "id"
       ],
-      "foreign_keys": [],
+      "foreign_keys": [
+        {
+          "column": "plnt_name",
+          "db_column": "plnt_name",
+          "references": {
+            "table": "plants_plt",
+            "column": "name"
+          }
+        }
+      ],
       "notes": "Auto-generated via dynamic scan"
     },
     "plant-ini.item": {
@@ -14137,6 +14178,22 @@
             "table": "bmpuser_str",
             "column": "id"
           }
+        },
+        {
+          "column": "cons_prac",
+          "db_column": "cons_prac",
+          "references": {
+            "table": "cons_practice_lum",
+            "column": "name"
+          }
+        },
+        {
+          "column": "urb_ro",
+          "db_column": "urb_ro",
+          "references": {
+            "table": "urban_urb",
+            "column": "name"
+          }
         }
       ],
       "notes": "Auto-generated via dynamic scan"
@@ -16133,6 +16190,14 @@
           "references": {
             "table": "nutrients_res",
             "column": "id"
+          }
+        },
+        {
+          "column": "rel",
+          "db_column": "rel",
+          "references": {
+            "table": "res_rel_dtl",
+            "column": "name"
           }
         }
       ],
@@ -19233,7 +19298,16 @@
       "primary_keys": [
         "id"
       ],
-      "foreign_keys": [],
+      "foreign_keys": [
+        {
+          "column": "typ",
+          "db_column": "typ",
+          "references": {
+            "table": "septic_sep",
+            "column": "name"
+          }
+        }
+      ],
       "notes": "Auto-generated via dynamic scan"
     },
     "bmpuser.str": {

@@ -128,6 +128,59 @@ def merge_file_metadata(existing: Dict, enhanced: Dict) -> Dict:
     return merged
 
 
+def merge_markdown_fks_into_schema(schema: Dict, enhanced: Dict, default_target_column: str) -> Dict:
+    """
+    Merge markdown-derived FK relationships into the main schema JSON.
+    """
+    tables = schema.get('tables', {})
+    file_to_table = {
+        file_name: table.get('table_name')
+        for file_name, table in tables.items()
+        if isinstance(table, dict)
+    }
+
+    for file_name, rel_block in enhanced.get('foreign_key_relationships', {}).items():
+        table = tables.get(file_name)
+        if not isinstance(table, dict):
+            continue
+
+        foreign_keys = table.get('foreign_keys', []) or []
+        existing_keys = {
+            (fk.get('column'), fk.get('references', {}).get('table'))
+            for fk in foreign_keys
+            if isinstance(fk, dict)
+        }
+
+        relationships = rel_block.get('relationships', []) if isinstance(rel_block, dict) else rel_block
+        for rel in relationships or []:
+            column = rel.get('column') if isinstance(rel, dict) else None
+            target_file = rel.get('target_file') if isinstance(rel, dict) else None
+            if not column or not target_file:
+                continue
+
+            target_table = file_to_table.get(target_file)
+            if not target_table:
+                target_table = target_file.replace('.', '_').replace('-', '_')
+
+            key = (column, target_table)
+            if key in existing_keys:
+                continue
+
+            foreign_keys.append({
+                'column': column,
+                'db_column': column,
+                'references': {
+                    'table': target_table,
+                    'column': default_target_column,
+                }
+            })
+            existing_keys.add(key)
+
+        table['foreign_keys'] = foreign_keys
+
+    return schema
+
+
 def main():
     """Main entry point."""
     script_dir = Path(__file__).parent
@@ -142,6 +195,11 @@ def main():
     enhanced_path = resources_dir / 'enhanced-schema-from-markdown.json'
     with open(enhanced_path, 'r', encoding='utf-8') as f:
         enhanced_schema = json.load(f)
+
+    # Load base schema for FK merging
+    schema_path = resources_dir / 'swatplus-editor-schema.json'
+    with open(schema_path, 'r', encoding='utf-8') as f:
+        base_schema = json.load(f)
     
     # Create merged metadata
     merged_metadata = existing_metadata.copy()
@@ -181,6 +239,16 @@ def main():
     print(f"  - File pointer columns for {len(merged_metadata['file_pointer_columns'])} files")
     print(f"  - FK relationships for {len(merged_metadata['foreign_key_relationships'])} files")
     print(f"  - Metadata for {len(merged_metadata['file_metadata'])} files")
+
+    # Merge markdown-derived FKs into the main schema JSON
+    default_target_column = merged_metadata.get('txtinout_fk_behavior', {}).get(
+        'default_target_column',
+        'name'
+    )
+    merged_schema = merge_markdown_fks_into_schema(base_schema, enhanced_schema, default_target_column)
+    with open(schema_path, 'w', encoding='utf-8') as f:
+        json.dump(merged_schema, f, indent=2, ensure_ascii=False)
+    print(f"  - Updated {schema_path} with markdown-derived FK relationships")
     
     # Also update the original txtinout-metadata.json with a backup
     backup_path = resources_dir / 'txtinout-metadata.json.backup'

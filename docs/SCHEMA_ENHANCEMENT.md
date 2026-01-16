@@ -25,16 +25,16 @@ This enhancement extracts and integrates that information to provide:
    - Primary keys (marked with ✓ in PK column)
    - Special structure indicators
 
-2. **`merge_schema_metadata.py`** - Merges extracted information into `txtinout-metadata.json`:
+2. **`merge_schema_metadata.py`** - Merges extracted information into `txtinout-metadata.json` and the main schema JSON:
    - Combines markdown-derived and existing metadata
    - Creates comprehensive file pointer column mappings
    - Adds FK relationships section
+   - Updates `swatplus-editor-schema.json` with markdown-derived FK relationships
    - Preserves backward compatibility
 
 3. **Enhanced Pandas Indexer** - `pandas_indexer.py` updated to:
    - Use file pointer column information to skip non-FK columns
-   - Process markdown-derived FK relationships
-   - Mark FK references by source (schema vs. markdown)
+   - Rely on schema-based FK relationships (including markdown-derived FKs that are now merged into `swatplus-editor-schema.json`)
 
 ### Data Flow
 
@@ -49,7 +49,9 @@ merge_schema_metadata.py
        ↓
 txtinout-metadata.json (enhanced)
        ↓
-pandas_indexer.py (uses enhanced metadata)
+swatplus-editor-schema.json (with markdown-derived FKs merged in)
+       ↓
+pandas_indexer.py (uses schema + enhanced metadata)
        ↓
 Better FK detection and indexing
 ```
@@ -146,6 +148,8 @@ python scripts/parse_schema_md.py
 # 2. Merge with existing metadata
 python scripts/merge_schema_metadata.py
 
+# This updates txtinout-metadata.json and merges markdown-derived FKs into swatplus-editor-schema.json
+
 # 3. Test the enhanced schema
 python scripts/test_enhanced_schema.py
 ```
@@ -203,6 +207,7 @@ Possible future improvements:
 ## Files Modified
 
 - `resources/schema/txtinout-metadata.json` - Enhanced with markdown-derived information
+- `resources/schema/swatplus-editor-schema.json` - Updated to include markdown-derived FK relationships
 - `resources/schema/enhanced-schema-from-markdown.json` - Generated from markdown
 - `scripts/pandas_indexer.py` - Updated to use markdown-derived FK relationships
 - `scripts/parse_schema_md.py` - New parser for markdown documentation
