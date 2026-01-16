@@ -18,15 +18,14 @@ export function activate(context: vscode.ExtensionContext) {
 
 	console.log('SWAT+ Dataset Selector extension is now active!');
 
+	// Initialize indexer and FK features
+	const indexer = new SwatIndexer(context);
 	// Create and register the webview view provider
-	const swatProvider = new SwatDatasetWebviewProvider(context);
+	const swatProvider = new SwatDatasetWebviewProvider(context, indexer);
 	const webviewViewProvider = vscode.window.registerWebviewViewProvider(
 		SwatDatasetWebviewProvider.viewType,
 		swatProvider
 	);
-
-	// Initialize indexer and FK features
-	const indexer = new SwatIndexer(context);
 	const fkDefinitionProvider = new SwatFKDefinitionProvider(indexer);
 	const fkHoverProvider = new SwatFKHoverProvider(indexer);
 	const fkDiagnostics = new SwatFKDiagnosticsProvider(indexer, context);
