@@ -676,7 +676,7 @@ export class SwatSingleTableViewerPanel {
                     const canOpen = this.canOpenFile(value);
                     const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
                     const title = canOpen ? `Click to open ${this._escapeHtml(value)}` : `${this._escapeHtml(value)} - Not indexed (may not exist in dataset)`;
-                    tableHtml += `<td class="file-link-cell"><a href="#" data-action="open-file" data-file="${this._escapeHtml(value)}" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
+                    tableHtml += `<td class="file-link-cell"><a href="#" data-action="open-file" data-file-context="true" data-file="${this._escapeHtml(value)}" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
                 } else if (isFilePointer && value && value !== 'null' && value.includes('.')) {
                     const mappedTableName = this.indexer.getTableNameFromFile(value);
                     const canOpenTable = mappedTableName ? this.indexer.isTableIndexed(mappedTableName) : false;
@@ -2931,6 +2931,14 @@ export class SwatSingleTableViewerPanel {
                 if (!(event.target instanceof Element)) {
                     return;
                 }
+                const fileTarget = event.target.closest('[data-file-context]');
+                if (fileTarget) {
+                    showFileContextMenu(
+                        event,
+                        fileTarget.getAttribute('data-file')
+                    );
+                    return;
+                }
                 const target = event.target.closest('[data-fk-context]');
                 if (!target) {
                     return;
@@ -3153,11 +3161,7 @@ export class SwatSingleTableViewerPanel {
                 event.preventDefault();
                 event.stopPropagation();
                 
-                // Remove any existing context menu
-                const existing = document.getElementById('fk-context-menu');
-                if (existing) {
-                    existing.remove();
-                }
+                removeExistingContextMenus();
                 
                 const menu = document.createElement('div');
                 menu.id = 'fk-context-menu';
@@ -3219,6 +3223,72 @@ export class SwatSingleTableViewerPanel {
                 setTimeout(() => {
                     document.addEventListener('click', closeMenu);
                 }, 0);
+            }
+
+            function showFileContextMenu(event, fileName) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                removeExistingContextMenus();
+
+                const menu = document.createElement('div');
+                menu.id = 'file-context-menu';
+                menu.className = 'fk-context-menu';
+                menu.style.left = event.clientX + 'px';
+                menu.style.top = event.clientY + 'px';
+
+                const menuItems = [
+                    {
+                        label: 'Open Raw File',
+                        action: () => {
+                            if (fileName) {
+                                openFilePointer(fileName);
+                            }
+                            menu.remove();
+                        }
+                    },
+                    {
+                        label: 'Open Table (default)',
+                        action: () => {
+                            const link = event.target.closest('a');
+                            if (link) {
+                                link.click();
+                            }
+                            menu.remove();
+                        }
+                    }
+                ];
+
+                menuItems.forEach(item => {
+                    const menuItem = document.createElement('div');
+                    menuItem.className = 'fk-context-menu-item';
+                    menuItem.textContent = item.label;
+                    menuItem.addEventListener('click', item.action);
+                    menu.appendChild(menuItem);
+                });
+
+                document.body.appendChild(menu);
+
+                const closeMenu = (e) => {
+                    if (!menu.contains(e.target)) {
+                        menu.remove();
+                        document.removeEventListener('click', closeMenu);
+                    }
+                };
+                setTimeout(() => {
+                    document.addEventListener('click', closeMenu);
+                }, 0);
+            }
+
+            function removeExistingContextMenus() {
+                const existingFK = document.getElementById('fk-context-menu');
+                if (existingFK) {
+                    existingFK.remove();
+                }
+                const existingFile = document.getElementById('file-context-menu');
+                if (existingFile) {
+                    existingFile.remove();
+                }
             }
 
             // Listen for FK row data from extension
