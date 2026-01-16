@@ -99,9 +99,12 @@ def render_file_section(
     lines.append("| Column | Type | FK Target | File Pointer | Notes |")
     lines.append("| --- | --- | --- | --- | --- |")
 
-    schema_columns = {col["name"]: col for col in schema_table.get("columns", [])}
-    all_columns = sorted(set(schema_columns) | set(rel_map))
-    for col_name in all_columns:
+    schema_column_list = schema_table.get("columns", [])
+    schema_columns = {col["name"]: col for col in schema_column_list if col.get("name")}
+    ordered_columns: List[str] = [col["name"] for col in schema_column_list if col.get("name")]
+    for col_name in sorted(set(rel_map) - set(schema_columns)):
+        ordered_columns.append(col_name)
+    for col_name in ordered_columns:
         col = schema_columns.get(col_name)
         col_type = col.get("type") if col else "Unknown (metadata)"
         rel = rel_map.get(col_name, {})
