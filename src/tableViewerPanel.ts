@@ -62,6 +62,11 @@ export class SwatTableViewerPanel {
                             this.openTableInNewTab(message.tableName);
                         }
                         break;
+                    case 'openSingleTable':
+                        if (message.tableName) {
+                            this.openSingleTable(message.tableName);
+                        }
+                        break;
                     case 'openInputFile':
                         if (message.file) {
                             this.openFileInEditor(message.file);
@@ -180,6 +185,10 @@ export class SwatTableViewerPanel {
         SwatTableViewerPanel.createOrShow(this.indexer, tableName);
     }
 
+    private openSingleTable(tableName: string) {
+        SwatSingleTableViewerPanel.createOrShow(this.indexer, tableName);
+    }
+
     private async openFileByName(fileName: string, highlightValue?: string) {
         try {
             // Map the file name to a table name using the indexer
@@ -288,14 +297,25 @@ export class SwatTableViewerPanel {
             const isFocused = this._focusedTable && tableName === this._focusedTable;
             const collapsedClass = isFocused ? '' : 'collapsed';
             const fileName = this.indexer.getFileNameForTable(tableName) || '';
+            const txtInOutPath = this.indexer.getTxtInOutPath();
+            const filePath = fileName && txtInOutPath ? path.join(txtInOutPath, fileName) : '';
+            const fileBadge = schemaTable
+                ? (filePath
+                    ? `<a href="#" class="file-badge file-badge-link" data-action="open-input-file" data-file-path="${this._escapeHtml(filePath)}" title="Open ${this._escapeHtml(fileName)}">${this._escapeHtml(schemaTable.file_name)}</a>`
+                    : `<span class="file-badge">${this._escapeHtml(schemaTable.file_name)}</span>`)
+                : '';
             
             tablesHtml += `
                 <div class="table-section" ${isFocused ? 'id="focused-table"' : ''}>
-                    <h3 class="table-header ${collapsedClass}" data-action="toggle-table" data-table-id="${this._escapeHtml(tableName)}">
-                        <span class="toggle-icon">▼</span>
-                        ${tableName}
+                    <h3 class="table-header ${collapsedClass}">
+                        <button type="button" class="toggle-button" data-action="toggle-table" data-table-id="${this._escapeHtml(tableName)}" title="Toggle details">
+                            <span class="toggle-icon">▼</span>
+                        </button>
+                        <a href="#" class="table-name-link" data-action="open-table" data-table-name="${this._escapeHtml(tableName)}" title="Open ${this._escapeHtml(tableName)}">
+                            ${tableName}
+                        </a>
                         <span class="badge">${rowCount} rows</span>
-                        ${schemaTable ? `<span class="file-badge">${schemaTable.file_name}</span>` : ''}
+                        ${fileBadge}
                         ${this._getGitbookLink(fileName)}
                     </h3>
                     <div id="${tableName}" class="table-content ${collapsedClass}">
@@ -340,190 +360,111 @@ export class SwatTableViewerPanel {
             return '<p class="empty-message">No data</p>';
         }
 
-        // Get columns from actual indexed data (not schema)
-        // This ensures we only show columns that exist in the actual input files
-        let columns: string[] = [];
         const columnMetadata = new Map<string, any>();
-        columns = Object.keys(rows[0].values || {});
-        
-        // Build metadata map from schema if available
         if (schemaTable && schemaTable.columns) {
             schemaTable.columns.forEach((col: any) => {
                 columnMetadata.set(col.name, col);
             });
         }
 
-        // Get FK columns and their targets
         const fkColumns = new Map<string, any>();
-        // Skip FK detection for file.cio - it has a special format that doesn't match the database schema
         if (schemaTable && schemaTable.foreign_keys && tableName !== 'file_cio') {
             schemaTable.foreign_keys.forEach((fk: any) => {
                 fkColumns.set(fk.column, fk);
             });
         }
 
-        const numericTypeIndicators = ['int', 'integer', 'num', 'numeric', 'decimal', 'float', 'double', 'real', 'dbl'];
-        const filterableColumns = columns.filter(col => {
-            const colMeta = columnMetadata.get(col);
-            if (!colMeta || !colMeta.type) {
-                return true;
-            }
-            const type = String(colMeta.type).toLowerCase();
-            const isText = type.includes('char') || type.includes('text') || type.includes('string');
-            const isNumeric = numericTypeIndicators.some(indicator => type.includes(indicator));
-            return isText || isNumeric || fkColumns.has(col);
-        });
-        const filterColumns = filterableColumns.length > 0 ? filterableColumns : columns;
-        const getFilterMode = (colName: string) => {
-            const colMeta = columnMetadata.get(colName);
-            const type = colMeta && colMeta.type ? String(colMeta.type).toLowerCase() : '';
-            const isText = type.includes('char') || type.includes('text') || type.includes('string');
-            const isNumeric = numericTypeIndicators.some(indicator => type.includes(indicator));
-            return fkColumns.has(colName) || isText ? 'text' : 'numeric';
-        };
-
-        // Get file pointer columns from metadata
         const metadata = this.indexer.getMetadata();
         const fileName = this.indexer.getFileNameForTable(tableName);
         const filePointers = metadata?.file_pointer_columns?.[fileName || ''] || {};
         const fileMetadata = metadata?.file_metadata?.[fileName || ''];
 
-        // Add file description if available
         let descriptionHtml = '';
         if (fileMetadata && fileMetadata.description) {
             descriptionHtml = `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
         }
 
         const issueCounts = new Map<string, { column: string; targetTable: string; count: number }>();
+        for (const row of rows) {
+            for (const [column, fkInfo] of fkColumns.entries()) {
+                const value = row.values[column];
+                if (!value) {
+                    continue;
+                }
+                const targetRow = this.indexer.resolveFKTarget(fkInfo.references.table, value);
+                if (!targetRow) {
+                    const issueKey = `${column}::${fkInfo.references.table}`;
+                    const existing = issueCounts.get(issueKey);
+                    if (existing) {
+                        existing.count += 1;
+                    } else {
+                        issueCounts.set(issueKey, { column, targetTable: fkInfo.references.table, count: 1 });
+                    }
+                }
+            }
+        }
 
-        const controlsHtml = `
-            <div class="table-controls" data-table="${this._escapeHtml(tableName)}">
-                <label>
-                    Column
-                    <select class="table-filter-column" data-table="${this._escapeHtml(tableName)}">
-                        <option value="__all" data-filter-mode="text">All columns</option>
-                        <option value="__line" data-filter-mode="numeric">Line</option>
-                        ${filterColumns.map((col, index) => `<option value="${this._escapeHtml(col)}" data-filter-mode="${getFilterMode(col)}"${index === 0 ? ' selected' : ''}>${this._escapeHtml(col)}</option>`).join('')}
-                    </select>
-                </label>
-                <label class="table-filter-operator" data-table="${this._escapeHtml(tableName)}">
-                    Operator
-                    <select class="table-filter-operator-select" data-table="${this._escapeHtml(tableName)}">
-                        <option value="=" selected>=</option>
-                        <option value="!=">!=</option>
-                        <option value=">">></option>
-                        <option value=">=">>=</option>
-                        <option value="<"><</option>
-                        <option value="<="><=</option>
-                    </select>
-                </label>
-                <label>
-                    Filter
-                    <input type="text" class="table-filter-input" data-table="${this._escapeHtml(tableName)}" placeholder="Type to filter rows" />
-                </label>
-                <button type="button" class="table-filter-clear" data-action="clear-filter" data-table="${this._escapeHtml(tableName)}">Clear</button>
+        const pointerColumns = typeof filePointers === 'object'
+            ? Object.keys(filePointers).filter(key => key !== 'description')
+            : [];
+        const relationshipSummary = `
+            <div class="relationship-summary">
+                <div class="relationship-meta">
+                    ${schemaTable ? `
+                        <div><strong>Structure:</strong> ${this._escapeHtml(fileMetadata?.metadata_structure || 'Standard')}</div>
+                        <div><strong>Title line:</strong> ${schemaTable.has_metadata_line ? 'Yes' : 'No'}</div>
+                        <div><strong>Header line:</strong> ${schemaTable.has_header_line ? 'Yes' : 'No'}</div>
+                        <div><strong>Data starts after line:</strong> ${schemaTable.data_starts_after}</div>
+                        <div><strong>Table name:</strong> ${this._escapeHtml(schemaTable.table_name)}</div>
+                        <div><strong>Relationships:</strong> ${fkColumns.size} FK column(s), ${pointerColumns.length} file pointer column(s)</div>
+                    ` : ''}
+                </div>
+                ${fileMetadata?.format ? `
+                    <div class="relationship-meta">
+                        <div><strong>Format:</strong> ${this._escapeHtml(fileMetadata.format.type || 'Standard')}</div>
+                        ${fileMetadata.format.description ? `<div>${this._escapeHtml(fileMetadata.format.description)}</div>` : ''}
+                    </div>
+                ` : ''}
             </div>
         `;
 
-        let tableHtml = `
-            ${controlsHtml}
-            <div class="table-wrapper">
-                <table class="data-table" data-table-name="${this._escapeHtml(tableName)}">
+        const columnRows = (schemaTable?.columns || []).map((col: any) => {
+            const fkInfo = fkColumns.get(col.name);
+            const pointerConfig = typeof filePointers === 'object' ? filePointers[col.name] : undefined;
+            const pointerText = pointerConfig
+                ? (typeof pointerConfig === 'string'
+                    ? pointerConfig
+                    : pointerConfig.target_file || pointerConfig.description || '')
+                : '';
+            const notes = col.nullable ? 'nullable' : '';
+            return `
+                <tr>
+                    <td>${this._escapeHtml(col.name)}</td>
+                    <td>${this._escapeHtml(col.type)}</td>
+                    <td>${col.is_primary_key ? 'Key' : (fkInfo ? `FK → ${this._escapeHtml(fkInfo.references.table)}.${this._escapeHtml(fkInfo.references.column)}` : '')}</td>
+                    <td>${fkInfo ? this._escapeHtml(fkInfo.references.table) : ''}</td>
+                    <td>${pointerText ? this._escapeHtml(pointerText) : ''}</td>
+                    <td>${this._escapeHtml(notes)}</td>
+                </tr>
+            `;
+        }).join('');
+
+        const relationshipTable = `
+            <div class="relationship-table">
+                <div class="relationship-title">Input Schema Relationships</div>
+                <table>
                     <thead>
                         <tr>
-                            <th class="line-col sortable" data-col-name="__line" data-sortable="true" title="Line">
-                                Line
-                                <span class="sort-indicator"></span>
-                            </th>
-                            ${columns.map(col => {
-                                const colMeta = columnMetadata.get(col);
-                                const fkInfo = fkColumns.get(col);
-                                const isFilePointer = typeof filePointers === 'object' && col in filePointers;
-                                
-                                // Build tooltip text
-                                let tooltip = col;
-                                if (colMeta) {
-                                    tooltip += `\nType: ${colMeta.type}`;
-                                    if (colMeta.nullable) {
-                                        tooltip += ' (nullable)';
-                                    }
-                                }
-                                if (fkInfo) {
-                                    tooltip += `\nForeign Key → ${fkInfo.references.table}`;
-                                }
-                                if (isFilePointer && typeof filePointers === 'object') {
-                                    const pointerConfig = filePointers[col];
-                                    if (pointerConfig && pointerConfig !== 'description') {
-                                        if (typeof pointerConfig === 'string') {
-                                            tooltip += `\n${pointerConfig}`;
-                                        } else if (typeof pointerConfig === 'object') {
-                                            if (pointerConfig.description) {
-                                                tooltip += `\n${pointerConfig.description}`;
-                                            }
-                                            if (pointerConfig.target_file) {
-                                                tooltip += `\nFile Pointer → ${pointerConfig.target_file}`;
-                                            }
-                                            if (pointerConfig.file_pattern) {
-                                                tooltip += `\nPattern: ${pointerConfig.file_pattern}`;
-                                            }
-                                        }
-                                    }
-                                }
-                                
-                                return `
-                                <th class="${fkInfo ? 'fk-col' : ''} sortable" data-col-name="${this._escapeHtml(col)}" data-sortable="true" title="${this._escapeHtml(tooltip)}">
-                                    ${col}
-                                    ${fkInfo ? '<span class="fk-indicator" title="Foreign Key">🔗</span>' : ''}
-                                    ${isFilePointer ? '<span class="file-pointer-indicator" title="File Pointer">📄</span>' : ''}
-                                    <span class="sort-indicator"></span>
-                                </th>
-                            `;
-                            }).join('')}
+                            <th>Column</th>
+                            <th>Type</th>
+                            <th>Key / References</th>
+                            <th>FK Target</th>
+                            <th>File Pointer</th>
+                            <th>Notes</th>
                         </tr>
                     </thead>
                     <tbody>
-        `;
-
-        for (const row of rows) {
-            tableHtml += `<tr>`;
-            tableHtml += `<td class="line-col" data-col-name="__line"><a href="#" data-action="navigate" data-file="${this._escapeHtml(row.file)}" data-line="${row.lineNumber}">${row.lineNumber}</a></td>`;
-            
-            for (const col of columns) {
-                const value = row.values[col] || '';
-                const fkInfo = fkColumns.get(col);
-                
-                // Special handling for file.cio file_name column - make it a clickable file link
-                if (tableName === 'file_cio' && col === 'file_name' && value && value !== 'null' && value.includes('.')) {
-                    const canOpen = this.canOpenFile(value);
-                    const linkClass = canOpen ? 'file-link' : 'file-link broken-link';
-                    const title = canOpen ? `Click to open ${this._escapeHtml(value)}` : `${this._escapeHtml(value)} - Not indexed (may not exist in dataset)`;
-                    tableHtml += `<td class="file-link-cell" data-col-name="${this._escapeHtml(col)}"><a href="#" data-action="open-file" data-file="${this._escapeHtml(value)}" class="${linkClass}" title="${title}">${this._escapeHtml(value)}</a></td>`;
-                } else if (fkInfo && value) {
-                    // Try to resolve FK
-                    const targetRow = this.indexer.resolveFKTarget(fkInfo.references.table, value);
-                    if (targetRow) {
-                        // Embed the FK row data as JSON in data attributes
-                        const fileName = this.indexer.getFileNameForTable(fkInfo.references.table) || fkInfo.references.table;
-                        tableHtml += `<td class="fk-cell" data-col-name="${this._escapeHtml(col)}" data-fk-context="true" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" data-fk-filename="${this._escapeHtml(fileName)}"><a href="#" data-action="toggle-fk" data-fk-context="true" data-fk-table="${this._escapeHtml(fkInfo.references.table)}" data-fk-value="${this._escapeHtml(value)}" data-fk-file="${this._escapeHtml(targetRow.file)}" data-fk-line="${targetRow.lineNumber}" class="fk-link" title="Click to peek, right-click for options">${this._escapeHtml(value)}</a></td>`;
-                    } else {
-                        const issueKey = `${col}::${fkInfo.references.table}`;
-                        const existing = issueCounts.get(issueKey);
-                        if (existing) {
-                            existing.count += 1;
-                        } else {
-                            issueCounts.set(issueKey, { column: col, targetTable: fkInfo.references.table, count: 1 });
-                        }
-                        tableHtml += `<td class="fk-cell unresolved" data-col-name="${this._escapeHtml(col)}" title="Unresolved FK to ${this._escapeHtml(fkInfo.references.table)}">${this._escapeHtml(value)}</td>`;
-                    }
-                } else {
-                    tableHtml += `<td data-col-name="${this._escapeHtml(col)}">${this._escapeHtml(value)}</td>`;
-                }
-            }
-            
-            tableHtml += `</tr>`;
-        }
-
-        tableHtml += `
+                        ${columnRows || '<tr><td colspan="6">No schema information available.</td></tr>'}
                     </tbody>
                 </table>
             </div>
@@ -555,8 +496,9 @@ export class SwatTableViewerPanel {
 
         return `
             ${descriptionHtml}
+            ${relationshipSummary}
+            ${relationshipTable}
             ${issuesHtml}
-            ${tableHtml}
         `;
     }
 
@@ -682,7 +624,6 @@ export class SwatTableViewerPanel {
                 padding: 12px 15px;
                 margin: 0;
                 background-color: var(--vscode-editorGroupHeader-tabsBackground);
-                cursor: pointer;
                 user-select: none;
                 display: flex;
                 align-items: center;
@@ -693,14 +634,35 @@ export class SwatTableViewerPanel {
             .table-header:hover {
                 background-color: var(--vscode-list-hoverBackground);
             }
+            .toggle-button {
+                border: none;
+                background: transparent;
+                cursor: pointer;
+                padding: 0;
+                display: inline-flex;
+                align-items: center;
+                color: inherit;
+            }
+            .toggle-button:hover .toggle-icon {
+                opacity: 1;
+            }
             .toggle-icon {
                 font-size: 0.8em;
                 transition: transform 0.2s;
                 display: inline-block;
                 width: 16px;
+                opacity: 0.75;
             }
             .table-header.collapsed .toggle-icon {
                 transform: rotate(-90deg);
+            }
+            .table-name-link {
+                color: var(--vscode-textLink-foreground);
+                text-decoration: none;
+            }
+            .table-name-link:hover {
+                text-decoration: underline;
+                color: var(--vscode-textLink-activeForeground);
             }
             .badge {
                 font-size: 0.75em;
@@ -717,6 +679,14 @@ export class SwatTableViewerPanel {
                 color: var(--vscode-button-foreground);
                 border-radius: 3px;
                 font-weight: normal;
+            }
+            .file-badge-link {
+                text-decoration: none;
+                display: inline-flex;
+                align-items: center;
+            }
+            .file-badge-link:hover {
+                background-color: var(--vscode-button-hoverBackground);
             }
             .gitbook-link {
                 color: var(--vscode-textLink-foreground);
@@ -899,6 +869,48 @@ export class SwatTableViewerPanel {
                 font-size: 0.9em;
                 line-height: 1.5;
             }
+            .relationship-summary {
+                padding: 12px 16px;
+                margin-bottom: 12px;
+                background-color: var(--vscode-sideBar-background);
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                display: grid;
+                gap: 10px;
+            }
+            .relationship-meta {
+                display: grid;
+                gap: 4px;
+                font-size: 0.9em;
+                color: var(--vscode-descriptionForeground);
+            }
+            .relationship-table {
+                margin-bottom: 12px;
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                overflow: hidden;
+            }
+            .relationship-table table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 0.9em;
+            }
+            .relationship-table th,
+            .relationship-table td {
+                padding: 6px 10px;
+                border-bottom: 1px solid var(--vscode-panel-border);
+                text-align: left;
+            }
+            .relationship-table th {
+                background-color: var(--vscode-editorGroupHeader-tabsBackground);
+                font-weight: 600;
+            }
+            .relationship-title {
+                padding: 10px 12px;
+                background-color: var(--vscode-sideBar-background);
+                font-weight: 600;
+                border-bottom: 1px solid var(--vscode-panel-border);
+            }
             .empty-message {
                 padding: 20px;
                 text-align: center;
@@ -1052,9 +1064,17 @@ export class SwatTableViewerPanel {
                         event.preventDefault();
                         toggleTable(target.getAttribute('data-table-id'));
                         break;
+                    case 'open-table':
+                        event.preventDefault();
+                        openTable(target.getAttribute('data-table-name'));
+                        break;
                     case 'navigate':
                         event.preventDefault();
                         navigateToFile(target.getAttribute('data-file'), Number(target.getAttribute('data-line')));
+                        break;
+                    case 'open-input-file':
+                        event.preventDefault();
+                        openInputFile(target.getAttribute('data-file-path'));
                         break;
                     case 'open-file':
                         event.preventDefault();
@@ -1173,10 +1193,30 @@ export class SwatTableViewerPanel {
                 });
             }
 
+            function openTable(tableName) {
+                if (!tableName) {
+                    return;
+                }
+                vscode.postMessage({
+                    command: 'openSingleTable',
+                    tableName: tableName
+                });
+            }
+
             function openFileByName(fileName) {
                 vscode.postMessage({
                     command: 'openFile',
                     fileName: fileName
+                });
+            }
+
+            function openInputFile(filePath) {
+                if (!filePath) {
+                    return;
+                }
+                vscode.postMessage({
+                    command: 'openInputFile',
+                    file: filePath
                 });
             }
 
@@ -1362,6 +1402,7 @@ export class SwatTableViewerPanel {
                 });
 
                 applyFilter(tableName);
+            }
             function openFileByNameWithHighlight(fileName, highlightValue) {
                 vscode.postMessage({
                     command: 'openFileWithHighlight',
