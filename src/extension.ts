@@ -11,6 +11,7 @@ import { SwatFKHoverProvider } from './fkHoverProvider';
 import { SwatFKReferencesPanel } from './fkReferencesPanel';
 import { SwatTableViewerPanel } from './tableViewerPanel';
 import { SwatSingleTableViewerPanel } from './singleTableViewerPanel';
+import { normalizePathForComparison, pathStartsWith } from './pathUtils';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -169,7 +170,8 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		try {
 			// Find if the document is open
-			const doc = vscode.workspace.textDocuments.find(d => d.fileName === filePath || d.uri.fsPath === filePath);
+			const normalizedPath = normalizePathForComparison(filePath);
+			const doc = vscode.workspace.textDocuments.find(d => normalizePathForComparison(d.uri.fsPath || d.fileName) === normalizedPath);
 			if (!doc) {
 				return;
 			}
@@ -188,7 +190,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		try {
 			// Find open documents that belong to this dataset
-			const docs = vscode.workspace.textDocuments.filter(d => d.uri && d.uri.fsPath && d.uri.fsPath.startsWith(datasetFolder));
+			const docs = vscode.workspace.textDocuments.filter(d => d.uri && d.uri.fsPath && pathStartsWith(d.uri.fsPath, datasetFolder));
 			for (const doc of docs) {
 				try {
 					await vscode.window.showTextDocument(doc, { preview: false, preserveFocus: true });
