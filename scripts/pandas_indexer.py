@@ -19,7 +19,7 @@ import argparse
 import json
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import pandas as pd
 
@@ -42,6 +42,56 @@ WEATHER_DATA_SCHEMA_FILES = {
 def load_json(path: Path) -> dict:
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def load_file_cio_filenames(dataset_path: Path) -> Set[str]:
+    file_cio_path = dataset_path / "file.cio"
+    if not file_cio_path.exists():
+        return set()
+    try:
+        with file_cio_path.open("r", encoding="utf-8", errors="ignore") as handle:
+            lines = handle.readlines()
+    except OSError:
+        return set()
+
+    filenames: Set[str] = set()
+    for line in lines[1:]:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        parts = stripped.split()
+        if len(parts) < 2:
+            continue
+        for name in parts[1:]:
+            candidate = name.strip()
+            if not candidate:
+                continue
+            candidate_lower = candidate.lower()
+            if candidate_lower in {"null", "0"}:
+                continue
+            filenames.add(candidate_lower)
+    return filenames
+
+
+def find_file_cio_override(
+    dataset_path: Path,
+    schema_file: str,
+    file_cio_files: Set[str]
+) -> Optional[Path]:
+    if not file_cio_files:
+        return None
+
+    schema_path = Path(schema_file)
+    base = schema_path.stem.lower()
+    suffix = schema_path.suffix.lower()
+    candidates = [
+        name for name in file_cio_files
+        if name.endswith(suffix) and name.split(".")[0].startswith(base)
+    ]
+    if len(candidates) != 1:
+        return None
+    candidate_path = dataset_path / candidates[0]
+    return candidate_path if candidate_path.exists() else None
 
 
 def is_hierarchical_file(file_name: str, metadata: dict) -> bool:
@@ -951,6 +1001,7 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
     file_table_map: Dict[str, str] = {}
 
     table_name_to_file = metadata.get("table_name_to_file_name", {}) if isinstance(metadata, dict) else {}
+    file_cio_files = load_file_cio_filenames(dataset_path)
 
     for file_name, table in schema.get("tables", {}).items():
         file_path = dataset_path / file_name
@@ -974,7 +1025,11 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
                     file_path = candidate_path
                     break
             if not file_path.exists():
-                continue
+                file_cio_override = find_file_cio_override(dataset_path, file_name, file_cio_files)
+                if file_cio_override is not None:
+                    file_path = file_cio_override
+                else:
+                    continue
 
         actual_file_name = file_path.name
         processed_files.add(actual_file_name.lower())
