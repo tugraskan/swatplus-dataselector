@@ -62,15 +62,15 @@ This file provides a short description of every top-level item and key subdirect
     - **txtinout-metadata.json.backup**: Backup copy of metadata during enhancement work.
 - **scripts/**: One-off and repeatable helper scripts for schema generation and analysis.
   - **README.md**: Documentation for the scripts in this folder.
-  - **add_con_files_to_schema.py**: Injects/consolidates CON-related file data into schema metadata.
-  - **extract_all_models.py**: Dynamically extracts the schema from swatplus-editor Peewee models.
-  - **generate_input_schema_relationships_doc.py**: Builds the INPUT_SCHEMA_RELATIONSHIPS.md doc from schema data.
-  - **merge_schema_metadata.py**: Merges metadata sources into the main schema JSON files.
-  - **pandas_indexer.py**: Pandas-powered index builder used by the extension for fast indexing.
-  - **parse_gitbook_urls.py**: Scrapes/normalizes GitBook URLs into a JSON mapping.
-  - **parse_schema_md.py**: Parses markdown schema docs into structured metadata.
+  - **add_con_files_to_schema.py**: Adds missing `.con` file definitions into the schema JSON when those files are documented elsewhere but absent from the generated schema.
+  - **extract_all_models.py**: Main schema extraction tool that scans swatplus-editor models to produce the JSON schema consumed by the extension.
+  - **generate_input_schema_relationships_doc.py**: Generates the INPUT_SCHEMA_RELATIONSHIPS.md report from schema + metadata so docs stay in sync.
+  - **merge_schema_metadata.py**: Merges extracted schema data with supplemental metadata for richer FK and pointer handling.
+  - **pandas_indexer.py**: Optional pandas-based index builder that the extension invokes for faster, more accurate indexing.
+  - **parse_gitbook_urls.py**: Collects SWAT+ GitBook documentation URLs into a JSON mapping for quick references in the extension/docs.
+  - **parse_schema_md.py**: Parses markdown tables into structured schema metadata for downstream merges.
   - **requirements.txt**: Python dependencies for the scripts (not needed for extension runtime).
-  - **test_enhanced_schema.py**: Test script for validating enhanced schema outputs.
+  - **test_enhanced_schema.py**: Validates the enhanced schema/metadata outputs to catch regressions.
 - **src/**: TypeScript source code for the VS Code extension.
   - **extension.ts**: Entry point that registers commands and extension activation.
   - **fkDecorations.ts**: Adds editor decorations for foreign key references.
