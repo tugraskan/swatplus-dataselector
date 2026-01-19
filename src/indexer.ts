@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
 import * as os from 'os';
+import { normalizePathForComparison, resolveFileCioPath } from './pathUtils';
 
 // TxtInOut metadata interface
 interface TxtInOutMetadata {
@@ -256,7 +257,7 @@ export class SwatIndexer {
             return true;
         }
 
-        if (fs.existsSync(path.join(datasetPath, 'file.cio'))) {
+        if (resolveFileCioPath(datasetPath)) {
             this.txtInOutPath = datasetPath;
             return true;
         }
@@ -305,8 +306,8 @@ export class SwatIndexer {
             return;
         }
 
-        const fileCioPath = path.join(this.txtInOutPath, 'file.cio');
-        if (!fs.existsSync(fileCioPath)) {
+        const fileCioPath = resolveFileCioPath(this.txtInOutPath);
+        if (!fileCioPath) {
             console.log('file.cio not found');
             return;
         }
@@ -408,8 +409,8 @@ export class SwatIndexer {
     }
 
     public updateFileCioHeader(datasetPath: string): void {
-        const fileCioPath = path.join(datasetPath, 'file.cio');
-        if (!fs.existsSync(fileCioPath)) {
+        const fileCioPath = resolveFileCioPath(datasetPath);
+        if (!fileCioPath) {
             this.fileCioHeader = null;
             return;
         }
@@ -898,8 +899,9 @@ export class SwatIndexer {
      * Get FK references for a specific file and line
      */
     public getFKReferencesForLine(filePath: string, lineNumber: number): FKReference[] {
+        const normalizedPath = normalizePathForComparison(filePath);
         return this.fkReferences.filter(
-            ref => ref.sourceFile === filePath && ref.sourceLine === lineNumber
+            ref => normalizePathForComparison(ref.sourceFile) === normalizedPath && ref.sourceLine === lineNumber
         );
     }
 
@@ -1051,7 +1053,8 @@ export class SwatIndexer {
      * Get all FK references from a specific file
      */
     public getFKReferencesFromFile(filePath: string): FKReference[] {
-        return this.fkReferences.filter(ref => ref.sourceFile === filePath);
+        const normalizedPath = normalizePathForComparison(filePath);
+        return this.fkReferences.filter(ref => normalizePathForComparison(ref.sourceFile) === normalizedPath);
     }
 
     /**

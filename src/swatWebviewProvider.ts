@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
+import { resolveFileCioPath } from './pathUtils';
 
 /**
  * Escapes HTML special characters to prevent XSS attacks
@@ -346,7 +347,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         const cachePath = this.selectedDataset ? path.join(this.selectedDataset, 'index.json') : undefined;
         const hasCachedIndex = cachePath ? fs.existsSync(cachePath) : false;
-        const hasFileCio = this.selectedDataset ? fs.existsSync(path.join(this.selectedDataset, 'File.cio')) : false;
+        const resolvedFileCioPath = this.selectedDataset ? resolveFileCioPath(this.selectedDataset) : null;
+        const hasFileCio = Boolean(resolvedFileCioPath);
         const buildIndexLabel = hasCachedIndex ? 'Rebuild Index' : 'Build Index';
         let combinedHtml = '';
         if (!this.selectedDataset) {
@@ -366,7 +368,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 // Use current directory if navigated into a subdirectory, otherwise use selected dataset
                 const viewingDirectoryInputs = this.currentDirectoryInputs || this.selectedDataset;
                 const viewingDirectoryOutputs = this.currentDirectoryOutputs || this.selectedDataset;
-                const fileCioPath = path.join(this.selectedDataset, 'File.cio');
+                const fileCioPath = resolvedFileCioPath ?? path.join(this.selectedDataset, 'file.cio');
                 
                 // Check if we're in a subdirectory for each section
                 const isInSubdirectoryInputs = this.currentDirectoryInputs && this.currentDirectoryInputs !== this.selectedDataset;

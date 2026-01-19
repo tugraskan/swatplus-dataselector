@@ -2,6 +2,7 @@
  * Path utilities for cross-platform path handling
  */
 
+import * as fs from 'fs';
 import * as path from 'path';
 
 /**
@@ -43,4 +44,22 @@ export function pathStartsWith(fullPath: string, prefixPath: string): boolean {
     
     const charAfterPrefix = normalizedFull.charAt(normalizedPrefix.length);
     return charAfterPrefix === path.sep;
+}
+
+/**
+ * Resolve the case-sensitive path to file.cio within a dataset folder.
+ * Falls back to File.cio for datasets created on case-insensitive filesystems.
+ */
+export function resolveFileCioPath(datasetPath: string): string | null {
+    const lowerCasePath = path.join(datasetPath, 'file.cio');
+    if (fs.existsSync(lowerCasePath)) {
+        return lowerCasePath;
+    }
+
+    const upperCasePath = path.join(datasetPath, 'File.cio');
+    if (fs.existsSync(upperCasePath)) {
+        return upperCasePath;
+    }
+
+    return null;
 }
