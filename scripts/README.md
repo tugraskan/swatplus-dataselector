@@ -135,13 +135,7 @@ When the swatplus-editor repository updates:
 
 ## Comparison: Old vs New
 
-### Old Approach (extract_schema_static.py in PR #13)
-- ✗ Hardcoded list of 7 files and 13 classes
-- ✗ Manual updates required when editor changes
-- ✗ Only extracted MVP subset (13 tables)
-- ✗ Missed 184+ other model classes
-
-### New Approach (extract_all_models.py)
+### Current Approach (extract_all_models.py)
 - ✓ Automatically scans all 55 database files
 - ✓ Discovers all 256 model classes
 - ✓ Maps 213 unique tables
@@ -153,7 +147,6 @@ When the swatplus-editor repository updates:
 ```
 scripts/
 ├── extract_all_models.py      # New: Dynamic extraction (this script)
-└── extract_schema_static.py   # Old: MVP only (13 tables, deprecated)
 
 resources/schema/
 ├── swatplus-editor-schema-full.json   # All 213 tables (full schema)
