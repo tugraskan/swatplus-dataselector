@@ -1,7 +1,17 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { SwatDatasetWebviewProvider } from './swatWebviewProvider';
+import { SwatIndexer } from './indexer';
+import { SwatFKDefinitionProvider } from './fkDefinitionProvider';
+import { SwatFKDiagnosticsProvider } from './fkDiagnostics';
+import { SwatFKDecorationProvider } from './fkDecorations';
+import { SwatFKHoverProvider } from './fkHoverProvider';
+import { SwatFKReferencesPanel } from './fkReferencesPanel';
+import { SwatTableViewerPanel } from './tableViewerPanel';
+import { SwatSingleTableViewerPanel } from './singleTableViewerPanel';
+import { normalizePathForComparison, pathStartsWith } from './pathUtils';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -9,11 +19,63 @@ export function activate(context: vscode.ExtensionContext) {
 
 	console.log('SWAT+ Dataset Selector extension is now active!');
 
+	// Initialize indexer and FK features
+	const indexer = new SwatIndexer(context);
 	// Create and register the webview view provider
-	const swatProvider = new SwatDatasetWebviewProvider(context);
+	const swatProvider = new SwatDatasetWebviewProvider(context, indexer);
 	const webviewViewProvider = vscode.window.registerWebviewViewProvider(
 		SwatDatasetWebviewProvider.viewType,
 		swatProvider
+	);
+	const fkDefinitionProvider = new SwatFKDefinitionProvider(indexer);
+	const fkHoverProvider = new SwatFKHoverProvider(indexer);
+	const fkDiagnostics = new SwatFKDiagnosticsProvider(indexer, context);
+	const fkDecorations = new SwatFKDecorationProvider(indexer, context);
+
+	const tryAutoLoadIndex = async (datasetPath: string): Promise<void> => {
+		if (!indexer.hasIndexCache(datasetPath)) {
+			return;
+		}
+
+		const success = await indexer.loadIndexFromCache(datasetPath);
+		if (success) {
+			fkDiagnostics.updateDiagnostics();
+			fkDecorations.refresh();
+		}
+	};
+
+	// Register FK definition provider for SWAT+ files
+	// Use a more flexible document selector that matches all files in TxtInOut
+	// and all SWAT+ file extensions found in the schema and documentation
+	const swatFileExtensions = [
+		// Common input files
+		'hru', 'hyd', 'sol', 'lum', 'ini', 'sno', 'plt', 'dtl', 'fld', 'sch',
+		'aqu', 'cha', 'res', 'bsn', 'cli', 'prt', 'ops', 'pst', 'sft', 'cal',
+		'cio', 'cnt', 'sim', 'wet', 'str', 'sep', 'frt', 'til', 'urb',
+		// Data and configuration files
+		'aa', 'act', 'allo', 'alt', 'auto', 'base', 'code', 'col', 'conc', 'cond',
+		'cs', 'dat', 'days', 'def', 'del', 'dr', 'ele', 'elem', 'exc', 'file',
+		'grid', 'hmd', 'hrus', 'int', 'item', 'lin', 'locs', 'lsus', 'mon', 'mtl',
+		'ob', 'op', 'out', 'pcp', 'pth', 'rec', 'road', 'rtu', 'slr', 'slt',
+		'src', 'sta', 'tmp', 'txt', 'val', 'wnd', 'wro', 'yr', 'zone',
+		// Pesticide and path files
+		'pes', 'con'
+	];
+	const documentSelectors = [
+		{ pattern: '**/TxtInOut/**' },
+		{ pattern: '**/TxtInOut/*' },
+		// Register for all SWAT+ file extensions
+		...swatFileExtensions.map(ext => ({ scheme: 'file' as const, pattern: `**/*.${ext}` }))
+	];
+	const definitionProviderDisposable = vscode.languages.registerDefinitionProvider(
+		documentSelectors,
+		fkDefinitionProvider
+	);
+
+	// Register FK hover provider
+	const hoverProviderDisposable = vscode.languages.registerHoverProvider(
+		documentSelectors,
+		fkHoverProvider
 	);
 
 	// Command to select dataset folder
@@ -30,6 +92,7 @@ export function activate(context: vscode.ExtensionContext) {
 			const selectedPath = result[0].fsPath;
 			swatProvider.setSelectedDataset(selectedPath);
 			vscode.window.showInformationMessage(`SWAT+ Dataset folder selected: ${selectedPath}`);
+			await tryAutoLoadIndex(selectedPath);
 		}
 	});
 
@@ -52,6 +115,7 @@ export function activate(context: vscode.ExtensionContext) {
 		const selectedPath = result[0].fsPath;
 		swatProvider.setSelectedDataset(selectedPath);
 		vscode.window.showInformationMessage(`Selected dataset: ${selectedPath}`);
+		await tryAutoLoadIndex(selectedPath);
 
 		// Launch debug session with the selected folder
 		await launchDebugSession(selectedPath);
@@ -77,6 +141,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const selectRecentDataset = vscode.commands.registerCommand('swat-dataset-selector.selectRecentDataset', async (datasetPath: string) => {
 		swatProvider.setSelectedDataset(datasetPath);
 		vscode.window.showInformationMessage(`SWAT+ Dataset folder selected: ${datasetPath}`);
+		await tryAutoLoadIndex(datasetPath);
 	});
 
 	// Command to show dataset info
@@ -105,7 +170,8 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		try {
 			// Find if the document is open
-			const doc = vscode.workspace.textDocuments.find(d => d.fileName === filePath || d.uri.fsPath === filePath);
+			const normalizedPath = normalizePathForComparison(filePath);
+			const doc = vscode.workspace.textDocuments.find(d => normalizePathForComparison(d.uri.fsPath || d.fileName) === normalizedPath);
 			if (!doc) {
 				return;
 			}
@@ -124,7 +190,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		try {
 			// Find open documents that belong to this dataset
-			const docs = vscode.workspace.textDocuments.filter(d => d.uri && d.uri.fsPath && d.uri.fsPath.startsWith(datasetFolder));
+			const docs = vscode.workspace.textDocuments.filter(d => d.uri && d.uri.fsPath && pathStartsWith(d.uri.fsPath, datasetFolder));
 			for (const doc of docs) {
 				try {
 					await vscode.window.showTextDocument(doc, { preview: false, preserveFocus: true });
@@ -135,6 +201,122 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 		} catch (err) {
 			console.error('Failed to close dataset files', err);
+		}
+
+		SwatTableViewerPanel.closeAll();
+		SwatSingleTableViewerPanel.closeAll();
+	});
+
+	// Command: Build Inputs Index (builds or rebuilds)
+	const buildIndex = vscode.commands.registerCommand('swat-dataset-selector.buildIndex', async () => {
+		const selectedPath = swatProvider.getSelectedDataset();
+		if (!selectedPath) {
+			vscode.window.showWarningMessage('Please select a SWAT+ dataset folder first.');
+			return;
+		}
+
+		const success = await indexer.buildIndex(selectedPath);
+		if (success) {
+			// Update diagnostics and decorations
+			fkDiagnostics.updateDiagnostics();
+			fkDecorations.refresh();
+			// Open the full table viewer first so file_cio is the last (active) tab
+			SwatTableViewerPanel.createOrShow(indexer);
+			// Automatically open file_cio table after successful index build
+			SwatSingleTableViewerPanel.createOrShow(indexer, 'file_cio');
+		}
+	});
+
+	// Command: Load cached index
+	const loadIndex = vscode.commands.registerCommand('swat-dataset-selector.loadIndex', async () => {
+		const selectedPath = swatProvider.getSelectedDataset();
+		if (!selectedPath) {
+			vscode.window.showWarningMessage('No dataset folder selected. Please select a folder first.');
+			return;
+		}
+
+		if (!indexer.hasIndexCache(selectedPath)) {
+			vscode.window.showWarningMessage('No cached index found in the selected dataset.');
+			return;
+		}
+
+		const success = await indexer.loadIndexFromCache(selectedPath);
+		if (success) {
+			// Update diagnostics and decorations
+			fkDiagnostics.updateDiagnostics();
+			fkDecorations.refresh();
+			SwatTableViewerPanel.createOrShow(indexer);
+			SwatSingleTableViewerPanel.createOrShow(indexer, 'file_cio');
+		}
+	});
+
+	// Command: Rebuild Inputs Index
+	const rebuildIndex = vscode.commands.registerCommand('swat-dataset-selector.rebuildIndex', async () => {
+		if (!indexer.isIndexBuilt()) {
+			vscode.window.showWarningMessage('No index exists yet. Use "Build Index" first.');
+			return;
+		}
+
+		const success = await indexer.rebuildIndex();
+		if (success) {
+			// Update diagnostics and decorations
+			fkDiagnostics.updateDiagnostics();
+			fkDecorations.refresh();
+			// Open the full table viewer first so file_cio is the last (active) tab
+			SwatTableViewerPanel.createOrShow(indexer);
+			// Automatically open file_cio table after successful index rebuild
+			SwatSingleTableViewerPanel.createOrShow(indexer, 'file_cio');
+		}
+	});
+
+	// Command: Show FK References Panel
+	const showFKReferences = vscode.commands.registerCommand('swat-dataset-selector.showFKReferences', () => {
+		SwatFKReferencesPanel.createOrShow(indexer);
+	});
+
+	// Command: Show table viewer
+	const showTableViewer = vscode.commands.registerCommand('swat-dataset-selector.showTableViewer', (filePath?: string) => {
+		// If a file path is provided, open the single table viewer for that specific file
+		if (filePath && typeof filePath === 'string') {
+			const resolvedFileName = filePath.includes('/') || filePath.includes('\\')
+				? path.basename(filePath)
+				: filePath;
+			let tableName = indexer.getTableNameFromFile(resolvedFileName);
+			if (!tableName) {
+				const tableNameFromFile = resolvedFileName.replace(/\./g, '_');
+				if (indexer.isTableIndexed(tableNameFromFile)) {
+					tableName = tableNameFromFile;
+				}
+			}
+			if (tableName) {
+				SwatSingleTableViewerPanel.createOrShow(indexer, tableName);
+			} else {
+				vscode.window.showWarningMessage(`Could not find table for file: ${resolvedFileName}`);
+			}
+		} else {
+			// Otherwise, show the all-tables viewer
+			SwatTableViewerPanel.createOrShow(indexer);
+		}
+	});
+
+	// Command: Export index to JSON file for inspection
+	const exportIndexCmd = vscode.commands.registerCommand('swat-dataset-selector.exportIndex', async () => {
+		if (!indexer.isIndexBuilt()) {
+			vscode.window.showWarningMessage('Index has not been built yet. Run Build Inputs Index first.');
+			return;
+		}
+
+		const outFile = await indexer.exportIndexToFile();
+		if (outFile) {
+			try {
+				const doc = await vscode.workspace.openTextDocument(outFile);
+				await vscode.window.showTextDocument(doc, { preview: false });
+				vscode.window.showInformationMessage(`Index exported: ${outFile}`);
+			} catch (err) {
+				vscode.window.showInformationMessage(`Index exported to ${outFile} (could not open automatically)`);
+			}
+		} else {
+			vscode.window.showErrorMessage('Failed to export index. See Output for details.');
 		}
 	});
 
@@ -157,16 +339,24 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(
 		webviewViewProvider,
+		definitionProviderDisposable,
+		hoverProviderDisposable,
 		selectDataset,
 		selectAndDebug,
 		launchWithSelected,
 		datasetFolderProvider,
 		selectRecentDataset,
-		showDatasetInfo
-		,openFile
-		,closeFile
-		,closeAllDatasetFiles
-		,seedTestData
+		showDatasetInfo,
+		openFile,
+		closeFile,
+		closeAllDatasetFiles,
+		buildIndex,
+		loadIndex,
+		rebuildIndex,
+		showFKReferences,
+		showTableViewer,
+		exportIndexCmd,
+		seedTestData
 	);
 }
 

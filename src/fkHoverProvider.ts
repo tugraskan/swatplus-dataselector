@@ -1,0 +1,242 @@
+/**
+ * SWAT+ Foreign Key Hover Provider
+ * 
+ * Provides hover information for foreign key values in SWAT+ input files,
+ * including file purposes and target information.
+ */
+
+import * as vscode from 'vscode';
+import * as path from 'path';
+import * as fs from 'fs';
+import { SwatIndexer } from './indexer';
+import { pathStartsWith } from './pathUtils';
+
+export class SwatFKHoverProvider implements vscode.HoverProvider {
+    constructor(private indexer: SwatIndexer) {}
+
+    public async provideHover(
+        document: vscode.TextDocument,
+        position: vscode.Position,
+        token: vscode.CancellationToken
+    ): Promise<vscode.Hover | undefined> {
+        // Only provide hover if index is built
+        if (!this.indexer.isIndexBuilt()) {
+            return undefined;
+        }
+
+        const schema = this.indexer.getSchema();
+        if (!schema) {
+            return undefined;
+        }
+
+        // Check if document is in the indexed folder
+        const txtInOutPath = this.indexer.getTxtInOutPath();
+        if (!txtInOutPath || !pathStartsWith(document.fileName, txtInOutPath)) {
+            return undefined;
+        }
+
+        // Get the file's schema table
+        const fileName = path.basename(document.fileName);
+        
+        // Special handling for file.cio - it has a unique format
+        // Actual format:
+        // Line 0: Metadata line
+        // Line 1+: classification_name  file1  file2  file3  ...
+        // Column 0 is classification name, columns 1+ are filenames
+        if (fileName === 'file.cio') {
+            const line = document.lineAt(position.line);
+            const lineText = line.text.trim();
+            
+            // Skip metadata line (line 0) and empty lines
+            if (position.line < 1 || !lineText || lineText.startsWith('#')) {
+                return undefined;
+            }
+            
+            // Split the line into columns
+            const parts = lineText.split(/\s+/);
+            
+            // Need at least classification name + one file
+            if (parts.length < 2) {
+                return undefined;
+            }
+            
+            // Find which column the cursor is on
+            let columnIndex = -1;
+            let currentPos = 0;
+            
+            for (let i = 0; i < parts.length; i++) {
+                const valueStart = line.text.indexOf(parts[i], currentPos);
+                if (valueStart === -1) {
+                    continue;
+                }
+                
+                const valueEnd = valueStart + parts[i].length;
+                if (position.character >= valueStart && position.character <= valueEnd) {
+                    columnIndex = i;
+                    break;
+                }
+                
+                currentPos = valueEnd;
+            }
+            
+            // Column 0 is classification name, skip it
+            // Only provide hover if cursor is on a filename column (1+)
+            if (columnIndex > 0 && columnIndex < parts.length) {
+                const targetFileName = parts[columnIndex];
+                
+                // Check if it looks like a filename (has extension) and not null
+                if (!targetFileName.includes('.') || targetFileName === 'null') {
+                    return undefined;
+                }
+                
+                const markdown = new vscode.MarkdownString();
+                markdown.isTrusted = true;
+                
+                markdown.appendMarkdown(`**File Reference**\n\n`);
+                
+                // Make the filename clickable if the file exists
+                const txtInOutPath = this.indexer.getTxtInOutPath();
+                if (txtInOutPath) {
+                    const targetFilePath = path.join(txtInOutPath, targetFileName);
+                    if (fs.existsSync(targetFilePath)) {
+                        const commandUri = vscode.Uri.parse(`command:vscode.open?${encodeURIComponent(JSON.stringify([vscode.Uri.file(targetFilePath)]))}`);
+                        markdown.appendMarkdown(`Points to: [${targetFileName}](${commandUri})\n\n`);
+                    } else {
+                        markdown.appendMarkdown(`Points to: \`${targetFileName}\` _(file not found)_\n\n`);
+                    }
+                } else {
+                    markdown.appendMarkdown(`Points to: \`${targetFileName}\`\n\n`);
+                }
+                
+                const targetPurpose = this.indexer.getFilePurpose(targetFileName);
+                if (targetPurpose) {
+                    markdown.appendMarkdown(`*${targetPurpose}*\n\n`);
+                }
+                
+                markdown.appendMarkdown(`_Click filename above to navigate_`);
+                return new vscode.Hover(markdown);
+            }
+        }
+        
+        const table = schema.tables[fileName];
+        if (!table) {
+            return undefined;
+        }
+
+        // Parse the line to identify column
+        const line = document.lineAt(position.line);
+        const lineText = line.text.trim();
+        const values = lineText.split(/\s+/);
+
+        // Get header line to map column positions
+        const headerLineIndex = table.has_metadata_line ? 1 : 0;
+        const headerLine = document.lineAt(headerLineIndex).text.trim();
+        const headers = this.normalizeHeaders(headerLine.split(/\s+/), table);
+
+        // Find which column the cursor is on
+        let columnIndex = -1;
+        let currentPos = 0;
+        
+        const trimmedLine = line.text.trimStart();
+        const leadingSpaces = line.text.length - trimmedLine.length;
+        
+        if (position.character < leadingSpaces) {
+            return undefined;
+        }
+        
+        for (let i = 0; i < values.length; i++) {
+            const valueStart = line.text.indexOf(values[i], currentPos);
+            if (valueStart === -1) {
+                continue;
+            }
+            
+            const valueEnd = valueStart + values[i].length;
+            if (position.character >= valueStart && position.character <= valueEnd) {
+                columnIndex = i;
+                break;
+            }
+            
+            currentPos = valueEnd;
+        }
+
+        if (columnIndex < 0 || columnIndex >= headers.length) {
+            return undefined;
+        }
+
+        const columnName = headers[columnIndex];
+        const cellValue = values[columnIndex];
+
+        // Build hover content
+        const markdown = new vscode.MarkdownString();
+        markdown.isTrusted = true;
+
+        // Check if this column is a FK
+        const fkColumn = table.columns.find(
+            col => col.name === columnName && col.is_foreign_key
+        );
+
+        if (fkColumn && fkColumn.fk_target) {
+            // This is a FK column
+            const targetFileName = this.indexer.getFileNameForTable(fkColumn.fk_target.table);
+            const targetPurpose = targetFileName ? this.indexer.getFilePurpose(targetFileName) : undefined;
+            
+            markdown.appendMarkdown(`**Foreign Key: \`${columnName}\`**\n\n`);
+            
+            if (targetFileName) {
+                // Make the filename clickable if the file exists
+                const txtInOutPath = this.indexer.getTxtInOutPath();
+                if (txtInOutPath) {
+                    const targetFilePath = path.join(txtInOutPath, targetFileName);
+                    if (fs.existsSync(targetFilePath)) {
+                        const commandUri = vscode.Uri.parse(`command:vscode.open?${encodeURIComponent(JSON.stringify([vscode.Uri.file(targetFilePath)]))}`);
+                        markdown.appendMarkdown(`Points to: [${targetFileName}](${commandUri})\n\n`);
+                    } else {
+                        markdown.appendMarkdown(`Points to: \`${targetFileName}\`\n\n`);
+                    }
+                } else {
+                    markdown.appendMarkdown(`Points to: \`${targetFileName}\`\n\n`);
+                }
+            }
+            
+            if (targetPurpose) {
+                markdown.appendMarkdown(`*${targetPurpose}*\n\n`);
+            }
+            
+            // Check if the FK is resolved
+            const targetRow = this.indexer.resolveFKTarget(fkColumn.fk_target.table, cellValue);
+            if (targetRow) {
+                markdown.appendMarkdown(`✓ Reference found: \`${cellValue}\`\n\n`);
+                markdown.appendMarkdown(`_Click to navigate to ${targetFileName}_`);
+            } else {
+                markdown.appendMarkdown(`⚠ Unresolved reference: \`${cellValue}\`\n\n`);
+                if (targetFileName) {
+                    markdown.appendMarkdown(`_Value not found in ${targetFileName}_`);
+                }
+            }
+        } else {
+            // Regular column - just show basic info
+            markdown.appendMarkdown(`**Column: \`${columnName}\`**\n\n`);
+            markdown.appendMarkdown(`Value: \`${cellValue}\``);
+        }
+
+        return new vscode.Hover(markdown);
+    }
+
+    private normalizeHeaders(headers: string[], table: any): string[] {
+        if (!table?.columns) {
+            return headers;
+        }
+        const schemaColumns = new Set((table.columns || []).map((col: any) => col.name));
+        const schemaColumnsLower = new Set((table.columns || []).map((col: any) => col.name.toLowerCase()));
+        return headers.map(header => {
+            if (schemaColumns.has(header)) {
+                return header;
+            }
+            const lowerHeader = header.toLowerCase();
+            if (schemaColumnsLower.has(lowerHeader)) {
+                return lowerHeader;
+            }
+            return header;
+        });
+    }
+}
