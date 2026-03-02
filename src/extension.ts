@@ -2,6 +2,7 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { SwatDatasetWebviewProvider } from './swatWebviewProvider';
 import { SwatIndexer } from './indexer';
 import { SwatFKDefinitionProvider } from './fkDefinitionProvider';
@@ -337,6 +338,112 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
+	// Command: Upload / import a dataset into the workdata/ folder
+	interface DatasetImportOption extends vscode.QuickPickItem {
+		action: 'open' | 'copy';
+	}
+
+	const uploadDataset = vscode.commands.registerCommand('swat-dataset-selector.uploadDataset', async () => {
+		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		if (!workspaceRoot) {
+			vscode.window.showWarningMessage('No workspace folder found. Please open a workspace first.');
+			return;
+		}
+
+		// Ensure workdata/ directory exists (the devcontainer creates it on first start,
+		// but this also handles non-Codespaces environments like WSL or local installs)
+		const workdataDir = path.join(workspaceRoot, 'workdata');
+		if (!fs.existsSync(workdataDir)) {
+			fs.mkdirSync(workdataDir, { recursive: true });
+		}
+
+		const choice = await vscode.window.showQuickPick<DatasetImportOption>(
+			[
+				{
+					label: '$(folder-opened) Select from workdata/ folder',
+					description: 'Select a dataset already in the workdata/ folder',
+					detail: 'In Codespaces: upload via Explorer drag-and-drop first, then select here',
+					action: 'open'
+				},
+				{
+					label: '$(copy) Copy dataset from another location',
+					description: 'Copy a dataset folder into workdata/',
+					detail: 'In WSL: copy from /mnt/c/... or any other path on the filesystem',
+					action: 'copy'
+				}
+			],
+			{
+				title: 'SWAT+: Upload / Import Dataset',
+				placeHolder: 'Choose how to add your dataset to this workspace'
+			}
+		);
+
+		if (!choice) {
+			return;
+		}
+
+		if (choice.action === 'open') {
+			const result = await vscode.window.showOpenDialog({
+				canSelectFiles: false,
+				canSelectFolders: true,
+				canSelectMany: false,
+				defaultUri: vscode.Uri.file(workdataDir),
+				openLabel: 'Select Dataset',
+				title: 'Select SWAT+ Dataset Folder'
+			});
+			if (result && result.length > 0) {
+				const selectedPath = result[0].fsPath;
+				swatProvider.setSelectedDataset(selectedPath);
+				vscode.window.showInformationMessage(`SWAT+ Dataset selected: ${selectedPath}`);
+				await tryAutoLoadIndex(selectedPath);
+			}
+		} else {
+			const source = await vscode.window.showOpenDialog({
+				canSelectFiles: false,
+				canSelectFolders: true,
+				canSelectMany: false,
+				openLabel: 'Select Source Dataset',
+				title: 'Select SWAT+ Dataset Folder to Copy into workdata/'
+			});
+			if (!source || source.length === 0) {
+				return;
+			}
+
+			const sourcePath = source[0].fsPath;
+			const folderName = path.basename(sourcePath);
+			const targetPath = path.join(workdataDir, folderName);
+
+			if (fs.existsSync(targetPath)) {
+				const confirm = await vscode.window.showWarningMessage(
+					`Folder "${folderName}" already exists in workdata/. Overwrite?`,
+					{ modal: true },
+					'Overwrite'
+				);
+				if (confirm !== 'Overwrite') {
+					return;
+				}
+			}
+
+			try {
+				await vscode.window.withProgress(
+					{
+						location: vscode.ProgressLocation.Notification,
+						title: `Copying "${folderName}" to workdata/...`,
+						cancellable: false
+					},
+					async () => {
+						fs.cpSync(sourcePath, targetPath, { recursive: true });
+					}
+				);
+				swatProvider.setSelectedDataset(targetPath);
+				vscode.window.showInformationMessage(`Dataset "${folderName}" imported to workdata/ and selected.`);
+				await tryAutoLoadIndex(targetPath);
+			} catch (err) {
+				vscode.window.showErrorMessage('Failed to copy dataset: ' + (err instanceof Error ? err.message : String(err)));
+			}
+		}
+	});
+
 	context.subscriptions.push(
 		webviewViewProvider,
 		definitionProviderDisposable,
@@ -356,7 +463,8 @@ export function activate(context: vscode.ExtensionContext) {
 		showFKReferences,
 		showTableViewer,
 		exportIndexCmd,
-		seedTestData
+		seedTestData,
+		uploadDataset
 	);
 }
 
