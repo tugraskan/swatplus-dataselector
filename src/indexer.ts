@@ -11,7 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
 import * as os from 'os';
-import { normalizePathForComparison, resolveFileCioPath } from './pathUtils';
+import { normalizePathForComparison, resolveFileCioPath, normalizeIndexedPath } from './pathUtils';
 
 // TxtInOut metadata interface
 interface TxtInOutMetadata {
@@ -567,6 +567,10 @@ export class SwatIndexer {
                 const tableIndex = new Map<string, IndexedRow>();
                 const isDecisionTable = tableName.includes('dtl');
                 (rows as IndexedRow[]).forEach((row) => {
+                    // Normalize the stored file path to the current environment
+                    if (row.file) {
+                        row.file = normalizeIndexedPath(row.file);
+                    }
                     const pkValueLower = row.pkValueLower ?? row.pkValue.toLowerCase();
                     tableIndex.set(pkValueLower, row);
                     if (isDecisionTable) {
@@ -576,7 +580,13 @@ export class SwatIndexer {
                 this.index.set(tableName, tableIndex);
             }
 
-            this.fkReferences = (payload.fkReferences || []) as FKReference[];
+            this.fkReferences = ((payload.fkReferences || []) as FKReference[]).map((ref) => {
+                // Normalize the stored source file path to the current environment
+                if (ref.sourceFile) {
+                    ref.sourceFile = normalizeIndexedPath(ref.sourceFile);
+                }
+                return ref;
+            });
 
             return {
                 success: true,
@@ -816,6 +826,10 @@ export class SwatIndexer {
                 const tableIndex = new Map<string, IndexedRow>();
                 const isDecisionTable = tableName.includes('dtl');
                 (rows as IndexedRow[]).forEach((row) => {
+                    // Normalize stored file path — see normalizeIndexedPath for details
+                    if (row.file) {
+                        row.file = normalizeIndexedPath(row.file);
+                    }
                     const pkValueLower = row.pkValueLower ?? row.pkValue.toLowerCase();
                     tableIndex.set(pkValueLower, row);
                     if (isDecisionTable) {
@@ -825,7 +839,13 @@ export class SwatIndexer {
                 this.index.set(tableName, tableIndex);
             }
 
-            this.fkReferences = (payload.fkReferences || []) as FKReference[];
+            this.fkReferences = ((payload.fkReferences || []) as FKReference[]).map((ref) => {
+                // Normalize the stored source file path for the current environment
+                if (ref.sourceFile) {
+                    ref.sourceFile = normalizeIndexedPath(ref.sourceFile);
+                }
+                return ref;
+            });
 
             if (payload.fileCioData && typeof payload.fileCioData === 'object') {
                 for (const [classification, data] of Object.entries(payload.fileCioData)) {

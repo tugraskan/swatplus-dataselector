@@ -13,6 +13,8 @@
  */
 
 import * as vscode from 'vscode';
+import { windowsPathToWsl } from './pathUtils';
+export { windowsPathToWsl };  // Re-export so existing callers don't need to change
 
 /** All VS Code environments where the SWAT+ Dataset Selector may run. */
 export type VsCodeEnvironment =
@@ -164,26 +166,6 @@ export function detectEnvironment(): EnvironmentInfo {
         mayHaveWindowsPaths: false,
         isRemoteLinux: false
     };
-}
-
-/**
- * Convert a Windows-style path to its WSL `/mnt/<drive>/` equivalent.
- *
- * Examples:
- *   `C:\Users\foo\bar`  → `/mnt/c/Users/foo/bar`
- *   `D:/datasets/Ames`  → `/mnt/d/datasets/Ames`
- *
- * Returns the original string unchanged if it does not match a Windows path pattern.
- */
-export function windowsPathToWsl(winPath: string): string {
-    const match = winPath.match(/^([A-Za-z]):[\\\/](.*)/);
-    if (!match) {
-        return winPath;
-    }
-    const drive = match[1].toLowerCase();
-    const rest  = match[2].replace(/\\/g, '/');
-    // Collapse any consecutive slashes and strip a trailing slash
-    return `/mnt/${drive}/${rest}`.replace(/\/+/g, '/').replace(/\/$/, '');
 }
 
 /**
