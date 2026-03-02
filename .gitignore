@@ -5,3 +5,7 @@ node_modules
 *.vsix
 __pycache__/
 *.pyc
+
+# Dataset uploads - ignore all contents of workdata/ except the placeholder
+workdata/*
+!workdata/.gitkeep

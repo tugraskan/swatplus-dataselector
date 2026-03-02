@@ -4,6 +4,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
 import { resolveFileCioPath } from './pathUtils';
+import { detectEnvironment, EnvironmentInfo } from './environmentUtils';
 
 /**
  * Escapes HTML special characters to prevent XSS attacks
@@ -184,6 +185,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                 this._updateWebview();
                             }
                             break;
+                        case 'uploadDataset':
+                            vscode.commands.executeCommand('swat-dataset-selector.uploadDataset');
+                            break;
                         default:
                             console.warn('swat webview unknown message', data);
                     }
@@ -307,9 +311,13 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         // Generate nonce for CSP
         const nonce = crypto.randomBytes(16).toString('base64');
 
+        // Detect the current VS Code environment for display and path hints
+        const env: EnvironmentInfo = detectEnvironment();
+
         const svgs: { [key: string]: string } = {
             folder: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 4C1.44772 4 1 4.44772 1 5V12C1 12.5523 1.44772 13 2 13H14C14.5523 13 15 12.5523 15 12V6C15 5.44772 14.5523 5 14 5H8L6 3H2Z" fill="currentColor"/></svg>`,
             info: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1"/><rect x="7.2" y="6" width="0.8" height="4" fill="currentColor"/><rect x="7.2" y="4" width="0.8" height="0.8" fill="currentColor"/></svg>`,
+            cloudUpload: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 16V8M8 12l4-4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 104 16.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
             chevronDown: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
             history: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 3v5l3 1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.05 6.05A6 6 0 1 0 8 2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
             close: `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 2l8 8M10 2L2 10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`,
@@ -1440,6 +1448,27 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             background-color: var(--vscode-menu-selectionBackground);
             color: var(--vscode-menu-selectionForeground);
         }
+
+        /* Environment indicator badge */
+        .env-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 8px;
+            margin-top: 8px;
+            background-color: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 4px;
+            cursor: default;
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+        }
+
+        .env-badge-label {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
     </style>
 </head>
 <body>
@@ -1455,6 +1484,10 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     Debug
                 </button>
             </div>
+            <button class="action-button secondary" id="uploadDatasetBtn" title="Upload or import a dataset into the workdata/ folder (Codespaces &amp; WSL)">
+                ${svgs.cloudUpload}
+                Upload Dataset
+            </button>
         </div>
 
         <div class="divider"></div>
@@ -1490,6 +1523,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         <div class="help-text">
             Select a SWAT+ dataset folder to use as the working directory for debugging. 
             The debug session will use CMake Tools to launch the target.
+        </div>
+
+        <div class="env-badge" title="${escapeHtml(env.description)}">
+            <span class="codicon codicon-${escapeHtml(env.icon)}"></span>
+            <span class="env-badge-label">${escapeHtml(env.label)}</span>
         </div>
     </div>
 
@@ -1573,6 +1611,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             const launchBtn = $('launchDebugBtn');
             if (launchBtn) launchBtn.addEventListener('click', () => {
                 swatHost.postMessage({ type: 'launchDebug' });
+            });
+
+            const uploadBtn = $('uploadDatasetBtn');
+            if (uploadBtn) uploadBtn.addEventListener('click', () => {
+                swatHost.postMessage({ type: 'uploadDataset' });
             });
 
             const buildIndexBtn = $('buildIndexBtn');
@@ -1735,6 +1778,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     if (closest && closest('#launchDebugBtn')) {
                         try { console.log('SWAT webview: delegated launchDebug click'); } catch (e) {}
                         swatHost.postMessage({ type: 'launchDebug' });
+                        return;
+                    }
+                    if (closest && closest('#uploadDatasetBtn')) {
+                        try { console.log('SWAT webview: delegated uploadDataset click'); } catch (e) {}
+                        swatHost.postMessage({ type: 'uploadDataset' });
                         return;
                     }
                     if (closest && closest('#buildIndexBtn')) {

@@ -87,6 +87,11 @@
         "command": "swat-dataset-selector.exportIndex",
         "title": "SWAT+: Export Index to JSON",
         "icon": "$(cloud-download)"
+      },
+      {
+        "command": "swat-dataset-selector.uploadDataset",
+        "title": "SWAT+: Upload Dataset to Workspace",
+        "icon": "$(cloud-upload)"
       }
     ],
     "configuration": {
