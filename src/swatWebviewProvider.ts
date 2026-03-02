@@ -4,6 +4,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
 import { resolveFileCioPath } from './pathUtils';
+import { detectEnvironment, EnvironmentInfo } from './environmentUtils';
 
 /**
  * Escapes HTML special characters to prevent XSS attacks
@@ -309,6 +310,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
     private _getHtmlForWebview(webview: vscode.Webview): string {
         // Generate nonce for CSP
         const nonce = crypto.randomBytes(16).toString('base64');
+
+        // Detect the current VS Code environment for display and path hints
+        const env: EnvironmentInfo = detectEnvironment();
 
         const svgs: { [key: string]: string } = {
             folder: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 4C1.44772 4 1 4.44772 1 5V12C1 12.5523 1.44772 13 2 13H14C14.5523 13 15 12.5523 15 12V6C15 5.44772 14.5523 5 14 5H8L6 3H2Z" fill="currentColor"/></svg>`,
@@ -1444,6 +1448,27 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             background-color: var(--vscode-menu-selectionBackground);
             color: var(--vscode-menu-selectionForeground);
         }
+
+        /* Environment indicator badge */
+        .env-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 8px;
+            margin-top: 8px;
+            background-color: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 4px;
+            cursor: default;
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+        }
+
+        .env-badge-label {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
     </style>
 </head>
 <body>
@@ -1498,6 +1523,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         <div class="help-text">
             Select a SWAT+ dataset folder to use as the working directory for debugging. 
             The debug session will use CMake Tools to launch the target.
+        </div>
+
+        <div class="env-badge" title="${escapeHtml(env.description)}">
+            <span class="codicon codicon-${escapeHtml(env.icon)}"></span>
+            <span class="env-badge-label">${escapeHtml(env.label)}</span>
         </div>
     </div>
 
