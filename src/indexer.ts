@@ -474,6 +474,16 @@ export class SwatIndexer {
         if (process.env.SWATPLUS_PYTHON) {
             candidates.push(process.env.SWATPLUS_PYTHON);
         }
+        // If the user has the VS Code Python extension installed, its configured interpreter
+        // is almost certainly the Python that has pandas (and the SWAT+ environment set up).
+        // Reading the workspace/user setting is synchronous and requires no extension activation.
+        const pythonConfig = vscode.workspace.getConfiguration('python');
+        const vsPythonPath = pythonConfig.get<string>('defaultInterpreterPath') ||
+                             pythonConfig.get<string>('pythonPath');
+        const vsPythonPathTrimmed = vsPythonPath?.trim();
+        if (vsPythonPathTrimmed && vsPythonPathTrimmed !== 'python') {
+            candidates.push(vsPythonPathTrimmed);
+        }
         // Common names on various platforms
         candidates.push('python', 'python3', 'py');
 
@@ -535,13 +545,22 @@ export class SwatIndexer {
                     vscode.window.showInformationMessage(
                         'SWAT+: pandas not found — installing automatically. This may take a minute…'
                     );
-                    // Use --user to install into the user site-packages, avoiding the need for
-                    // elevated privileges on systems with a protected system Python installation.
-                    const pipResult = spawnSync(
+                    // Try pip install without --user first (required inside virtual environments).
+                    // If that fails (e.g. no write access to system site-packages), retry with
+                    // --user to install into the user site-packages directory.
+                    let pipResult = spawnSync(
                         pythonExecutable,
-                        ['-m', 'pip', 'install', '--user', '--quiet', 'pandas'],
+                        ['-m', 'pip', 'install', '--quiet', 'pandas'],
                         { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
                     );
+                    if (pipResult.error || pipResult.status !== 0) {
+                        console.log(`[Indexer] pip install (no --user) failed, retrying with --user…`);
+                        pipResult = spawnSync(
+                            pythonExecutable,
+                            ['-m', 'pip', 'install', '--user', '--quiet', 'pandas'],
+                            { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
+                        );
+                    }
                     if (!pipResult.error && pipResult.status === 0) {
                         console.log(`[Indexer] pandas installed successfully via ${pythonExecutable}, retrying indexer…`);
                         // Retry the indexer now that pandas is installed
