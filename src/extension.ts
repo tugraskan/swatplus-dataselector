@@ -18,8 +18,11 @@ import { detectEnvironment, resolvePathForEnvironment } from './environmentUtils
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
+	try {
+		console.log('SWAT+ Dataset Selector extension is now active!');
 
-	console.log('SWAT+ Dataset Selector extension is now active!');
+	// Auto-open the SWAT+ Dataset sidebar panel when the extension activates
+	vscode.commands.executeCommand('workbench.view.extension.swat-dataset-selector');
 
 	// Initialize indexer and FK features
 	const indexer = new SwatIndexer(context);
@@ -339,20 +342,6 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
-	// Command: Reveal workdata/ folder in the VS Code Explorer
-	const revealWorkdataFolder = vscode.commands.registerCommand('swat-dataset-selector.revealWorkdataFolder', async () => {
-		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-		if (!workspaceRoot) {
-			vscode.window.showWarningMessage('No workspace folder found. Please open a workspace first.');
-			return;
-		}
-		const workdataDir = path.join(workspaceRoot, 'workdata');
-		if (!fs.existsSync(workdataDir)) {
-			fs.mkdirSync(workdataDir, { recursive: true });
-		}
-		await vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(workdataDir));
-	});
-
 	// Command: Upload / import a dataset into the workdata/ folder
 	interface DatasetImportOption extends vscode.QuickPickItem {
 		action: 'open' | 'copy' | 'path';
@@ -543,9 +532,17 @@ export function activate(context: vscode.ExtensionContext) {
 		showTableViewer,
 		exportIndexCmd,
 		seedTestData,
-		uploadDataset,
-		revealWorkdataFolder
+		uploadDataset
 	);
+	} catch (err) {
+		console.error('SWAT+ Dataset Selector activation error', err);
+		try {
+			vscode.window.showErrorMessage('SWAT+ Dataset Selector activation failed: ' + (err instanceof Error ? err.message : String(err)));
+		} catch (e) {
+			console.error('Failed to show activation error message', e);
+		}
+	}
+
 }
 
 async function launchDebugSession(datasetFolder: string) {
