@@ -195,6 +195,18 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                 });
                             }
                             break;
+                        case 'selectWorkdataDataset':
+                            if (data.path && typeof data.path === 'string') {
+                                this.setSelectedDataset(data.path);
+                                vscode.window.showInformationMessage(`SWAT+ Dataset selected: ${data.path}`);
+                            }
+                            break;
+                        case 'refreshWorkdata':
+                            this._updateWebview();
+                            break;
+                        case 'revealWorkdataFolder':
+                            vscode.commands.executeCommand('swat-dataset-selector.revealWorkdataFolder');
+                            break;
                         default:
                             console.warn('swat webview unknown message', data);
                     }
@@ -786,6 +798,63 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     </div>
                 </div>
                </div>`;
+
+        // --- Workdata section ---
+        const workspaceRootForHtml = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const workdataDirForHtml = workspaceRootForHtml ? path.join(workspaceRootForHtml, 'workdata') : undefined;
+        let workdataDatasets: string[] = [];
+        if (workdataDirForHtml && fs.existsSync(workdataDirForHtml)) {
+            try {
+                workdataDatasets = fs.readdirSync(workdataDirForHtml, { withFileTypes: true })
+                    .filter(e => e.isDirectory())
+                    .map(e => path.join(workdataDirForHtml, e.name));
+            } catch (e) { /* ignore */ }
+        }
+
+        // Environment-specific upload tip
+        let uploadTip = '';
+        if (env.type === 'codespaces-browser') {
+            uploadTip = 'Codespaces (browser): right-click <code>workdata/</code> in the Explorer and choose <b>Upload &hellip;</b> to copy datasets from your machine.';
+        } else if (env.type === 'codespaces-desktop') {
+            uploadTip = 'Codespaces (desktop): drag folders into the Explorer\'s <code>workdata/</code> folder, or use <b>Upload Dataset</b> above.';
+        } else if (env.type === 'remote-wsl') {
+            uploadTip = 'WSL: paste a Windows path (e.g. <code>C:\\Users\\&hellip;</code>) via <b>Upload Dataset &rarr; Enter a path</b>, or copy files to <code>workdata/</code>.';
+        } else if (env.type === 'remote-ssh') {
+            uploadTip = 'Remote SSH: copy datasets to <code>workdata/</code> on the remote machine, then click Refresh.';
+        } else {
+            uploadTip = 'Drop a dataset folder below, or click <b>Upload Dataset</b> above to add it to <code>workdata/</code>.';
+        }
+
+        const workdataHtml = `<div class="section" id="workdata-section">
+            <div class="section-header collapsible" data-section="workdata">
+                <span class="collapse-icon">${svgs.chevronDown}</span>
+                ${svgs.folder}
+                <span class="section-title">Workdata Datasets</span>
+                <span class="badge">${workdataDatasets.length}</span>
+                <button class="icon-button" id="revealWorkdataBtn" title="Reveal workdata/ folder in Explorer" style="margin-left:auto">
+                    ${svgs.folderOpened}
+                </button>
+                <button class="icon-button" id="refreshWorkdataBtn" title="Refresh workdata/ list">
+                    ${svgs.refresh}
+                </button>
+            </div>
+            <div class="section-content" id="workdata-content">
+                ${workdataDatasets.length === 0 ? '' : workdataDatasets.map(p => `
+                    <div class="workdata-item" data-path="${escapeHtml(p)}" title="${escapeHtml(p)}" style="cursor:pointer">
+                        ${svgs.folder}
+                        <div class="recent-item-info">
+                            <div class="recent-item-name">${escapeHtml(path.basename(p))}</div>
+                            <div class="recent-item-path">${escapeHtml(p)}</div>
+                        </div>
+                    </div>
+                `).join('')}
+                <div class="workdata-drop-zone${workdataDatasets.length === 0 ? ' workdata-drop-zone-empty' : ''}" id="workdata-drop-zone">
+                    ${svgs.cloudUpload}
+                    <span>Drop a dataset folder here</span>
+                </div>
+                <div class="workdata-tip">${uploadTip}</div>
+            </div>
+        </div>`;
 
         // The combinedHtml above now replaces the separate TXTINOUT block.
 
@@ -1571,6 +1640,65 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         #recent-content {
             min-height: 40px;
         }
+
+        /* Workdata section */
+        .workdata-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.1s ease;
+        }
+
+        .workdata-item:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+
+        .workdata-drop-zone {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 8px;
+            margin-top: 4px;
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            border: 1px dashed var(--vscode-panel-border);
+            border-radius: 4px;
+            transition: background-color 0.1s, border-color 0.1s;
+        }
+
+        .workdata-drop-zone-empty {
+            padding: 14px 8px;
+        }
+
+        .workdata-drop-zone.drag-over,
+        #workdata-section.drag-over .workdata-drop-zone {
+            background-color: var(--vscode-list-dropBackground, rgba(0, 120, 215, 0.1));
+            border-color: var(--vscode-focusBorder);
+            border-style: solid;
+        }
+
+        .workdata-tip {
+            margin-top: 6px;
+            padding: 6px 8px;
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            background-color: var(--vscode-editor-infoBackground, rgba(0,120,215,0.06));
+            border-left: 2px solid var(--vscode-editorInfo-foreground, #75beff);
+            border-radius: 0 4px 4px 0;
+            line-height: 1.5;
+        }
+
+        .workdata-tip code {
+            font-family: var(--vscode-editor-font-family, monospace);
+            font-size: 10px;
+            background-color: var(--vscode-textCodeBlock-background);
+            padding: 1px 3px;
+            border-radius: 2px;
+        }
     </style>
 </head>
 <body>
@@ -1596,6 +1724,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         <div class="middle">
             ${recentDatasetsHtml}
+
+            ${workdataHtml}
 
             <!-- Divider separating Recent Datasets from Selected dataset window -->
             <div class="divider" id="recent-divider" title="Recent / Selected separator"><div class="handle"></div></div>
@@ -1803,6 +1933,66 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 });
             }
 
+            // Workdata section: click-to-select items
+            document.querySelectorAll('.workdata-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const p = item.dataset.path;
+                    if (p) {
+                        try { console.log('SWAT webview: workdata-item clicked', p); } catch (e) {}
+                        swatHost.postMessage({ type: 'selectWorkdataDataset', path: p });
+                    }
+                });
+            });
+
+            // Workdata refresh button
+            const refreshWorkdataBtn = $('refreshWorkdataBtn');
+            if (refreshWorkdataBtn) {
+                refreshWorkdataBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    swatHost.postMessage({ type: 'refreshWorkdata' });
+                });
+            }
+
+            // Workdata reveal button
+            const revealWorkdataBtn = $('revealWorkdataBtn');
+            if (revealWorkdataBtn) {
+                revealWorkdataBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    swatHost.postMessage({ type: 'revealWorkdataFolder' });
+                });
+            }
+
+            // Drag-and-drop: workdata drop zone
+            const workdataDropZone = $('workdata-drop-zone');
+            const workdataSection = $('workdata-section');
+            if (workdataDropZone && workdataSection) {
+                workdataSection.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    if (!e.dataTransfer || !e.dataTransfer.types.includes('Files')) { return; }
+                    e.dataTransfer.dropEffect = 'copy';
+                    workdataDropZone.classList.add('drag-over');
+                });
+                workdataSection.addEventListener('dragleave', (e) => {
+                    const relatedTarget = e.relatedTarget;
+                    if (!relatedTarget || !workdataSection.contains(/** @type {Node} */ (relatedTarget))) {
+                        workdataDropZone.classList.remove('drag-over');
+                    }
+                });
+                workdataSection.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    workdataDropZone.classList.remove('drag-over');
+                    const files = e.dataTransfer && e.dataTransfer.files;
+                    if (files && files.length > 0) {
+                        const file = files[0];
+                        const filePath = file.path;
+                        if (filePath) {
+                            try { console.log('SWAT webview: workdata drop', filePath); } catch (err) {}
+                            swatHost.postMessage({ type: 'dropDataset', path: filePath });
+                        }
+                    }
+                });
+            }
+
             // TXT explorer item handlers
             document.querySelectorAll('.txt-item').forEach(item => {
                 item.addEventListener('click', (e) => {
@@ -1959,6 +2149,23 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         const path = container ? container.dataset.path : undefined;
                         try { console.log('SWAT webview: delegated recent-item click', path); } catch (e) {}
                         if (path) swatHost.postMessage({ type: 'selectRecentDataset', path });
+                        return;
+                    }
+                    if (closest && closest('.workdata-item')) {
+                        const container = tgt.closest('.workdata-item');
+                        const path = container ? container.dataset.path : undefined;
+                        try { console.log('SWAT webview: delegated workdata-item click', path); } catch (e) {}
+                        if (path) swatHost.postMessage({ type: 'selectWorkdataDataset', path });
+                        return;
+                    }
+                    if (closest && closest('#revealWorkdataBtn')) {
+                        try { console.log('SWAT webview: delegated revealWorkdata click'); } catch (e) {}
+                        swatHost.postMessage({ type: 'revealWorkdataFolder' });
+                        return;
+                    }
+                    if (closest && closest('#refreshWorkdataBtn')) {
+                        try { console.log('SWAT webview: delegated refreshWorkdata click'); } catch (e) {}
+                        swatHost.postMessage({ type: 'refreshWorkdata' });
                         return;
                     }
                     if (closest && closest('.txt-item')) {

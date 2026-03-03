@@ -339,6 +339,20 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
+	// Command: Reveal workdata/ folder in the VS Code Explorer
+	const revealWorkdataFolder = vscode.commands.registerCommand('swat-dataset-selector.revealWorkdataFolder', async () => {
+		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		if (!workspaceRoot) {
+			vscode.window.showWarningMessage('No workspace folder found. Please open a workspace first.');
+			return;
+		}
+		const workdataDir = path.join(workspaceRoot, 'workdata');
+		if (!fs.existsSync(workdataDir)) {
+			fs.mkdirSync(workdataDir, { recursive: true });
+		}
+		await vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(workdataDir));
+	});
+
 	// Command: Upload / import a dataset into the workdata/ folder
 	interface DatasetImportOption extends vscode.QuickPickItem {
 		action: 'open' | 'copy' | 'path';
@@ -529,7 +543,8 @@ export function activate(context: vscode.ExtensionContext) {
 		showTableViewer,
 		exportIndexCmd,
 		seedTestData,
-		uploadDataset
+		uploadDataset,
+		revealWorkdataFolder
 	);
 }
 

@@ -92,6 +92,11 @@
         "command": "swat-dataset-selector.uploadDataset",
         "title": "SWAT+: Upload Dataset to Workspace",
         "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "swat-dataset-selector.revealWorkdataFolder",
+        "title": "SWAT+: Reveal workdata/ Folder in Explorer",
+        "icon": "$(folder-opened)"
       }
     ],
     "configuration": {
