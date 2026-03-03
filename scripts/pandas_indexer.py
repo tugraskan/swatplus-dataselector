@@ -341,7 +341,7 @@ def parse_lines_to_dataframe(
 
 
 def build_weather_data_rows(file_path: Path, table: dict) -> Tuple[List[dict], Dict[str, str]]:
-    """Build row payloads for weather data files with comment + header + station metadata."""
+    """Build row payloads for weather data files with comment + header + station metadata + all data rows."""
     with file_path.open("r", encoding="utf-8", errors="ignore") as handle:
         lines = handle.readlines()
 
@@ -380,6 +380,38 @@ def build_weather_data_rows(file_path: Path, table: dict) -> Tuple[List[dict], D
             values[col] = station_values[idx]
 
     pk_value = values.get("name") or file_path.name
+    
+    # Build child rows from data lines (all lines after station metadata)
+    child_rows: List[dict] = []
+    data_columns = [col for col in ("year", "month", "value") if col in schema_columns]
+    
+    # If no specific data columns, use all remaining columns or allow flexible parsing
+    if not data_columns:
+        data_columns = schema_columns[:]
+    
+    for data_line_idx in range(station_idx + 1, len(lines)):
+        line = lines[data_line_idx].strip()
+        if not line:
+            continue
+        
+        data_values = line.split()
+        data_value_map: Dict[str, str] = {}
+        for col_idx, col_name in enumerate(data_columns):
+            data_value_map[col_name] = data_values[col_idx] if col_idx < len(data_values) else ""
+        
+        # Store generic column values for flexible data structures
+        for col_idx, val in enumerate(data_values):
+            if col_idx < len(data_columns):
+                data_value_map[data_columns[col_idx]] = val
+            else:
+                # Store extra columns as col1, col2, etc.
+                data_value_map[f"col{col_idx + 1}"] = val
+        
+        child_rows.append({
+            "lineNumber": data_line_idx + 1,
+            "values": data_value_map
+        })
+    
     row_payload = [{
         "file": str(file_path),
         "tableName": table["table_name"],
@@ -387,6 +419,7 @@ def build_weather_data_rows(file_path: Path, table: dict) -> Tuple[List[dict], D
         "pkValue": str(pk_value),
         "pkValueLower": str(pk_value).lower(),
         "values": values,
+        "childRows": child_rows if child_rows else None,
     }]
 
     return row_payload, {file_path.name.lower(): table["table_name"]}

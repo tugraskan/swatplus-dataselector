@@ -15,9 +15,31 @@
 			"outFiles": [
 				"${workspaceFolder}/dist/**/*.js"
 			],
-			"preLaunchTask": "${defaultBuildTask}",
+			"preLaunchTask": "compile",
 			"env": {
 				"SWATPLUS_PYTHON": "C:\\Program Files\\Python313\\python.exe"
+			}
+		},
+		{
+			"name": "Run Extension Tests",
+			"type": "node",
+			"request": "launch",
+			"cwd": "${workspaceFolder}",
+			"runtimeExecutable": "npm",
+			"runtimeArgs": [
+				"run",
+				"test"
+			],
+			"console": "integratedTerminal",
+			"internalConsoleOptions": "neverOpen",
+			"linux": {
+				"runtimeExecutable": "xvfb-run",
+				"runtimeArgs": [
+					"-a",
+					"npm",
+					"run",
+					"test"
+				]
 			}
 		}
 	]
