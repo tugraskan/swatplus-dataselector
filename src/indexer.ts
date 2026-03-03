@@ -11,7 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
 import * as os from 'os';
-import { normalizePathForComparison, resolveFileCioPath } from './pathUtils';
+import { normalizePathForComparison, resolveFileCioPath, normalizeIndexedPath } from './pathUtils';
 
 // TxtInOut metadata interface
 interface TxtInOutMetadata {
@@ -474,6 +474,16 @@ export class SwatIndexer {
         if (process.env.SWATPLUS_PYTHON) {
             candidates.push(process.env.SWATPLUS_PYTHON);
         }
+        // If the user has the VS Code Python extension installed, its configured interpreter
+        // is almost certainly the Python that has pandas (and the SWAT+ environment set up).
+        // Reading the workspace/user setting is synchronous and requires no extension activation.
+        const pythonConfig = vscode.workspace.getConfiguration('python');
+        const vsPythonPath = pythonConfig.get<string>('defaultInterpreterPath') ||
+                             pythonConfig.get<string>('pythonPath');
+        const vsPythonPathTrimmed = vsPythonPath?.trim();
+        if (vsPythonPathTrimmed && vsPythonPathTrimmed !== 'python') {
+            candidates.push(vsPythonPathTrimmed);
+        }
         // Common names on various platforms
         candidates.push('python', 'python3', 'py');
 
@@ -522,9 +532,58 @@ export class SwatIndexer {
                 console.log(`[Indexer] pandas pipeline succeeded with ${pythonExecutable}`);
                 break;
             } else {
-                // Non-zero exit - capture stderr and try next candidate (in case of unexpected executable)
+                // Non-zero exit — check whether pandas is simply not installed
                 lastError = result.stderr || `Exit code ${result.status}`;
-                console.warn(`[Indexer] ${pythonExecutable} exited with code ${result.status}: ${lastError}`);
+                const stderrLower = (result.stderr || '').toLowerCase();
+                const isPandasMissing =
+                    stderrLower.includes("no module named 'pandas'") ||
+                    stderrLower.includes('no module named "pandas"') ||
+                    (stderrLower.includes('modulenotfounderror') && stderrLower.includes('pandas'));
+
+                if (isPandasMissing) {
+                    console.log(`[Indexer] pandas not found for ${pythonExecutable}, attempting auto-install via pip…`);
+                    vscode.window.showInformationMessage(
+                        'SWAT+: pandas not found — installing automatically. This may take a minute…'
+                    );
+                    // Try pip install without --user first (required inside virtual environments).
+                    // If that fails (e.g. no write access to system site-packages), retry with
+                    // --user to install into the user site-packages directory.
+                    let pipResult = spawnSync(
+                        pythonExecutable,
+                        ['-m', 'pip', 'install', '--quiet', 'pandas'],
+                        { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
+                    );
+                    if (pipResult.error || pipResult.status !== 0) {
+                        console.log(`[Indexer] pip install (no --user) failed, retrying with --user…`);
+                        pipResult = spawnSync(
+                            pythonExecutable,
+                            ['-m', 'pip', 'install', '--user', '--quiet', 'pandas'],
+                            { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
+                        );
+                    }
+                    if (!pipResult.error && pipResult.status === 0) {
+                        console.log(`[Indexer] pandas installed successfully via ${pythonExecutable}, retrying indexer…`);
+                        // Retry the indexer now that pandas is installed
+                        try {
+                            result = spawnSync(pythonExecutable, args, { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 });
+                        } catch (err: any) {
+                            lastError = err.message || String(err);
+                            result = null;
+                        }
+                        if (result && !result.error && result.status === 0) {
+                            console.log(`[Indexer] pandas pipeline succeeded after auto-install with ${pythonExecutable}`);
+                            break;
+                        }
+                        lastError = result?.stderr || `Exit code ${result?.status}`;
+                        console.warn(`[Indexer] Retry after auto-install failed: ${lastError}`);
+                    } else {
+                        const pipErr = pipResult.error?.message || pipResult.stderr || `pip exit code ${pipResult.status}`;
+                        console.warn(`[Indexer] pip install pandas failed: ${pipErr}`);
+                        lastError = `pandas missing and auto-install failed: ${pipErr}`;
+                    }
+                } else {
+                    console.warn(`[Indexer] ${pythonExecutable} exited with code ${result.status}: ${lastError}`);
+                }
                 // continue trying other candidates
             }
         }
@@ -567,6 +626,10 @@ export class SwatIndexer {
                 const tableIndex = new Map<string, IndexedRow>();
                 const isDecisionTable = tableName.includes('dtl');
                 (rows as IndexedRow[]).forEach((row) => {
+                    // Normalize the stored file path to the current environment
+                    if (row.file) {
+                        row.file = normalizeIndexedPath(row.file);
+                    }
                     const pkValueLower = row.pkValueLower ?? row.pkValue.toLowerCase();
                     tableIndex.set(pkValueLower, row);
                     if (isDecisionTable) {
@@ -576,7 +639,13 @@ export class SwatIndexer {
                 this.index.set(tableName, tableIndex);
             }
 
-            this.fkReferences = (payload.fkReferences || []) as FKReference[];
+            this.fkReferences = ((payload.fkReferences || []) as FKReference[]).map((ref) => {
+                // Normalize the stored source file path to the current environment
+                if (ref.sourceFile) {
+                    ref.sourceFile = normalizeIndexedPath(ref.sourceFile);
+                }
+                return ref;
+            });
 
             return {
                 success: true,
@@ -816,6 +885,10 @@ export class SwatIndexer {
                 const tableIndex = new Map<string, IndexedRow>();
                 const isDecisionTable = tableName.includes('dtl');
                 (rows as IndexedRow[]).forEach((row) => {
+                    // Normalize stored file path — see normalizeIndexedPath for details
+                    if (row.file) {
+                        row.file = normalizeIndexedPath(row.file);
+                    }
                     const pkValueLower = row.pkValueLower ?? row.pkValue.toLowerCase();
                     tableIndex.set(pkValueLower, row);
                     if (isDecisionTable) {
@@ -825,7 +898,13 @@ export class SwatIndexer {
                 this.index.set(tableName, tableIndex);
             }
 
-            this.fkReferences = (payload.fkReferences || []) as FKReference[];
+            this.fkReferences = ((payload.fkReferences || []) as FKReference[]).map((ref) => {
+                // Normalize the stored source file path for the current environment
+                if (ref.sourceFile) {
+                    ref.sourceFile = normalizeIndexedPath(ref.sourceFile);
+                }
+                return ref;
+            });
 
             if (payload.fileCioData && typeof payload.fileCioData === 'object') {
                 for (const [classification, data] of Object.entries(payload.fileCioData)) {

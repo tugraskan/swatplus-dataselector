@@ -2,6 +2,7 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { SwatDatasetWebviewProvider } from './swatWebviewProvider';
 import { SwatIndexer } from './indexer';
 import { SwatFKDefinitionProvider } from './fkDefinitionProvider';
@@ -12,6 +13,7 @@ import { SwatFKReferencesPanel } from './fkReferencesPanel';
 import { SwatTableViewerPanel } from './tableViewerPanel';
 import { SwatSingleTableViewerPanel } from './singleTableViewerPanel';
 import { normalizePathForComparison, pathStartsWith } from './pathUtils';
+import { detectEnvironment, resolvePathForEnvironment } from './environmentUtils';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -337,6 +339,176 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
+	// Command: Upload / import a dataset into the workdata/ folder
+	interface DatasetImportOption extends vscode.QuickPickItem {
+		action: 'open' | 'copy' | 'path';
+	}
+
+	const uploadDataset = vscode.commands.registerCommand('swat-dataset-selector.uploadDataset', async () => {
+		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		if (!workspaceRoot) {
+			vscode.window.showWarningMessage('No workspace folder found. Please open a workspace first.');
+			return;
+		}
+
+		// Ensure workdata/ directory exists (the devcontainer creates it on first start,
+		// but this also handles non-Codespaces environments like WSL or local installs)
+		const workdataDir = path.join(workspaceRoot, 'workdata');
+		if (!fs.existsSync(workdataDir)) {
+			fs.mkdirSync(workdataDir, { recursive: true });
+		}
+
+		const env = detectEnvironment();
+
+		// Build environment-aware option details
+		const openDetail = env.type === 'codespaces-browser' || env.type === 'codespaces-desktop'
+			? 'Upload files first: Explorer → right-click workdata/ → Upload, then select here'
+			: env.type === 'remote-wsl'
+				? 'Select a dataset already present in the workdata/ folder on the WSL filesystem'
+				: 'Select a dataset already present in the workdata/ folder';
+
+		const copyDetail = env.type === 'remote-wsl'
+			? 'Copy a dataset folder into workdata/ — Windows drives are accessible at /mnt/<drive>/'
+			: env.type === 'remote-ssh'
+				? 'Copy a dataset folder from elsewhere on the remote machine into workdata/'
+				: 'Copy a dataset folder from another location into workdata/';
+
+		const options: DatasetImportOption[] = [
+			{
+				label: '$(folder-opened) Select from workdata/ folder',
+				description: 'Select a dataset already in the workdata/ folder',
+				detail: openDetail,
+				action: 'open'
+			},
+			{
+				label: '$(copy) Copy dataset from another location',
+				description: 'Copy a dataset folder into workdata/',
+				detail: copyDetail,
+				action: 'copy'
+			},
+			{
+				label: '$(edit) Enter a path directly',
+				description: 'Type or paste a dataset path',
+				detail: env.mayHaveWindowsPaths
+					? 'WSL: you may paste a Windows path (e.g. C:\\Users\\...); it will be converted automatically'
+					: 'Type the full path to your dataset folder',
+				action: 'path'
+			}
+		];
+
+		const choice = await vscode.window.showQuickPick<DatasetImportOption>(
+			options,
+			{
+				title: `SWAT+: Upload / Import Dataset  [${env.label}]`,
+				placeHolder: 'Choose how to add your dataset to this workspace'
+			}
+		);
+
+		if (!choice) {
+			return;
+		}
+
+		if (choice.action === 'open') {
+			const result = await vscode.window.showOpenDialog({
+				canSelectFiles: false,
+				canSelectFolders: true,
+				canSelectMany: false,
+				defaultUri: vscode.Uri.file(workdataDir),
+				openLabel: 'Select Dataset',
+				title: 'Select SWAT+ Dataset Folder'
+			});
+			if (result && result.length > 0) {
+				const selectedPath = result[0].fsPath;
+				swatProvider.setSelectedDataset(selectedPath);
+				vscode.window.showInformationMessage(`SWAT+ Dataset selected: ${selectedPath}`);
+				await tryAutoLoadIndex(selectedPath);
+			}
+		} else if (choice.action === 'copy') {
+			const source = await vscode.window.showOpenDialog({
+				canSelectFiles: false,
+				canSelectFolders: true,
+				canSelectMany: false,
+				openLabel: 'Select Source Dataset',
+				title: 'Select SWAT+ Dataset Folder to Copy into workdata/'
+			});
+			if (!source || source.length === 0) {
+				return;
+			}
+
+			const sourcePath = source[0].fsPath;
+			const folderName = path.basename(sourcePath);
+			const targetPath = path.join(workdataDir, folderName);
+
+			if (fs.existsSync(targetPath)) {
+				const confirm = await vscode.window.showWarningMessage(
+					`Folder "${folderName}" already exists in workdata/. Overwrite?`,
+					{ modal: true },
+					'Overwrite'
+				);
+				if (confirm !== 'Overwrite') {
+					return;
+				}
+			}
+
+			try {
+				await vscode.window.withProgress(
+					{
+						location: vscode.ProgressLocation.Notification,
+						title: `Copying "${folderName}" to workdata/...`,
+						cancellable: false
+					},
+					async () => {
+						fs.cpSync(sourcePath, targetPath, { recursive: true });
+					}
+				);
+				swatProvider.setSelectedDataset(targetPath);
+				vscode.window.showInformationMessage(`Dataset "${folderName}" imported to workdata/ and selected.`);
+				await tryAutoLoadIndex(targetPath);
+			} catch (err) {
+				vscode.window.showErrorMessage('Failed to copy dataset: ' + (err instanceof Error ? err.message : String(err)));
+			}
+		} else {
+			// 'path': let the user type/paste a path directly
+			let placeholder: string;
+			if (env.mayHaveWindowsPaths) {
+				placeholder = 'e.g. C:\\Users\\you\\datasets\\Ames_sub1  or  /mnt/c/Users/you/datasets/Ames_sub1';
+			} else if (env.type === 'local-windows') {
+				placeholder = 'e.g. C:\\Users\\you\\datasets\\Ames_sub1';
+			} else {
+				placeholder = 'e.g. /workdata/Ames_sub1';
+			}
+
+			const typed = await vscode.window.showInputBox({
+				title: 'Enter Dataset Path',
+				prompt: env.mayHaveWindowsPaths
+					? 'Enter the path to your dataset (Windows paths like C:\\... are converted automatically)'
+					: 'Enter the full path to your SWAT+ dataset folder',
+				placeHolder: placeholder,
+				validateInput: (val) => {
+					if (!val || !val.trim()) {
+						return 'Please enter a path';
+					}
+					return undefined;
+				}
+			});
+
+			if (!typed) {
+				return;
+			}
+
+			const resolved = resolvePathForEnvironment(typed.trim(), env);
+			if (!fs.existsSync(resolved)) {
+				vscode.window.showErrorMessage(`Dataset folder not found: ${resolved}` +
+					(resolved !== typed.trim() ? ` (converted from "${typed.trim()}")` : ''));
+				return;
+			}
+
+			swatProvider.setSelectedDataset(resolved);
+			vscode.window.showInformationMessage(`SWAT+ Dataset selected: ${resolved}`);
+			await tryAutoLoadIndex(resolved);
+		}
+	});
+
 	context.subscriptions.push(
 		webviewViewProvider,
 		definitionProviderDisposable,
@@ -356,7 +528,8 @@ export function activate(context: vscode.ExtensionContext) {
 		showFKReferences,
 		showTableViewer,
 		exportIndexCmd,
-		seedTestData
+		seedTestData,
+		uploadDataset
 	);
 }
 

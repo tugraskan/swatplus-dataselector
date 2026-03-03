@@ -570,6 +570,13 @@ export class SwatSingleTableViewerPanel {
             }
             return this._getDecisionTableSubTableHtml(rows, resolvedFileName);
         }
+        // Special rendering for weather data files (.pcp, .tmp, .slr, .hmd, .wnd)
+        if (['.pcp', '.tmp', '.slr', '.hmd', '.wnd'].some(ext => resolvedFileName.endsWith(ext))) {
+            if (rows.length === 0) {
+                return '<p class="empty-message">No data</p>';
+            }
+            return this._getWeatherDataSubTableHtml(rows, resolvedFileName);
+        }
 
         // For empty tables, show table structure with headers from schema
         if (rows.length === 0) {
@@ -1022,6 +1029,85 @@ export class SwatSingleTableViewerPanel {
 
         html += `</div>`;
         
+        return html;
+    }
+
+    private _getWeatherDataSubTableHtml(rows: any[], fileName: string): string {
+        const metadata = this.indexer.getMetadata();
+        const fileMetadata = metadata?.file_metadata?.[fileName];
+
+        let html = '';
+        
+        // Add file description if available
+        if (fileMetadata && fileMetadata.description) {
+            html += `<div class="file-description">${this._escapeHtml(fileMetadata.description)}</div>`;
+        }
+
+        if (rows.length === 0) {
+            return '<p class="empty-message">No data</p>';
+        }
+
+        const mainRow = rows[0];
+        const nbyr = mainRow.values.nbyr || '0';
+        const tstep = mainRow.values.tstep || 'N/A';
+        const lat = mainRow.values.lat || 'N/A';
+        const lon = mainRow.values.lon || 'N/A';
+        const elev = mainRow.values.elev || 'N/A';
+
+        html += `
+            <div class="weather-data-header">
+                <h3>Weather Station Data</h3>
+                <div class="weather-metadata">
+                    <span><strong>Years:</strong> ${this._escapeHtml(nbyr)}</span>
+                    <span><strong>Timestep:</strong> ${this._escapeHtml(tstep)}</span>
+                    <span><strong>Latitude:</strong> ${this._escapeHtml(lat)}</span>
+                    <span><strong>Longitude:</strong> ${this._escapeHtml(lon)}</span>
+                    <span><strong>Elevation:</strong> ${this._escapeHtml(elev)}</span>
+                </div>
+            </div>
+        `;
+
+        // Display child rows as a table
+        if (mainRow.childRows && Array.isArray(mainRow.childRows) && mainRow.childRows.length > 0) {
+            const childRows = mainRow.childRows;
+            const columns = Object.keys(childRows[0].values || {});
+
+            html += `
+                <div class="weather-data-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+            `;
+            
+            columns.forEach((col) => {
+                html += `<th>${this._escapeHtml(col)}</th>`;
+            });
+            
+            html += `
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            childRows.forEach((row: any, idx: number) => {
+                html += `<tr><td>${idx + 1}</td>`;
+                columns.forEach((col) => {
+                    const val = row.values[col] || '';
+                    html += `<td>${this._escapeHtml(val)}</td>`;
+                });
+                html += `</tr>`;
+            });
+            
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        } else {
+            html += `<p class="empty-message">No data rows available</p>`;
+        }
+
         return html;
     }
 
@@ -2959,6 +3045,59 @@ export class SwatSingleTableViewerPanel {
             .fk-context-menu-item:hover {
                 background-color: var(--vscode-menu-selectionBackground);
                 color: var(--vscode-menu-selectionForeground);
+            }
+            
+            /* Weather data files table view */
+            .weather-data-header {
+                margin-bottom: 20px;
+                padding-bottom: 16px;
+                border-bottom: 1px solid var(--vscode-panel-border);
+            }
+            .weather-data-header h3 {
+                margin: 0 0 12px 0;
+                color: var(--vscode-foreground);
+            }
+            .weather-metadata {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 12px;
+                font-size: 12px;
+            }
+            .weather-metadata span {
+                padding: 6px 0;
+            }
+            .weather-data-table {
+                overflow-x: auto;
+                margin-top: 16px;
+            }
+            .weather-data-table table {
+                width: 100%;
+                border-collapse: collapse;
+                border: 1px solid var(--vscode-panel-border);
+                background-color: var(--vscode-editor-background);
+                font-size: 12px;
+            }
+            .weather-data-table thead {
+                background-color: var(--vscode-editorGroupHeader-tabsBackground);
+                position: sticky;
+                top: 0;
+            }
+            .weather-data-table th {
+                padding: 8px 12px;
+                text-align: left;
+                border-right: 1px solid var(--vscode-panel-border);
+                border-bottom: 1px solid var(--vscode-panel-border);
+                font-weight: 600;
+                color: var(--vscode-foreground);
+            }
+            .weather-data-table td {
+                padding: 6px 12px;
+                border-right: 1px solid var(--vscode-panel-border);
+                border-bottom: 1px solid var(--vscode-divider-background);
+                color: var(--vscode-foreground);
+            }
+            .weather-data-table tbody tr:hover {
+                background-color: var(--vscode-list-hoverBackground);
             }
         `;
     }

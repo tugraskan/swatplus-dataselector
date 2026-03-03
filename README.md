@@ -5,6 +5,7 @@ A VS Code extension for SWAT+ development that allows you to browse and select d
 ## Features
 
 - **Select Dataset Folder**: Browse and select a SWAT+ dataset folder
+- **Upload Dataset**: Import datasets into the `workdata/` folder — works in GitHub Codespaces (upload via Explorer, then select) and WSL Ubuntu (copy from `/mnt/c/...` or any path)
 - **Quick Debug Launch**: Select a dataset folder and immediately start debugging
 - **Seamless Integration**: Works with CMake Tools and gdb debugger configurations
 - **Comprehensive Schema**: Auto-generated schema for all 213 SWAT+ input tables from swatplus-editor
@@ -43,6 +44,7 @@ This extension provides the following commands:
 - `SWAT+: Select Dataset Folder` - Browse and select a dataset folder (saves selection for later use)
 - `SWAT+: Select Dataset and Debug` - Browse for a dataset folder and immediately launch debug session
 - `SWAT+: Debug with Selected Dataset` - Launch debug with previously selected dataset folder
+- `SWAT+: Upload Dataset to Workspace` - Import a dataset into the `workdata/` folder (Codespaces & WSL)
 - `SWAT+: Build Inputs Index` - Build an index of all SWAT+ input files in the selected dataset
 - `SWAT+: Load Cached Index` - Load a cached index from the dataset folder (index.json)
 - `SWAT+: Rebuild Inputs Index` - Rebuild the index for the currently selected dataset
@@ -69,6 +71,25 @@ This extension provides the following commands:
 2. Click "Select Folder" to choose your dataset folder
 3. Use the "Debug" button to launch a debug session
 4. Use the "Build Index" button to index all SWAT+ input files in the dataset
+
+### Method 4: Upload Dataset (GitHub Codespaces & WSL Ubuntu)
+
+The `SWAT+: Upload Dataset to Workspace` command (or the **Upload Dataset** button in the sidebar) makes it easy to bring your own dataset into a remote environment where you cannot simply browse a local path.
+
+#### GitHub Codespaces
+
+1. In the VS Code Explorer sidebar, right-click the `workdata/` folder and choose **Upload…** (or drag-and-drop your dataset folder onto it).
+2. Open the Command Palette (`Ctrl+Shift+P`) and run `SWAT+: Upload Dataset to Workspace`.
+3. Choose **Select from workdata/ folder** and pick the folder you just uploaded.
+4. The dataset is now active — build the index and start debugging.
+
+#### WSL Ubuntu
+
+1. Open the Command Palette (`Ctrl+Shift+P`) and run `SWAT+: Upload Dataset to Workspace`.
+2. Choose **Copy dataset from another location** to copy a dataset from your Windows filesystem (e.g. `/mnt/c/Users/you/myDataset`) into the `workdata/` folder inside the WSL workspace.
+3. The copied dataset is automatically selected — build the index and start debugging.
+
+> **Note:** The `workdata/` directory is listed in `.gitignore` so uploaded datasets are never accidentally committed.
 
 ## How It Works
 
