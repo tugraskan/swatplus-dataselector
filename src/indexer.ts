@@ -9,8 +9,9 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { spawnSync } from 'child_process';
+import * as os from 'os';
 import { normalizePathForComparison, resolveFileCioPath, normalizeIndexedPath } from './pathUtils';
-import { buildIndexNative } from './nativeIndexer';
 
 // TxtInOut metadata interface
 interface TxtInOutMetadata {
@@ -455,13 +456,138 @@ export class SwatIndexer {
     }
 
     /**
-     * Build the index using the native TypeScript indexer.
-     * No Python or external dependencies required.
+     * Build the index using the pandas helper script for tabular processing
      */
-    private buildIndexWithTypeScript(datasetPath: string): { success: boolean; tableCount: number; fkCount: number; error?: string } {
+    private buildIndexWithPandas(datasetPath: string): { success: boolean; tableCount: number; fkCount: number; error?: string } {
+        const scriptPath = path.join(this.context.extensionPath, 'scripts', 'pandas_indexer.py');
+        if (!fs.existsSync(scriptPath)) {
+            console.log('[Indexer] pandas_indexer.py not found, skipping pandas pipeline');
+            return { success: false, tableCount: 0, fkCount: 0, error: 'Indexer script not found' };
+        }
+
+        const schemaPath = this.resolveSchemaPath();
+        const metadataPath = path.join(this.context.extensionPath, 'resources', 'schema', 'txtinout-metadata.json');
+        const txtInOutPath = this.txtInOutPath ?? datasetPath;
+
+        // Try a list of candidate Python executables so the extension works on Windows/macOS/Linux
+        const candidates: string[] = [];
+        if (process.env.SWATPLUS_PYTHON) {
+            candidates.push(process.env.SWATPLUS_PYTHON);
+        }
+        // Common names on various platforms
+        candidates.push('python', 'python3', 'py');
+
+        const outputPath = path.join(os.tmpdir(), `swatplus-index-${Date.now()}.json`);
+        const args = [
+            scriptPath,
+            '--dataset',
+            txtInOutPath,
+            '--schema',
+            schemaPath,
+            '--metadata',
+            metadataPath,
+            '--output',
+            outputPath
+        ];
+
+        console.log(`[Indexer] Attempting pandas-backed indexing via candidates: ${candidates.join(', ')}`);
+
+        let lastError: string | undefined;
+        let result: import('child_process').SpawnSyncReturns<string> | null = null;
+
+        for (const pythonExecutable of candidates) {
+            try {
+                console.log(`[Indexer] Trying python executable: ${pythonExecutable}`);
+                // Increase maxBuffer to handle large JSON payloads emitted by the pandas indexer
+                result = spawnSync(pythonExecutable, args, { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 });
+            } catch (err: any) {
+                lastError = err.message || String(err);
+                console.warn(`[Indexer] Failed to start ${pythonExecutable}: ${lastError}`);
+                result = null;
+            }
+
+            if (!result) {
+                continue;
+            }
+
+            if (result.error) {
+                // If executable not found, try next candidate
+                lastError = result.error.message;
+                console.warn(`[Indexer] ${pythonExecutable} start error: ${lastError}`);
+                continue;
+            }
+
+            if (result.status === 0) {
+                // Success
+                console.log(`[Indexer] pandas pipeline succeeded with ${pythonExecutable}`);
+                break;
+            } else {
+                // Non-zero exit — check whether pandas is simply not installed
+                lastError = result.stderr || `Exit code ${result.status}`;
+                const stderrLower = (result.stderr || '').toLowerCase();
+                const isPandasMissing =
+                    stderrLower.includes("no module named 'pandas'") ||
+                    stderrLower.includes('no module named "pandas"') ||
+                    (stderrLower.includes('modulenotfounderror') && stderrLower.includes('pandas'));
+
+                if (isPandasMissing) {
+                    console.log(`[Indexer] pandas not found for ${pythonExecutable}, attempting auto-install via pip…`);
+                    vscode.window.showInformationMessage(
+                        'SWAT+: pandas not found — installing automatically. This may take a minute…'
+                    );
+                    // Use --user to install into the user site-packages, avoiding the need for
+                    // elevated privileges on systems with a protected system Python installation.
+                    const pipResult = spawnSync(
+                        pythonExecutable,
+                        ['-m', 'pip', 'install', '--user', '--quiet', 'pandas'],
+                        { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
+                    );
+                    if (!pipResult.error && pipResult.status === 0) {
+                        console.log(`[Indexer] pandas installed successfully via ${pythonExecutable}, retrying indexer…`);
+                        // Retry the indexer now that pandas is installed
+                        try {
+                            result = spawnSync(pythonExecutable, args, { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 });
+                        } catch (err: any) {
+                            lastError = err.message || String(err);
+                            result = null;
+                        }
+                        if (result && !result.error && result.status === 0) {
+                            console.log(`[Indexer] pandas pipeline succeeded after auto-install with ${pythonExecutable}`);
+                            break;
+                        }
+                        lastError = result?.stderr || `Exit code ${result?.status}`;
+                        console.warn(`[Indexer] Retry after auto-install failed: ${lastError}`);
+                    } else {
+                        const pipErr = pipResult.error?.message || pipResult.stderr || `pip exit code ${pipResult.status}`;
+                        console.warn(`[Indexer] pip install pandas failed: ${pipErr}`);
+                        lastError = `pandas missing and auto-install failed: ${pipErr}`;
+                    }
+                } else {
+                    console.warn(`[Indexer] ${pythonExecutable} exited with code ${result.status}: ${lastError}`);
+                }
+                // continue trying other candidates
+            }
+        }
+
+        if (!result) {
+            return { success: false, tableCount: 0, fkCount: 0, error: `Python not found: tried ${candidates.join(', ')}. Please install Python or set the SWATPLUS_PYTHON environment variable to the Python executable.` };
+        }
+
+        if (result.error) {
+            return { success: false, tableCount: 0, fkCount: 0, error: `Python failed to start: ${result.error.message}` };
+        }
+
+        if (result.status !== 0) {
+            const errorMsg = result.stderr || `Exit code ${result.status}, no stderr output`;
+            return { success: false, tableCount: 0, fkCount: 0, error: `Indexer failed: ${errorMsg}` };
+        }
+
         try {
-            console.log('[Indexer] Starting native TypeScript indexing...');
-            const payload = buildIndexNative(datasetPath, this.schema, this.metadata);
+            if (!fs.existsSync(outputPath)) {
+                return { success: false, tableCount: 0, fkCount: 0, error: 'Indexer output file not found.' };
+            }
+            const payloadContent = fs.readFileSync(outputPath, 'utf-8');
+            const payload = JSON.parse(payloadContent);
 
             this.index.clear();
             this.fkReferences = [];
@@ -469,14 +595,19 @@ export class SwatIndexer {
             this.decisionTableIndex.clear();
             this.dynamicFileToTableMap.clear();
 
-            for (const [fileName, tableName] of Object.entries(payload.fileTableMap)) {
-                this.dynamicFileToTableMap.set(fileName.toLowerCase(), tableName);
+            if (payload.fileTableMap && typeof payload.fileTableMap === 'object') {
+                for (const [fileName, tableName] of Object.entries(payload.fileTableMap)) {
+                    if (typeof fileName === 'string' && typeof tableName === 'string') {
+                        this.dynamicFileToTableMap.set(fileName.toLowerCase(), tableName);
+                    }
+                }
             }
 
-            for (const [tableName, rows] of Object.entries(payload.tables)) {
+            for (const [tableName, rows] of Object.entries(payload.tables || {})) {
                 const tableIndex = new Map<string, IndexedRow>();
                 const isDecisionTable = tableName.includes('dtl');
-                for (const row of rows) {
+                (rows as IndexedRow[]).forEach((row) => {
+                    // Normalize the stored file path to the current environment
                     if (row.file) {
                         row.file = normalizeIndexedPath(row.file);
                     }
@@ -485,18 +616,18 @@ export class SwatIndexer {
                     if (isDecisionTable) {
                         this.decisionTableIndex.set(pkValueLower, row);
                     }
-                }
+                });
                 this.index.set(tableName, tableIndex);
             }
 
-            this.fkReferences = payload.fkReferences.map((ref) => {
+            this.fkReferences = ((payload.fkReferences || []) as FKReference[]).map((ref) => {
+                // Normalize the stored source file path to the current environment
                 if (ref.sourceFile) {
                     ref.sourceFile = normalizeIndexedPath(ref.sourceFile);
                 }
                 return ref;
             });
 
-            console.log(`[Indexer] Native indexing complete: ${this.index.size} tables, ${this.fkReferences.length} FK references`);
             return {
                 success: true,
                 tableCount: this.index.size,
@@ -504,10 +635,19 @@ export class SwatIndexer {
             };
         } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);
-            console.warn(`[Indexer] Native indexing failed: ${errorMsg}`);
-            return { success: false, tableCount: 0, fkCount: 0, error: `Native indexer failed: ${errorMsg}` };
+            console.warn(`[Indexer] Unable to parse pandas pipeline output: ${errorMsg}`);
+            return { success: false, tableCount: 0, fkCount: 0, error: `Failed to parse indexer output: ${errorMsg}` };
+        } finally {
+            if (fs.existsSync(outputPath)) {
+                try {
+                    fs.unlinkSync(outputPath);
+                } catch (error) {
+                    console.warn(`[Indexer] Failed to remove temporary index output: ${error}`);
+                }
+            }
         }
     }
+
     /**
      * Build index for the given dataset path
      */
@@ -533,12 +673,12 @@ export class SwatIndexer {
             title: 'Building SWAT+ Inputs Index',
             cancellable: true
         }, async (progress, token) => {
-            // Use native TypeScript indexing (no Python/pandas required)
+            // Use pandas-backed indexing (required)
             progress.report({ message: 'Indexing files...', increment: 10 });
-            const indexDatasetPath = this.txtInOutPath || datasetPath;
-            const indexResult = this.buildIndexWithTypeScript(indexDatasetPath);
-            if (!indexResult.success) {
-                const errorDetail = indexResult.error || 'Unknown error';
+            const pandasDatasetPath = this.txtInOutPath || datasetPath;
+            const pandasResult = this.buildIndexWithPandas(pandasDatasetPath);
+            if (!pandasResult.success) {
+                const errorDetail = pandasResult.error || 'Unknown error';
                 vscode.window.showErrorMessage(
                     `Failed to build index: ${errorDetail}. ` +
                     'Check the Output panel for details.'
@@ -546,7 +686,7 @@ export class SwatIndexer {
                 return false;
             }
 
-            // Parse file.cio to add it to the index
+            // Parse file.cio after pandas indexing to add it to the index
             // file.cio has a special classification-based format handled separately
             progress.report({ message: 'Parsing file.cio...', increment: 70 });
             this.parseFileCio();
@@ -557,13 +697,13 @@ export class SwatIndexer {
             this.saveIndexCache(datasetPath);
 
             vscode.window.showInformationMessage(
-                `Index built successfully: ${indexResult.tableCount} tables, ${this.fkReferences.length} FK references`
+                `Index built successfully: ${pandasResult.tableCount} tables, ${this.fkReferences.length} FK references`
             );
 
             await this.context.workspaceState.update(`index:${datasetPath}`, {
                 built: true,
                 timestamp: new Date().toISOString(),
-                tableCount: indexResult.tableCount,
+                tableCount: pandasResult.tableCount,
                 fkCount: this.fkReferences.length
             });
 
