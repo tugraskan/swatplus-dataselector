@@ -1966,15 +1966,17 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
     </div>
 
     <script nonce="${nonce}">
-        // Environment info injected from the extension host at render time.
-        // Used by drop handlers to adapt behaviour per environment.
-        const SWAT_ENV = ${JSON.stringify({
-            type: env.type,
-            isBrowserUI: env.isBrowserUI,
-            isRemoteLinux: env.isRemoteLinux,
-            mayHaveWindowsPaths: env.mayHaveWindowsPaths
-        })};
         (function() {
+            // Environment info injected from the extension host at render time.
+            // Used by drop handlers to adapt behaviour per environment.
+            // Declared inside the IIFE so that any unexpected error here is contained
+            // within the IIFE scope and does not prevent event handlers from registering.
+            const SWAT_ENV = ${JSON.stringify({
+                type: env.type,
+                isBrowserUI: env.isBrowserUI,
+                isRemoteLinux: env.isRemoteLinux,
+                mayHaveWindowsPaths: env.mayHaveWindowsPaths
+            })};
             document.addEventListener('DOMContentLoaded', () => {
                 try {
                     const vscode = acquireVsCodeApi();
