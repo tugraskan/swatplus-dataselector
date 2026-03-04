@@ -16,7 +16,10 @@
     "Other"
   ],
   "activationEvents": [
-    "onLanguage:plaintext",
+    "onStartupFinished",
+    "onView:swatDatasetView",
+    "onCommand:swat-dataset-selector.selectDataset",
+    "onCommand:swat-dataset-selector.uploadDataset",
     "onCommand:swat-dataset-selector.buildIndex",
     "onCommand:swat-dataset-selector.loadIndex",
     "onCommand:swat-dataset-selector.rebuildIndex"
