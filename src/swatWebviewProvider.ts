@@ -1969,11 +1969,61 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 });
             });
 
+            // Drag-and-drop helpers shared by both drop zones
+
+            /**
+             * Returns true when the dataTransfer contains file-like data.
+             * Checks both 'Files' (Electron/OS file drag) and 'text/uri-list'
+             * (present even when 'Files' is absent in VS Code webview sandboxes).
+             */
+            function hasDragFiles(dataTransfer) {
+                if (!dataTransfer) { return false; }
+                const types = Array.from(dataTransfer.types);
+                return types.includes('Files') || types.includes('text/uri-list');
+            }
+
+            /**
+             * Extracts an OS filesystem path from a drop event.
+             *
+             * Strategy (in order):
+             *  1. file.path  — Electron extension, works in the main renderer but
+             *                  NOT inside VS Code webview sandboxes.
+             *  2. text/uri-list — standard; Electron DOES populate this even in
+             *                     sandboxed webviews when the source is the OS/Explorer.
+             *  3. Returns '' if neither method yields a path.
+             */
+            function getDroppedFsPath(e) {
+                const dt = e.dataTransfer;
+                if (!dt) { return ''; }
+                // Method 1: Electron File.path (only works outside the webview sandbox)
+                const files = dt.files;
+                if (files && files.length > 0 && files[0].path) {
+                    return files[0].path;
+                }
+                // Method 2: text/uri-list (works in most local Electron drag scenarios)
+                try {
+                    const uriList = dt.getData('text/uri-list');
+                    if (uriList) {
+                        const firstUri = uriList.split(/\r?\n/).find(line => line.trim() && !line.startsWith('#'));
+                        if (firstUri) {
+                            const url = new URL(firstUri.trim());
+                            if (url.protocol === 'file:') {
+                                let fsPath = decodeURIComponent(url.pathname);
+                                // Windows paths arrive as /C:/Users/... — strip the leading slash
+                                if (/^\/[A-Za-z]:\//.test(fsPath)) { fsPath = fsPath.slice(1); }
+                                return fsPath;
+                            }
+                        }
+                    }
+                } catch (err) { /* invalid URI — ignore */ }
+                return '';
+            }
+
             // Drag-and-drop: allow dropping a folder onto the recent datasets section
             const recentSection = document.getElementById('recent-section');
             if (recentSection) {
                 recentSection.addEventListener('dragover', (e) => {
-                    if (!e.dataTransfer || !e.dataTransfer.types.includes('Files')) { return; }
+                    if (!hasDragFiles(e.dataTransfer)) { return; }
                     e.preventDefault();
                     e.dataTransfer.dropEffect = 'copy';
                     recentSection.classList.add('drag-over');
@@ -1987,15 +2037,14 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 recentSection.addEventListener('drop', (e) => {
                     e.preventDefault();
                     recentSection.classList.remove('drag-over');
-                    const files = e.dataTransfer && e.dataTransfer.files;
-                    if (files && files.length > 0) {
-                        const file = files[0];
-                        // In VS Code's Electron renderer, File objects expose a .path property
-                        const filePath = file.path;
-                        if (filePath) {
-                            try { console.log('SWAT webview: drop dataset', filePath); } catch (err) {}
-                            swatHost.postMessage({ type: 'dropDataset', path: filePath });
-                        }
+                    const filePath = getDroppedFsPath(e);
+                    if (filePath) {
+                        try { console.log('SWAT webview: drop dataset', filePath); } catch (err) {}
+                        swatHost.postMessage({ type: 'dropDataset', path: filePath });
+                    } else {
+                        // Path not available (sandboxed / remote env) — open the folder picker
+                        try { console.log('SWAT webview: drop — no path, falling back to folder picker'); } catch (err) {}
+                        swatHost.postMessage({ type: 'selectDataset' });
                     }
                 });
             }
@@ -2034,8 +2083,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             const workdataSection = $('workdata-section');
             if (workdataDropZone && workdataSection) {
                 workdataSection.addEventListener('dragover', (e) => {
+                    if (!hasDragFiles(e.dataTransfer)) { return; }
                     e.preventDefault();
-                    if (!e.dataTransfer || !e.dataTransfer.types.includes('Files')) { return; }
                     e.dataTransfer.dropEffect = 'copy';
                     workdataDropZone.classList.add('drag-over');
                 });
@@ -2048,14 +2097,14 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 workdataSection.addEventListener('drop', (e) => {
                     e.preventDefault();
                     workdataDropZone.classList.remove('drag-over');
-                    const files = e.dataTransfer && e.dataTransfer.files;
-                    if (files && files.length > 0) {
-                        const file = files[0];
-                        const filePath = file.path;
-                        if (filePath) {
-                            try { console.log('SWAT webview: workdata drop', filePath); } catch (err) {}
-                            swatHost.postMessage({ type: 'dropDataset', path: filePath });
-                        }
+                    const filePath = getDroppedFsPath(e);
+                    if (filePath) {
+                        try { console.log('SWAT webview: workdata drop', filePath); } catch (err) {}
+                        swatHost.postMessage({ type: 'dropDataset', path: filePath });
+                    } else {
+                        // Path not available (sandboxed / remote env) — open the folder picker
+                        try { console.log('SWAT webview: workdata drop — no path, falling back to folder picker'); } catch (err) {}
+                        swatHost.postMessage({ type: 'selectDataset' });
                     }
                 });
             }
