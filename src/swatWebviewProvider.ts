@@ -926,7 +926,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             <div class="section-header collapsible" data-section="workdata">
                 <span class="collapse-icon">${svgs.chevronDown}</span>
                 ${svgs.folder}
-                <span class="section-title" title="${escapeHtml(effectiveDatasetDir || rawDatasetDir)}">${swatPlusMode ? 'Dataset Folder' : 'Workdata Datasets'}</span>
+                <span class="section-title" title="${escapeHtml(effectiveDatasetDir || datasetDirLabel)}">${swatPlusMode ? 'Dataset Folder' : 'Workdata Datasets'}</span>
                 <span class="badge">${workdataDatasets.length}</span>
                 ${swatPlusMode ? `<button class="icon-button" id="changeDatasetDirBtn" title="Change dataset folder" style="margin-left:auto">
                     ${svgs.folderOpened}
