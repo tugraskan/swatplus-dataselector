@@ -47,6 +47,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
     private currentDirectoryInputs: string | undefined; // Current directory being viewed in inputs section
     private currentDirectoryOutputs: string | undefined; // Current directory being viewed in outputs section
     private recentDatasets: string[] = [];
+    private _onChangeCallback?: (dataset: string | undefined) => void;
 
     constructor(
         private readonly context: vscode.ExtensionContext,
@@ -235,11 +236,17 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         this.recentDatasets = [p, ...this.recentDatasets.filter(d => d !== p)].slice(0, 10);
         this.context.globalState.update('recentDatasets', this.recentDatasets);
 
+        this._onChangeCallback?.(p);
         this._updateWebview();
     }
 
     public getSelectedDataset(): string | undefined {
         return this.selectedDataset;
+    }
+
+    /** Register a callback invoked whenever the active dataset changes. */
+    public setOnChangeCallback(cb: (dataset: string | undefined) => void): void {
+        this._onChangeCallback = cb;
     }
 
     private removeRecentDataset(datasetPath: string): void {

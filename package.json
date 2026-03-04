@@ -97,8 +97,27 @@
         "command": "swat-dataset-selector.revealWorkdataFolder",
         "title": "SWAT+: Reveal workdata/ Folder in Explorer",
         "icon": "$(folder-opened)"
+      },
+      {
+        "command": "swat-dataset-selector.switchDataset",
+        "title": "SWAT+: Switch Dataset",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "swat-dataset-selector.useAsDataset",
+        "title": "Use as SWAT+ Dataset",
+        "icon": "$(folder-opened)"
       }
     ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "swat-dataset-selector.useAsDataset",
+          "when": "explorerResourceIsFolder",
+          "group": "2_workspace@100"
+        }
+      ]
+    },
     "configuration": {
       "title": "SWAT+ Dataset Selector",
       "properties": {
