@@ -60,6 +60,17 @@ export function hasWorkspace(): boolean {
 }
 
 /**
+ * Returns true when the CMake Tools extension (`ms-vscode.cmake-tools`) is
+ * installed in this VS Code instance.
+ *
+ * When false, the Debug button and CMake-related UI should be hidden or
+ * disabled — the user is operating in a "data examination only" mode.
+ */
+export function isCmakeToolsInstalled(): boolean {
+    return vscode.extensions.getExtension('ms-vscode.cmake-tools') !== undefined;
+}
+
+/**
  * Detect the current VS Code environment by inspecting `vscode.env.remoteName`,
  * `vscode.env.uiKind`, and `process.platform`.
  */

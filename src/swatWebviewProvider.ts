@@ -4,7 +4,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
 import { resolveFileCioPath } from './pathUtils';
-import { detectEnvironment, hasWorkspace, EnvironmentInfo } from './environmentUtils';
+import { detectEnvironment, hasWorkspace, isCmakeToolsInstalled, EnvironmentInfo } from './environmentUtils';
 
 /**
  * Escapes HTML special characters to prevent XSS attacks
@@ -405,6 +405,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         // Detect the current VS Code environment for display and path hints
         const env: EnvironmentInfo = detectEnvironment();
+
+        // CMake Tools detection: Debug features are only meaningful when CMake Tools is present
+        const cmakeAvailable = isCmakeToolsInstalled();
 
         const svgs: { [key: string]: string } = {
             folder: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 4C1.44772 4 1 4.44772 1 5V12C1 12.5523 1.44772 13 2 13H14C14.5523 13 15 12.5523 15 12V6C15 5.44772 14.5523 5 14 5H8L6 3H2Z" fill="currentColor"/></svg>`,
@@ -1764,10 +1767,10 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     ${svgs.folderOpened}
                     Select Folder
                 </button>
-                <button class="action-button secondary${!this.selectedDataset ? ' disabled' : ''}" id="launchDebugBtn" ${!this.selectedDataset ? 'disabled' : ''}>
+                ${cmakeAvailable ? `<button class="action-button secondary${!this.selectedDataset ? ' disabled' : ''}" id="launchDebugBtn" ${!this.selectedDataset ? 'disabled' : ''}>
                     ${svgs.debugPlay}
                     Debug
-                </button>
+                </button>` : ''}
             </div>
             ${hasWorkspaceOpen ? `<button class="action-button secondary" id="uploadDatasetBtn" title="Upload or import a dataset into the workdata/ folder (Codespaces &amp; WSL)">
                 ${svgs.cloudUpload}
@@ -1808,8 +1811,10 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         </div>
 
         <div class="help-text">
-            Select a SWAT+ dataset folder to use as the working directory for debugging. 
-            The debug session will use CMake Tools to launch the target.
+            Select a SWAT+ dataset folder to browse its inputs and outputs.
+            ${cmakeAvailable
+                ? 'Use <strong>Debug</strong> to launch a SWAT+ debug session via CMake Tools.'
+                : 'Install <strong>CMake Tools</strong> to enable debug session support.'}
         </div>
 
         <div class="env-badge" title="${escapeHtml(env.description)}">

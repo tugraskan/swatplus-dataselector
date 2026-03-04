@@ -13,7 +13,7 @@ import { SwatFKReferencesPanel } from './fkReferencesPanel';
 import { SwatTableViewerPanel } from './tableViewerPanel';
 import { SwatSingleTableViewerPanel } from './singleTableViewerPanel';
 import { normalizePathForComparison, pathStartsWith } from './pathUtils';
-import { detectEnvironment, hasWorkspace, resolvePathForEnvironment } from './environmentUtils';
+import { detectEnvironment, hasWorkspace, isCmakeToolsInstalled, resolvePathForEnvironment } from './environmentUtils';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -90,7 +90,7 @@ export function activate(context: vscode.ExtensionContext) {
 			canSelectFolders: true,
 			canSelectMany: false,
 			openLabel: 'Select SWAT+ Dataset Folder',
-			title: 'Select SWAT+ Dataset Folder for Debugging'
+			title: 'Select SWAT+ Dataset Folder'
 		});
 
 		if (result && result.length > 0) {
@@ -103,13 +103,12 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Command to select dataset and launch debug
 	const selectAndDebug = vscode.commands.registerCommand('swat-dataset-selector.selectAndDebug', async () => {
-		// First, select the dataset folder
 		const result = await vscode.window.showOpenDialog({
 			canSelectFiles: false,
 			canSelectFolders: true,
 			canSelectMany: false,
 			openLabel: 'Select SWAT+ Dataset Folder',
-			title: 'Select SWAT+ Dataset Folder for Debugging'
+			title: 'Select SWAT+ Dataset Folder'
 		});
 
 		if (!result || result.length === 0) {
@@ -122,7 +121,6 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.showInformationMessage(`Selected dataset: ${selectedPath}`);
 		await tryAutoLoadIndex(selectedPath);
 
-		// Launch debug session with the selected folder
 		await launchDebugSession(selectedPath);
 	});
 
@@ -724,9 +722,21 @@ export function activate(context: vscode.ExtensionContext) {
 
 async function launchDebugSession(datasetFolder: string) {
 	const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-	
+
 	if (!workspaceFolder) {
-		vscode.window.showErrorMessage('No workspace folder found.');
+		vscode.window.showErrorMessage('No workspace folder found. Open a folder containing your SWAT+ CMake project first.');
+		return;
+	}
+
+	// Guard: CMake Tools must be installed for the debug launch to work
+	if (!isCmakeToolsInstalled()) {
+		const action = await vscode.window.showErrorMessage(
+			'Debug requires the CMake Tools extension. Install it to launch SWAT+ debug sessions.',
+			'Install CMake Tools'
+		);
+		if (action === 'Install CMake Tools') {
+			await vscode.commands.executeCommand('workbench.extensions.search', 'ms-vscode.cmake-tools');
+		}
 		return;
 	}
 
@@ -763,7 +773,7 @@ async function launchDebugSession(datasetFolder: string) {
 	if (success) {
 		vscode.window.showInformationMessage(`Debug session started with dataset: ${datasetFolder}`);
 	} else {
-		vscode.window.showErrorMessage('Failed to start debug session. Make sure CMake Tools is configured properly.');
+		vscode.window.showErrorMessage('Failed to start debug session. Make sure CMake Tools is configured and a build target is selected.');
 	}
 }
 
