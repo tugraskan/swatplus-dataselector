@@ -13,13 +13,16 @@ import { SwatFKReferencesPanel } from './fkReferencesPanel';
 import { SwatTableViewerPanel } from './tableViewerPanel';
 import { SwatSingleTableViewerPanel } from './singleTableViewerPanel';
 import { normalizePathForComparison, pathStartsWith } from './pathUtils';
-import { detectEnvironment, resolvePathForEnvironment } from './environmentUtils';
+import { detectEnvironment, hasWorkspace, isCmakeToolsInstalled, resolvePathForEnvironment } from './environmentUtils';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
+	try {
+		console.log('SWAT+ Dataset Selector extension is now active!');
 
-	console.log('SWAT+ Dataset Selector extension is now active!');
+	// Auto-open the SWAT+ Dataset sidebar panel when the extension activates
+	vscode.commands.executeCommand('workbench.view.extension.swat-dataset-selector');
 
 	// Initialize indexer and FK features
 	const indexer = new SwatIndexer(context);
@@ -87,7 +90,7 @@ export function activate(context: vscode.ExtensionContext) {
 			canSelectFolders: true,
 			canSelectMany: false,
 			openLabel: 'Select SWAT+ Dataset Folder',
-			title: 'Select SWAT+ Dataset Folder for Debugging'
+			title: 'Select SWAT+ Dataset Folder'
 		});
 
 		if (result && result.length > 0) {
@@ -100,13 +103,12 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Command to select dataset and launch debug
 	const selectAndDebug = vscode.commands.registerCommand('swat-dataset-selector.selectAndDebug', async () => {
-		// First, select the dataset folder
 		const result = await vscode.window.showOpenDialog({
 			canSelectFiles: false,
 			canSelectFolders: true,
 			canSelectMany: false,
 			openLabel: 'Select SWAT+ Dataset Folder',
-			title: 'Select SWAT+ Dataset Folder for Debugging'
+			title: 'Select SWAT+ Dataset Folder'
 		});
 
 		if (!result || result.length === 0) {
@@ -119,7 +121,6 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.showInformationMessage(`Selected dataset: ${selectedPath}`);
 		await tryAutoLoadIndex(selectedPath);
 
-		// Launch debug session with the selected folder
 		await launchDebugSession(selectedPath);
 	});
 
@@ -341,26 +342,26 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Command: Upload / import a dataset into the workdata/ folder
 	interface DatasetImportOption extends vscode.QuickPickItem {
-		action: 'open' | 'copy' | 'path';
+		action: 'open' | 'copy' | 'browse' | 'path';
 	}
 
 	const uploadDataset = vscode.commands.registerCommand('swat-dataset-selector.uploadDataset', async () => {
 		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-		if (!workspaceRoot) {
-			vscode.window.showWarningMessage('No workspace folder found. Please open a workspace first.');
-			return;
-		}
+		const env = detectEnvironment();
 
-		// Ensure workdata/ directory exists (the devcontainer creates it on first start,
-		// but this also handles non-Codespaces environments like WSL or local installs)
-		const workdataDir = path.join(workspaceRoot, 'workdata');
-		if (!fs.existsSync(workdataDir)) {
+		// Ensure workdata/ directory exists only when we have a workspace
+		const workdataDir = workspaceRoot ? path.join(workspaceRoot, 'workdata') : undefined;
+		if (workdataDir && !fs.existsSync(workdataDir)) {
 			fs.mkdirSync(workdataDir, { recursive: true });
 		}
 
-		const env = detectEnvironment();
+		// Build the list of options based on environment + workspace availability.
+		// Rules:
+		//   - workdata options require a workspace folder
+		//   - "Copy from another location" (native folder picker) is unavailable in browser UIs
+		//   - "Enter a path" is always available
+		//   - "Browse" is always available (uses VS Code open dialog which works in all non-browser envs)
 
-		// Build environment-aware option details
 		const openDetail = env.type === 'codespaces-browser' || env.type === 'codespaces-desktop'
 			? 'Upload files first: Explorer → right-click workdata/ → Upload, then select here'
 			: env.type === 'remote-wsl'
@@ -373,34 +374,55 @@ export function activate(context: vscode.ExtensionContext) {
 				? 'Copy a dataset folder from elsewhere on the remote machine into workdata/'
 				: 'Copy a dataset folder from another location into workdata/';
 
-		const options: DatasetImportOption[] = [
-			{
+		const options: DatasetImportOption[] = [];
+
+		if (workdataDir) {
+			options.push({
 				label: '$(folder-opened) Select from workdata/ folder',
 				description: 'Select a dataset already in the workdata/ folder',
 				detail: openDetail,
 				action: 'open'
-			},
-			{
+			});
+		}
+
+		// "Copy to workdata" requires both a workspace and a native folder picker (not browser UI)
+		if (workdataDir && !env.isBrowserUI) {
+			options.push({
 				label: '$(copy) Copy dataset from another location',
 				description: 'Copy a dataset folder into workdata/',
 				detail: copyDetail,
 				action: 'copy'
-			},
-			{
-				label: '$(edit) Enter a path directly',
-				description: 'Type or paste a dataset path',
-				detail: env.mayHaveWindowsPaths
-					? 'WSL: you may paste a Windows path (e.g. C:\\Users\\...); it will be converted automatically'
-					: 'Type the full path to your dataset folder',
-				action: 'path'
-			}
-		];
+			});
+		}
+
+		// "Browse" works everywhere except browser UIs (no native file picker)
+		if (!env.isBrowserUI) {
+			options.push({
+				label: '$(folder-opened) Browse for a dataset folder',
+				description: 'Open a folder picker and use the selected folder directly',
+				detail: 'The folder will be used as-is (not copied to workdata/)',
+				action: 'browse'
+			});
+		}
+
+		options.push({
+			label: '$(edit) Enter a path directly',
+			description: 'Type or paste a dataset path',
+			detail: env.mayHaveWindowsPaths
+				? 'WSL: you may paste a Windows path (e.g. C:\\Users\\...); it will be converted automatically'
+				: 'Type the full path to your dataset folder',
+			action: 'path'
+		});
+
+		const placeHolder = workspaceRoot
+			? 'Choose how to add your dataset to this workspace'
+			: 'Choose how to select a dataset (open a workspace to enable workdata/ options)';
 
 		const choice = await vscode.window.showQuickPick<DatasetImportOption>(
 			options,
 			{
 				title: `SWAT+: Upload / Import Dataset  [${env.label}]`,
-				placeHolder: 'Choose how to add your dataset to this workspace'
+				placeHolder
 			}
 		);
 
@@ -413,7 +435,21 @@ export function activate(context: vscode.ExtensionContext) {
 				canSelectFiles: false,
 				canSelectFolders: true,
 				canSelectMany: false,
-				defaultUri: vscode.Uri.file(workdataDir),
+				defaultUri: workdataDir ? vscode.Uri.file(workdataDir) : undefined,
+				openLabel: 'Select Dataset',
+				title: 'Select SWAT+ Dataset Folder'
+			});
+			if (result && result.length > 0) {
+				const selectedPath = result[0].fsPath;
+				swatProvider.setSelectedDataset(selectedPath);
+				vscode.window.showInformationMessage(`SWAT+ Dataset selected: ${selectedPath}`);
+				await tryAutoLoadIndex(selectedPath);
+			}
+		} else if (choice.action === 'browse') {
+			const result = await vscode.window.showOpenDialog({
+				canSelectFiles: false,
+				canSelectFolders: true,
+				canSelectMany: false,
 				openLabel: 'Select Dataset',
 				title: 'Select SWAT+ Dataset Folder'
 			});
@@ -437,7 +473,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 			const sourcePath = source[0].fsPath;
 			const folderName = path.basename(sourcePath);
-			const targetPath = path.join(workdataDir, folderName);
+			const targetPath = path.join(workdataDir!, folderName);
 
 			if (fs.existsSync(targetPath)) {
 				const confirm = await vscode.window.showWarningMessage(
@@ -509,6 +545,144 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
+	// Command: Reveal workdata/ folder in the VS Code Explorer
+	const revealWorkdataFolder = vscode.commands.registerCommand('swat-dataset-selector.revealWorkdataFolder', async () => {
+		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		if (!workspaceRoot) {
+			const action = await vscode.window.showWarningMessage(
+				'No workspace folder is open. Open a folder to use workdata/.',
+				'Open Folder'
+			);
+			if (action === 'Open Folder') {
+				await vscode.commands.executeCommand('vscode.openFolder');
+			}
+			return;
+		}
+		const workdataDir = path.join(workspaceRoot, 'workdata');
+		if (!fs.existsSync(workdataDir)) {
+			fs.mkdirSync(workdataDir, { recursive: true });
+		}
+		await vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(workdataDir));
+	});
+
+	// Command: Use a folder from the Explorer context menu as the active SWAT+ dataset
+	const useAsDataset = vscode.commands.registerCommand('swat-dataset-selector.useAsDataset', async (uri: vscode.Uri) => {
+		const folderPath = uri?.fsPath;
+		if (!folderPath) {
+			vscode.window.showWarningMessage('No folder selected.');
+			return;
+		}
+		swatProvider.setSelectedDataset(folderPath);
+		vscode.window.showInformationMessage(`SWAT+ Dataset: ${path.basename(folderPath)}`);
+		await tryAutoLoadIndex(folderPath);
+	});
+
+	// Status bar item — always visible, shows the active dataset name
+	const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10);
+	statusBarItem.command = 'swat-dataset-selector.switchDataset';
+	const updateStatusBar = (dataset: string | undefined) => {
+		if (dataset) {
+			statusBarItem.text = `$(folder) ${path.basename(dataset)}`;
+			statusBarItem.tooltip = `SWAT+ active dataset: ${dataset}\nClick to switch`;
+		} else {
+			statusBarItem.text = `$(folder) No SWAT+ dataset`;
+			statusBarItem.tooltip = 'Click to select a SWAT+ dataset';
+		}
+	};
+	updateStatusBar(swatProvider.getSelectedDataset());
+	swatProvider.setOnChangeCallback(updateStatusBar);
+	statusBarItem.show();
+
+	// Command: Switch dataset — quick-pick combining workdata/, recent datasets, and browse
+	const switchDataset = vscode.commands.registerCommand('swat-dataset-selector.switchDataset', async () => {
+		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		const workdataDir = workspaceRoot ? path.join(workspaceRoot, 'workdata') : undefined;
+		const env = detectEnvironment();
+
+		interface SwitchOption extends vscode.QuickPickItem {
+			action?: 'select' | 'browse' | 'upload';
+			datasetPath?: string;
+		}
+
+		const items: SwitchOption[] = [];
+
+		// Workdata datasets — only shown when a workspace is open
+		if (workdataDir && fs.existsSync(workdataDir)) {
+			const workdataDirs = fs.readdirSync(workdataDir, { withFileTypes: true })
+				.filter(e => e.isDirectory())
+				.map(e => path.join(workdataDir!, e.name));
+			if (workdataDirs.length > 0) {
+				items.push({ label: 'workdata/ datasets', kind: vscode.QuickPickItemKind.Separator });
+				for (const d of workdataDirs) {
+					items.push({
+						label: `$(folder) ${path.basename(d)}`,
+						description: d,
+						action: 'select',
+						datasetPath: d
+					});
+				}
+			}
+		}
+
+		// Recent datasets (deduplicated against workdata entries already listed)
+		const recentDatasets: string[] = context.globalState.get('recentDatasets', []);
+		const workdataEntries = new Set(items.filter(i => i.datasetPath).map(i => i.datasetPath!));
+		const recentFiltered = recentDatasets.filter(d => !workdataEntries.has(d));
+		if (recentFiltered.length > 0) {
+			items.push({ label: 'Recent datasets', kind: vscode.QuickPickItemKind.Separator });
+			for (const d of recentFiltered.slice(0, 5)) {
+				items.push({
+					label: `$(history) ${path.basename(d)}`,
+					description: d,
+					action: 'select',
+					datasetPath: d
+				});
+			}
+		}
+
+		// Footer actions
+		items.push({ label: '', kind: vscode.QuickPickItemKind.Separator });
+
+		// "Browse" is unavailable in browser UIs (no native file picker)
+		if (!env.isBrowserUI) {
+			items.push({
+				label: '$(folder-opened) Browse for folder...',
+				description: 'Open a folder picker',
+				action: 'browse'
+			});
+		}
+
+		items.push({
+			label: '$(cloud-upload) Upload / import dataset...',
+			description: workspaceRoot
+				? 'Copy a dataset into workdata/ or select by path'
+				: 'Select or enter a dataset path (open a workspace to enable workdata/ options)',
+			action: 'upload'
+		});
+
+		const placeHolder = workspaceRoot
+			? 'Select a SWAT+ dataset to activate'
+			: 'No workspace open — workdata/ options unavailable';
+
+		const chosen = await vscode.window.showQuickPick<SwitchOption>(items, {
+			title: 'SWAT+: Switch Dataset',
+			placeHolder
+		});
+
+		if (!chosen || !chosen.action) {
+			return;
+		}
+
+		if (chosen.action === 'browse') {
+			await vscode.commands.executeCommand('swat-dataset-selector.selectDataset');
+		} else if (chosen.action === 'upload') {
+			await vscode.commands.executeCommand('swat-dataset-selector.uploadDataset');
+		} else if (chosen.action === 'select' && chosen.datasetPath) {
+			swatProvider.setSelectedDataset(chosen.datasetPath);
+			await tryAutoLoadIndex(chosen.datasetPath);
+		}
+	});
+
 	context.subscriptions.push(
 		webviewViewProvider,
 		definitionProviderDisposable,
@@ -529,15 +703,40 @@ export function activate(context: vscode.ExtensionContext) {
 		showTableViewer,
 		exportIndexCmd,
 		seedTestData,
-		uploadDataset
+		uploadDataset,
+		revealWorkdataFolder,
+		useAsDataset,
+		switchDataset,
+		statusBarItem
 	);
+	} catch (err) {
+		console.error('SWAT+ Dataset Selector activation error', err);
+		try {
+			vscode.window.showErrorMessage('SWAT+ Dataset Selector activation failed: ' + (err instanceof Error ? err.message : String(err)));
+		} catch (e) {
+			console.error('Failed to show activation error message', e);
+		}
+	}
+
 }
 
 async function launchDebugSession(datasetFolder: string) {
 	const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-	
+
 	if (!workspaceFolder) {
-		vscode.window.showErrorMessage('No workspace folder found.');
+		vscode.window.showErrorMessage('No workspace folder found. Open a folder containing your SWAT+ CMake project first.');
+		return;
+	}
+
+	// Guard: CMake Tools must be installed for the debug launch to work
+	if (!isCmakeToolsInstalled()) {
+		const action = await vscode.window.showErrorMessage(
+			'Debug requires the CMake Tools extension. Install it to launch SWAT+ debug sessions.',
+			'Install CMake Tools'
+		);
+		if (action === 'Install CMake Tools') {
+			await vscode.commands.executeCommand('workbench.extensions.search', 'ms-vscode.cmake-tools');
+		}
 		return;
 	}
 
@@ -574,7 +773,7 @@ async function launchDebugSession(datasetFolder: string) {
 	if (success) {
 		vscode.window.showInformationMessage(`Debug session started with dataset: ${datasetFolder}`);
 	} else {
-		vscode.window.showErrorMessage('Failed to start debug session. Make sure CMake Tools is configured properly.');
+		vscode.window.showErrorMessage('Failed to start debug session. Make sure CMake Tools is configured and a build target is selected.');
 	}
 }
 

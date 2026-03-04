@@ -3,8 +3,8 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
-import { resolveFileCioPath } from './pathUtils';
-import { detectEnvironment, EnvironmentInfo } from './environmentUtils';
+import { resolveFileCioPath, wslPathToWindows } from './pathUtils';
+import { detectEnvironment, hasWorkspace, isCmakeToolsInstalled, isSwatPlusWorkspace, resolvePathForEnvironment, EnvironmentInfo } from './environmentUtils';
 
 /**
  * Escapes HTML special characters to prevent XSS attacks
@@ -47,6 +47,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
     private currentDirectoryInputs: string | undefined; // Current directory being viewed in inputs section
     private currentDirectoryOutputs: string | undefined; // Current directory being viewed in outputs section
     private recentDatasets: string[] = [];
+    private _onChangeCallback?: (dataset: string | undefined) => void;
 
     constructor(
         private readonly context: vscode.ExtensionContext,
@@ -78,7 +79,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
             // Handle messages from the webview
-            webviewView.webview.onDidReceiveMessage(data => {
+            webviewView.webview.onDidReceiveMessage(async data => {
                 console.log('SWAT: webview message received', data);
                 try {
                     if (!data || !data.type) {
@@ -195,6 +196,48 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                 });
                             }
                             break;
+                        case 'selectWorkdataDataset':
+                            if (data.path && typeof data.path === 'string') {
+                                this.setSelectedDataset(data.path);
+                                vscode.window.showInformationMessage(`SWAT+ Dataset selected: ${data.path}`);
+                            }
+                            break;
+                        case 'refreshWorkdata':
+                            this._updateWebview();
+                            break;
+                        case 'revealWorkdataFolder':
+                            vscode.commands.executeCommand('swat-dataset-selector.revealWorkdataFolder');
+                            break;
+                        case 'selectDatasetDirectory': {
+                            // Let the user pick the directory that contains dataset folders
+                            const result = await vscode.window.showOpenDialog({
+                                canSelectFiles: false,
+                                canSelectFolders: true,
+                                canSelectMany: false,
+                                openLabel: 'Select Dataset Folder',
+                                title: 'Select the directory that contains your SWAT+ dataset folders'
+                            });
+                            if (result && result.length > 0) {
+                                const chosen = result[0].fsPath;
+                                this.context.workspaceState.update('datasetDirectory', chosen);
+                                this._updateWebview();
+                            }
+                            break;
+                        }
+                        case 'revealSelectedDataset': {
+                            if (this.selectedDataset) {
+                                await vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(this.selectedDataset));
+                            }
+                            break;
+                        }
+                        case 'openFolder':
+                            vscode.commands.executeCommand('vscode.openFolder');
+                            break;
+                        case 'showError':
+                            if (typeof data.message === 'string') {
+                                vscode.window.showErrorMessage(data.message);
+                            }
+                            break;
                         default:
                             console.warn('swat webview unknown message', data);
                     }
@@ -223,11 +266,17 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         this.recentDatasets = [p, ...this.recentDatasets.filter(d => d !== p)].slice(0, 10);
         this.context.globalState.update('recentDatasets', this.recentDatasets);
 
+        this._onChangeCallback?.(p);
         this._updateWebview();
     }
 
     public getSelectedDataset(): string | undefined {
         return this.selectedDataset;
+    }
+
+    /** Register a callback invoked whenever the active dataset changes. */
+    public setOnChangeCallback(cb: (dataset: string | undefined) => void): void {
+        this._onChangeCallback = cb;
     }
 
     private removeRecentDataset(datasetPath: string): void {
@@ -246,12 +295,16 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         if (!droppedPath) {
             return;
         }
+        // Resolve the path for the current environment (e.g. convert Windows paths to /mnt/... in WSL)
+        const currentEnv = detectEnvironment();
+        const resolvedPath = resolvePathForEnvironment(droppedPath, currentEnv);
+
         // Validate it's a directory
         let stat: fs.Stats;
         try {
-            stat = fs.statSync(droppedPath);
+            stat = fs.statSync(resolvedPath);
         } catch {
-            vscode.window.showErrorMessage(`Dropped path not found: ${droppedPath}`);
+            vscode.window.showErrorMessage(`Dropped path not found: ${resolvedPath}`);
             return;
         }
         if (!stat.isDirectory()) {
@@ -259,33 +312,34 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             return;
         }
 
-        const folderName = path.basename(droppedPath);
+        const folderName = path.basename(resolvedPath);
         const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        const workdataDir = workspaceRoot ? path.join(workspaceRoot, 'workdata') : undefined;
+        const workdataDir = this._resolveDatasetDirectory();
+        const datasetDirName = workdataDir ? path.basename(workdataDir) : 'workdata';
         // Use path.relative to robustly detect containment (handles separator differences)
         const isAlreadyInWorkdata = workdataDir
-            ? !path.relative(workdataDir, droppedPath).startsWith('..')
+            ? !path.relative(workdataDir, resolvedPath).startsWith('..')
             : false;
 
-        let finalPath = droppedPath;
+        let finalPath = resolvedPath;
 
         if (workspaceRoot && workdataDir && !isAlreadyInWorkdata) {
             const choice = await vscode.window.showInformationMessage(
                 `Add "${folderName}" as a SWAT+ dataset?`,
                 'Add as-is',
-                'Copy to workdata/'
+                `Copy to ${datasetDirName}/`
             );
             if (!choice) {
                 return;
             }
-            if (choice === 'Copy to workdata/') {
+            if (choice === `Copy to ${datasetDirName}/`) {
                 if (!fs.existsSync(workdataDir)) {
                     fs.mkdirSync(workdataDir, { recursive: true });
                 }
                 const targetPath = path.join(workdataDir, folderName);
                 if (fs.existsSync(targetPath)) {
                     const confirm = await vscode.window.showWarningMessage(
-                        `"${folderName}" already exists in workdata/. Overwrite?`,
+                        `"${folderName}" already exists in ${datasetDirName}/. Overwrite?`,
                         { modal: true },
                         'Overwrite'
                     );
@@ -294,8 +348,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     }
                 }
                 await vscode.window.withProgress(
-                    { location: vscode.ProgressLocation.Notification, title: `Copying "${folderName}" to workdata/...`, cancellable: false },
-                    async () => { await fs.promises.cp(droppedPath, targetPath, { recursive: true }); }
+                    { location: vscode.ProgressLocation.Notification, title: `Copying "${folderName}" to ${datasetDirName}/...`, cancellable: false },
+                    async () => { await fs.promises.cp(resolvedPath, targetPath, { recursive: true }); }
                 );
                 finalPath = targetPath;
             }
@@ -303,6 +357,22 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         this.setSelectedDataset(finalPath);
         vscode.window.showInformationMessage(`Dataset added: ${path.basename(finalPath)}`);
+    }
+
+    /**
+     * Resolve the configured dataset directory to an absolute path.
+     * Priority: workspace-state override → `swatplus.datasetDirectory` setting → `'workdata'` fallback.
+     * Returns `undefined` when no workspace folder is open.
+     */
+    private _resolveDatasetDirectory(): string | undefined {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!workspaceRoot) {
+            return undefined;
+        }
+        const stored = this.context.workspaceState.get<string>('datasetDirectory');
+        const configured = vscode.workspace.getConfiguration('swatplus').get<string>('datasetDirectory') || 'workdata';
+        const raw = stored || configured;
+        return path.isAbsolute(raw) ? raw : path.join(workspaceRoot, raw);
     }
 
     private getSchemaDirectories(): string[] {
@@ -383,6 +453,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         // Detect the current VS Code environment for display and path hints
         const env: EnvironmentInfo = detectEnvironment();
+
+        // CMake Tools detection: Debug features are only meaningful when CMake Tools is present
+        const cmakeAvailable = isCmakeToolsInstalled();
 
         const svgs: { [key: string]: string } = {
             folder: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 4C1.44772 4 1 4.44772 1 5V12C1 12.5523 1.44772 13 2 13H14C14.5523 13 15 12.5523 15 12V6C15 5.44772 14.5523 5 14 5H8L6 3H2Z" fill="currentColor"/></svg>`,
@@ -761,6 +834,15 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             }
         }
 
+        // Per-environment drop zone hint for the recent-datasets section
+        const recentDropHint = env.isBrowserUI
+            ? `${svgs.cloudUpload} Use right-click &rarr; Upload in the Explorer to add datasets`
+            : (env.isRemoteLinux && !env.mayHaveWindowsPaths)
+                ? `${svgs.folder} Drop here to open a folder picker (remote host)`
+                : (env.mayHaveWindowsPaths
+                    ? `${svgs.folder} Drop a dataset folder here (Windows paths supported)`
+                    : `${svgs.folder} Drop a dataset folder here to add it`);
+
         const recentDatasetsHtml = `<div class="section" id="recent-section">
                 <div class="section-header collapsible" data-section="recent">
                     ${svgs.chevronDown}
@@ -782,10 +864,117 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         </div>
                     `).join('')}
                     <div class="drop-zone-hint${this.recentDatasets.length === 0 ? ' drop-zone-hint-empty' : ''}">
-                        ${svgs.folder} Drop a dataset folder here to add it
+                        ${recentDropHint}
                     </div>
                 </div>
                </div>`;
+
+        // --- Workdata / dataset-directory section ---
+        const workspaceRootForHtml = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const hasWorkspaceOpen = hasWorkspace();
+
+        // SWAT+ mode: CMake Tools installed + CMakeLists.txt at workspace root
+        // Inspector mode: no CMake project detected → recent datasets are the primary list
+        const swatPlusMode = isSwatPlusWorkspace();
+
+        // Resolve the effective dataset directory via shared helper
+        const effectiveDatasetDir = this._resolveDatasetDirectory();
+
+        // Keep the legacy workdataDirForHtml for backward-compatible drop handling
+        const workdataDirForHtml = effectiveDatasetDir;
+
+        let workdataDatasets: string[] = [];
+        if (effectiveDatasetDir && fs.existsSync(effectiveDatasetDir)) {
+            try {
+                workdataDatasets = fs.readdirSync(effectiveDatasetDir, { withFileTypes: true })
+                    .filter(e => e.isDirectory())
+                    .map(e => path.join(effectiveDatasetDir, e.name));
+            } catch (e) { /* ignore */ }
+        }
+
+        // Environment-specific upload tip
+        let uploadTip = '';
+        if (env.type === 'codespaces-browser') {
+            uploadTip = 'Codespaces (browser): right-click the dataset folder in the Explorer and choose <b>Upload &hellip;</b> to copy datasets from your machine.';
+        } else if (env.type === 'codespaces-desktop') {
+            uploadTip = 'Codespaces (desktop): drag folders into the dataset directory in the Explorer, or use <b>Upload Dataset</b> above.';
+        } else if (env.type === 'remote-wsl') {
+            uploadTip = 'WSL: paste a Windows path (e.g. <code>C:\\Users\\&hellip;</code>) via <b>Upload Dataset &rarr; Enter a path</b>, or copy files to the dataset folder.';
+        } else if (env.type === 'remote-ssh') {
+            uploadTip = 'Remote SSH: copy datasets to the dataset folder on the remote machine, then click Refresh.';
+        } else {
+            uploadTip = 'Drop a dataset folder below, or click <b>Upload Dataset</b> above to add it.';
+        }
+
+        const datasetDirLabel = effectiveDatasetDir
+            ? (workspaceRootForHtml && effectiveDatasetDir.startsWith(workspaceRootForHtml)
+                ? path.relative(workspaceRootForHtml, effectiveDatasetDir)
+                : effectiveDatasetDir)
+            : 'workdata';
+
+        const noWorkspaceBanner = !hasWorkspaceOpen
+            ? `<div class="no-workspace-banner">
+                <span class="codicon codicon-warning"></span>
+                <span>No workspace folder is open. <a href="#" id="openFolderLink">Open a folder</a> to use the dataset directory and dataset uploads.</span>
+              </div>`
+            : '';
+
+        // WSL mount path button — shown in WSL mode when a dataset is selected
+        const wslWinPath = (env.type === 'remote-wsl' && this.selectedDataset)
+            ? wslPathToWindows(this.selectedDataset)
+            : '';
+        // Only render the WSL row when conversion produced a real Windows path
+        const wslMountHtml = (wslWinPath && wslWinPath !== this.selectedDataset)
+            ? `<div class="wsl-mount-row">
+                <span class="wsl-mount-label" title="Windows path for this dataset (for WSL mounts)">
+                    ${svgs.info} Windows path: <code>${escapeHtml(wslWinPath)}</code>
+                </span>
+                <button class="icon-button" id="copyWslPathBtn" data-winpath="${escapeHtml(wslWinPath)}" title="Copy Windows path to clipboard">
+                    ${svgs.file}
+                </button>
+            </div>`
+            : '';
+
+        // Per-environment drop zone hint for the workdata/dataset-folder section
+        const workdataDropHint = env.isRemoteLinux && !env.mayHaveWindowsPaths
+            ? 'Drop to open a folder picker (remote host)'
+            : env.mayHaveWindowsPaths
+                ? 'Drop a dataset folder here (Windows paths supported)'
+                : 'Drop a dataset folder here';
+
+        const workdataHtml = hasWorkspaceOpen ? `<div class="section" id="workdata-section">
+            <div class="section-header collapsible" data-section="workdata">
+                <span class="collapse-icon">${svgs.chevronDown}</span>
+                ${svgs.folder}
+                <span class="section-title" title="${escapeHtml(effectiveDatasetDir || datasetDirLabel)}">${swatPlusMode ? 'Dataset Folder' : 'Workdata Datasets'}</span>
+                <span class="badge">${workdataDatasets.length}</span>
+                ${swatPlusMode ? `<button class="icon-button" id="changeDatasetDirBtn" title="Change dataset folder" style="margin-left:auto">
+                    ${svgs.folderOpened}
+                </button>` : `<button class="icon-button" id="revealWorkdataBtn" title="Reveal dataset folder in Explorer" style="margin-left:auto">
+                    ${svgs.folderOpened}
+                </button>`}
+                <button class="icon-button" id="refreshWorkdataBtn" title="Refresh dataset list">
+                    ${svgs.refresh}
+                </button>
+            </div>
+            <div class="section-content" id="workdata-content">
+                ${swatPlusMode ? `<div class="dataset-dir-path" title="${escapeHtml(effectiveDatasetDir || datasetDirLabel)}">${escapeHtml(datasetDirLabel)}</div>` : ''}
+                ${workdataDatasets.length === 0 ? '' : workdataDatasets.map(p => `
+                    <div class="workdata-item" data-path="${escapeHtml(p)}" title="${escapeHtml(p)}" style="cursor:pointer">
+                        ${svgs.folder}
+                        <div class="recent-item-info">
+                            <div class="recent-item-name">${escapeHtml(path.basename(p))}</div>
+                            <div class="recent-item-path">${escapeHtml(p)}</div>
+                        </div>
+                    </div>
+                `).join('')}
+                ${!env.isBrowserUI ? `<div class="workdata-drop-zone${workdataDatasets.length === 0 ? ' workdata-drop-zone-empty' : ''}" id="workdata-drop-zone">
+                    ${svgs.cloudUpload}
+                    <span>${workdataDropHint}</span>
+                </div>` : ''}
+                <div class="workdata-tip">${uploadTip}</div>
+            </div>
+        </div>` : '';
 
         // The combinedHtml above now replaces the separate TXTINOUT block.
 
@@ -1309,6 +1498,42 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             text-decoration: underline;
         }
 
+        .no-workspace-banner {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            background: var(--vscode-inputValidation-warningBackground, rgba(255,204,0,0.15));
+            border: 1px solid var(--vscode-inputValidation-warningBorder, rgba(255,204,0,0.5));
+            border-radius: 4px;
+            padding: 8px 10px;
+            margin-bottom: 8px;
+            font-size: 11px;
+            color: var(--vscode-foreground);
+            line-height: 1.5;
+        }
+
+        .no-workspace-banner .codicon {
+            flex-shrink: 0;
+            margin-top: 1px;
+            color: var(--vscode-editorWarning-foreground, #ffcc00);
+        }
+
+        .no-workspace-banner a {
+            color: var(--vscode-textLink-foreground);
+            text-decoration: none;
+        }
+
+        .no-workspace-banner a:hover {
+            text-decoration: underline;
+        }
+
+        .no-workspace-banner code {
+            font-family: var(--vscode-editor-font-family, monospace);
+            background: var(--vscode-textCodeBlock-background);
+            padding: 0 3px;
+            border-radius: 3px;
+        }
+
         /* Filter toolbar at the bottom of the selected-window */
         .filter-toolbar {
             display: flex;
@@ -1571,37 +1796,139 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         #recent-content {
             min-height: 40px;
         }
+
+        /* Workdata section */
+        .workdata-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.1s ease;
+        }
+
+        .workdata-item:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+
+        .workdata-drop-zone {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 8px;
+            margin-top: 4px;
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            border: 1px dashed var(--vscode-panel-border);
+            border-radius: 4px;
+            transition: background-color 0.1s, border-color 0.1s;
+        }
+
+        .workdata-drop-zone-empty {
+            padding: 14px 8px;
+        }
+
+        .workdata-drop-zone.drag-over,
+        #workdata-section.drag-over .workdata-drop-zone {
+            background-color: var(--vscode-list-dropBackground, rgba(0, 120, 215, 0.1));
+            border-color: var(--vscode-focusBorder);
+            border-style: solid;
+        }
+
+        .workdata-tip {
+            margin-top: 6px;
+            padding: 6px 8px;
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            background-color: var(--vscode-editor-infoBackground, rgba(0,120,215,0.06));
+            border-left: 2px solid var(--vscode-editorInfo-foreground, #75beff);
+            border-radius: 0 4px 4px 0;
+            line-height: 1.5;
+        }
+
+        .workdata-tip code {
+            font-family: var(--vscode-editor-font-family, monospace);
+            font-size: 10px;
+            background-color: var(--vscode-textCodeBlock-background);
+            padding: 1px 3px;
+            border-radius: 2px;
+        }
+
+        /* Dataset directory path label in SWAT+ mode */
+        .dataset-dir-path {
+            font-size: 10px;
+            color: var(--vscode-descriptionForeground);
+            padding: 2px 8px 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* WSL mount path row */
+        .wsl-mount-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            background-color: var(--vscode-editor-infoBackground, rgba(0,120,215,0.06));
+            border-left: 2px solid var(--vscode-editorInfo-foreground, #75beff);
+            margin: 4px 0;
+        }
+
+        .wsl-mount-label {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .wsl-mount-label code {
+            font-family: var(--vscode-editor-font-family, monospace);
+            font-size: 10px;
+            background-color: var(--vscode-textCodeBlock-background);
+            padding: 1px 3px;
+            border-radius: 2px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
+        ${noWorkspaceBanner}
         <div class="actions">
             <div class="button-row">
                 <button class="action-button secondary" id="selectDatasetBtn">
                     ${svgs.folderOpened}
                     Select Folder
                 </button>
-                <button class="action-button secondary${!this.selectedDataset ? ' disabled' : ''}" id="launchDebugBtn" ${!this.selectedDataset ? 'disabled' : ''}>
+                ${cmakeAvailable ? `<button class="action-button secondary${!this.selectedDataset ? ' disabled' : ''}" id="launchDebugBtn" ${!this.selectedDataset ? 'disabled' : ''}>
                     ${svgs.debugPlay}
                     Debug
-                </button>
+                </button>` : ''}
             </div>
-            <button class="action-button secondary" id="uploadDatasetBtn" title="Upload or import a dataset into the workdata/ folder (Codespaces &amp; WSL)">
+            ${hasWorkspaceOpen ? `<button class="action-button secondary" id="uploadDatasetBtn" title="Upload or import a dataset into the workdata/ folder (Codespaces &amp; WSL)">
                 ${svgs.cloudUpload}
                 Upload Dataset
-            </button>
+            </button>` : ''}
         </div>
 
         <div class="divider"></div>
 
         <div class="middle">
-            ${recentDatasetsHtml}
+            ${swatPlusMode ? '' : recentDatasetsHtml}
 
-            <!-- Divider separating Recent Datasets from Selected dataset window -->
+            ${workdataHtml}
+
+            <!-- Divider separating Dataset list from Selected dataset window -->
             <div class="divider" id="recent-divider" title="Recent / Selected separator"><div class="handle"></div></div>
 
             ${combinedHtml}
         </div>
+
+        ${wslMountHtml}
 
         <!-- Build Index button placed outside selected dataset section -->
         <div class="build-index-section" id="build-index-section" style="display: ${this.selectedDataset ? 'block' : 'none'};">
@@ -1623,8 +1950,13 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         </div>
 
         <div class="help-text">
-            Select a SWAT+ dataset folder to use as the working directory for debugging. 
-            The debug session will use CMake Tools to launch the target.
+            ${swatPlusMode
+                ? `Select a dataset from the <strong>${escapeHtml(datasetDirLabel)}/</strong> folder, or drop a folder into the Dataset Folder section. Use <strong>Debug</strong> to launch a SWAT+ debug session via CMake Tools.`
+                : `Select a SWAT+ dataset folder to browse its inputs and outputs.
+                    ${cmakeAvailable
+                        ? 'Use <strong>Debug</strong> to launch a SWAT+ debug session via CMake Tools.'
+                        : 'Install <strong>CMake Tools</strong> to enable debug session support.'}`
+            }
         </div>
 
         <div class="env-badge" title="${escapeHtml(env.description)}">
@@ -1635,6 +1967,16 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
     <script nonce="${nonce}">
         (function() {
+            // Environment info injected from the extension host at render time.
+            // Used by drop handlers to adapt behaviour per environment.
+            // Declared inside the IIFE so that any unexpected error here is contained
+            // within the IIFE scope and does not prevent event handlers from registering.
+            const SWAT_ENV = ${JSON.stringify({
+                type: env.type,
+                isBrowserUI: env.isBrowserUI,
+                isRemoteLinux: env.isRemoteLinux,
+                mayHaveWindowsPaths: env.mayHaveWindowsPaths
+            })};
             document.addEventListener('DOMContentLoaded', () => {
                 try {
                     const vscode = acquireVsCodeApi();
@@ -1720,6 +2062,13 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 swatHost.postMessage({ type: 'uploadDataset' });
             });
 
+            const openFolderLink = document.getElementById('openFolderLink');
+            // openFolderLink only exists in the DOM when no workspace is open (rendered by noWorkspaceBanner)
+            if (openFolderLink) openFolderLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                swatHost.postMessage({ type: 'openFolder' });
+            });
+
             const buildIndexBtn = $('buildIndexBtn');
             if (buildIndexBtn) buildIndexBtn.addEventListener('click', () => {
                 swatHost.postMessage({ type: 'buildIndex' });
@@ -1772,11 +2121,102 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 });
             });
 
+            // Drag-and-drop helpers shared by both drop zones
+
+            /**
+             * Returns true when the dataTransfer contains file-like data.
+             * Checks both 'Files' (Electron/OS file drag) and 'text/uri-list'
+             * (present even when 'Files' is absent in VS Code webview sandboxes).
+             *
+             * Returns false in browser-based UIs (Codespaces browser) where the
+             * browser security model prevents OS filesystem paths from being
+             * exposed via drag-and-drop.
+             */
+            function hasDragFiles(dataTransfer) {
+                // Codespaces browser: OS → browser DnD is blocked by browser security.
+                // Returning false prevents misleading drag-highlight feedback.
+                if (SWAT_ENV.isBrowserUI) { return false; }
+                if (!dataTransfer) { return false; }
+                const types = Array.from(dataTransfer.types);
+                return types.includes('Files') || types.includes('text/uri-list');
+            }
+
+            /**
+             * Extracts an OS filesystem path from a drop event.
+             *
+             * Strategy (in order):
+             *  1. file.path  — Electron extension, works in the main renderer but
+             *                  NOT inside VS Code webview sandboxes.
+             *  2. text/uri-list — standard; Electron DOES populate this even in
+             *                     sandboxed webviews when the source is the OS/Explorer.
+             *  3. Returns '' if neither method yields a path.
+             *
+             * Note: WSL Windows paths (C:\\...) are sent as-is to the extension host
+             * where resolvePathForEnvironment() converts them to /mnt/<drive>/...
+             */
+            function getDroppedFsPath(e) {
+                const dt = e.dataTransfer;
+                if (!dt) { return ''; }
+                // Method 1: Electron File.path (only works outside the webview sandbox)
+                const files = dt.files;
+                if (files && files.length > 0 && files[0].path) {
+                    return files[0].path;
+                }
+                // Method 2: text/uri-list (works in most local Electron drag scenarios)
+                try {
+                    const uriList = dt.getData('text/uri-list');
+                    if (uriList) {
+                        const firstUri = uriList.split(/\r?\n/).find(line => line.trim() && !line.startsWith('#'));
+                        if (firstUri) {
+                            const url = new URL(firstUri.trim());
+                            if (url.protocol === 'file:') {
+                                let fsPath = decodeURIComponent(url.pathname);
+                                // Windows paths arrive as /C:/Users/... — strip the leading slash
+                                if (/^\/[A-Za-z]:\//.test(fsPath)) { fsPath = fsPath.slice(1); }
+                                return fsPath;
+                            }
+                        }
+                    }
+                } catch (err) { /* invalid URI — ignore */ }
+                return '';
+            }
+
+            /**
+             * Handle a drop event on either drop zone.
+             * - Local environments: extract the filesystem path and send it to the host.
+             * - WSL: path is sent as-is (Windows C:\... format); the host converts it.
+             * - Remote Linux without Windows path access (Codespaces desktop, SSH, tunnel):
+             *   the path is a local client path that the remote host can't access, so we
+             *   fall back to the folder picker which browses the remote filesystem.
+             * - Browser UI: hasDragFiles() already returns false so this is never called.
+             */
+            function handleDrop(e, messageType) {
+                e.preventDefault();
+                // Remote (non-WSL) Linux hosts can't access the local client path —
+                // open the folder picker so the user can browse the remote filesystem.
+                if (SWAT_ENV.isRemoteLinux && !SWAT_ENV.mayHaveWindowsPaths) {
+                    // try/catch guards console.log in sandboxed webview contexts where
+                    // the global console object may not always be available.
+                    try { console.log('SWAT webview: remote drop — falling back to folder picker'); } catch (err) {}
+                    swatHost.postMessage({ type: 'selectDataset' });
+                    return;
+                }
+                const filePath = getDroppedFsPath(e);
+                if (filePath) {
+                    try { console.log('SWAT webview: drop', messageType, filePath); } catch (err) {}
+                    swatHost.postMessage({ type: 'dropDataset', path: filePath });
+                } else {
+                    // Path not available (sandboxed env) — open the folder picker
+                    try { console.log('SWAT webview: drop — no path, falling back to folder picker'); } catch (err) {}
+                    swatHost.postMessage({ type: 'selectDataset' });
+                }
+            }
+
             // Drag-and-drop: allow dropping a folder onto the recent datasets section
             const recentSection = document.getElementById('recent-section');
             if (recentSection) {
                 recentSection.addEventListener('dragover', (e) => {
-                    if (!e.dataTransfer || !e.dataTransfer.types.includes('Files')) { return; }
+                    if (!hasDragFiles(e.dataTransfer)) { return; }
                     e.preventDefault();
                     e.dataTransfer.dropEffect = 'copy';
                     recentSection.classList.add('drag-over');
@@ -1788,18 +2228,85 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     }
                 });
                 recentSection.addEventListener('drop', (e) => {
-                    e.preventDefault();
                     recentSection.classList.remove('drag-over');
-                    const files = e.dataTransfer && e.dataTransfer.files;
-                    if (files && files.length > 0) {
-                        const file = files[0];
-                        // In VS Code's Electron renderer, File objects expose a .path property
-                        const filePath = file.path;
-                        if (filePath) {
-                            try { console.log('SWAT webview: drop dataset', filePath); } catch (err) {}
-                            swatHost.postMessage({ type: 'dropDataset', path: filePath });
-                        }
+                    handleDrop(e, 'recent');
+                });
+            }
+
+            // Workdata section: click-to-select items
+            document.querySelectorAll('.workdata-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const p = item.dataset.path;
+                    if (p) {
+                        try { console.log('SWAT webview: workdata-item clicked', p); } catch (e) {}
+                        swatHost.postMessage({ type: 'selectWorkdataDataset', path: p });
                     }
+                });
+            });
+
+            // Workdata refresh button
+            const refreshWorkdataBtn = $('refreshWorkdataBtn');
+            if (refreshWorkdataBtn) {
+                refreshWorkdataBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    swatHost.postMessage({ type: 'refreshWorkdata' });
+                });
+            }
+
+            // Workdata reveal button (inspector mode)
+            const revealWorkdataBtn = $('revealWorkdataBtn');
+            if (revealWorkdataBtn) {
+                revealWorkdataBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    swatHost.postMessage({ type: 'revealWorkdataFolder' });
+                });
+            }
+
+            // Change Dataset Directory button (SWAT+ mode)
+            const changeDatasetDirBtn = $('changeDatasetDirBtn');
+            if (changeDatasetDirBtn) {
+                changeDatasetDirBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    swatHost.postMessage({ type: 'selectDatasetDirectory' });
+                });
+            }
+
+            // WSL mount path copy button
+            const copyWslPathBtn = $('copyWslPathBtn');
+            if (copyWslPathBtn) {
+                copyWslPathBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const winPath = copyWslPathBtn.dataset.winpath;
+                    if (winPath) {
+                        navigator.clipboard.writeText(winPath).then(() => {
+                            try { console.log('SWAT webview: WSL Windows path copied', winPath); } catch (err) {}
+                        }).catch((copyErr) => {
+                            try { console.error('SWAT webview: clipboard copy failed', copyErr); } catch (err) {}
+                            swatHost.postMessage({ type: 'showError', message: 'Could not copy to clipboard: ' + (copyErr instanceof Error ? copyErr.message : String(copyErr)) });
+                        });
+                    }
+                });
+            }
+
+            // Drag-and-drop: workdata drop zone
+            const workdataDropZone = $('workdata-drop-zone');
+            const workdataSection = $('workdata-section');
+            if (workdataDropZone && workdataSection) {
+                workdataSection.addEventListener('dragover', (e) => {
+                    if (!hasDragFiles(e.dataTransfer)) { return; }
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'copy';
+                    workdataDropZone.classList.add('drag-over');
+                });
+                workdataSection.addEventListener('dragleave', (e) => {
+                    const relatedTarget = e.relatedTarget;
+                    if (!relatedTarget || !workdataSection.contains(/** @type {Node} */ (relatedTarget))) {
+                        workdataDropZone.classList.remove('drag-over');
+                    }
+                });
+                workdataSection.addEventListener('drop', (e) => {
+                    workdataDropZone.classList.remove('drag-over');
+                    handleDrop(e, 'workdata');
                 });
             }
 
@@ -1959,6 +2466,23 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         const path = container ? container.dataset.path : undefined;
                         try { console.log('SWAT webview: delegated recent-item click', path); } catch (e) {}
                         if (path) swatHost.postMessage({ type: 'selectRecentDataset', path });
+                        return;
+                    }
+                    if (closest && closest('.workdata-item')) {
+                        const container = tgt.closest('.workdata-item');
+                        const path = container ? container.dataset.path : undefined;
+                        try { console.log('SWAT webview: delegated workdata-item click', path); } catch (e) {}
+                        if (path) swatHost.postMessage({ type: 'selectWorkdataDataset', path });
+                        return;
+                    }
+                    if (closest && closest('#revealWorkdataBtn')) {
+                        try { console.log('SWAT webview: delegated revealWorkdata click'); } catch (e) {}
+                        swatHost.postMessage({ type: 'revealWorkdataFolder' });
+                        return;
+                    }
+                    if (closest && closest('#refreshWorkdataBtn')) {
+                        try { console.log('SWAT webview: delegated refreshWorkdata click'); } catch (e) {}
+                        swatHost.postMessage({ type: 'refreshWorkdata' });
                         return;
                     }
                     if (closest && closest('.txt-item')) {

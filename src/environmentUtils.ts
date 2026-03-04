@@ -13,6 +13,8 @@
  */
 
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
 import { windowsPathToWsl } from './pathUtils';
 export { windowsPathToWsl };  // Re-export so existing callers don't need to change
 
@@ -46,6 +48,53 @@ export interface EnvironmentInfo {
     mayHaveWindowsPaths: boolean;
     /** True when the extension host process runs on Linux (remote or local). */
     isRemoteLinux: boolean;
+    /**
+     * True when the environment is a browser-based UI where a native folder
+     * picker cannot browse the local machine's filesystem.
+     * Currently true only for `codespaces-browser`.
+     */
+    isBrowserUI: boolean;
+}
+
+/** Returns true when at least one workspace folder is open. */
+export function hasWorkspace(): boolean {
+    return (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
+}
+
+/**
+ * Returns true when the CMake Tools extension (`ms-vscode.cmake-tools`) is
+ * installed in this VS Code instance.
+ *
+ * When false, the Debug button and CMake-related UI should be hidden or
+ * disabled — the user is operating in a "data examination only" mode.
+ */
+export function isCmakeToolsInstalled(): boolean {
+    return vscode.extensions.getExtension('ms-vscode.cmake-tools') !== undefined;
+}
+
+/**
+ * Returns true when the current workspace looks like a SWAT+ source checkout.
+ *
+ * The check uses two signals from the `swat-model/swatplus` repository layout:
+ *   1. A `CMakeLists.txt` file exists at the workspace root (every SWAT+ dev
+ *      workspace has this — it is the CMake build entry-point for the model).
+ *   2. The CMake Tools extension (`ms-vscode.cmake-tools`) is installed, which
+ *      is required to build and debug the SWAT+ model from VS Code.
+ *
+ * Both must be true; either alone would produce false-positives (e.g. a plain
+ * CMake C++ project satisfies (1), and having CMake Tools installed without a
+ * SWAT+ workspace open satisfies (2)).
+ *
+ * When false the extension falls back to "Inspector mode" where users browse
+ * individual `txtinout` dataset directories from a recent-datasets list.
+ */
+export function isSwatPlusWorkspace(): boolean {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot) {
+        return false;
+    }
+    const hasCMakeLists = fs.existsSync(path.join(workspaceRoot, 'CMakeLists.txt'));
+    return hasCMakeLists && isCmakeToolsInstalled();
 }
 
 /**
@@ -66,7 +115,8 @@ export function detectEnvironment(): EnvironmentInfo {
             description: `Remote WSL (${distro}) — Windows drives are accessible at /mnt/<drive>/. ` +
                          `You can paste Windows paths (C:\\...) and they will be converted automatically.`,
             mayHaveWindowsPaths: true,
-            isRemoteLinux: true
+            isRemoteLinux: true,
+            isBrowserUI: false
         };
     }
 
@@ -79,7 +129,8 @@ export function detectEnvironment(): EnvironmentInfo {
                 description: 'GitHub Codespaces via browser — upload datasets using the Explorer ' +
                              'upload option (right-click → Upload) and select them here.',
                 mayHaveWindowsPaths: false,
-                isRemoteLinux: true
+                isRemoteLinux: true,
+                isBrowserUI: true
             };
         }
         return {
@@ -89,7 +140,8 @@ export function detectEnvironment(): EnvironmentInfo {
             description: 'GitHub Codespaces via VS Code desktop — upload datasets using the ' +
                          'Explorer upload option or drag-and-drop from your local machine.',
             mayHaveWindowsPaths: false,
-            isRemoteLinux: true
+            isRemoteLinux: true,
+            isBrowserUI: false
         };
     }
 
@@ -100,7 +152,8 @@ export function detectEnvironment(): EnvironmentInfo {
             icon: 'remote',
             description: 'VS Code Remote SSH — paths are relative to the remote machine filesystem.',
             mayHaveWindowsPaths: false,
-            isRemoteLinux: platform === 'linux'
+            isRemoteLinux: platform === 'linux',
+            isBrowserUI: false
         };
     }
 
@@ -111,7 +164,8 @@ export function detectEnvironment(): EnvironmentInfo {
             icon: 'package',
             description: 'Dev Container (Docker) — paths are inside the container filesystem.',
             mayHaveWindowsPaths: false,
-            isRemoteLinux: true
+            isRemoteLinux: true,
+            isBrowserUI: false
         };
     }
 
@@ -122,7 +176,8 @@ export function detectEnvironment(): EnvironmentInfo {
             icon: 'remote-explorer',
             description: 'VS Code Tunnel — paths are relative to the tunnel host filesystem.',
             mayHaveWindowsPaths: false,
-            isRemoteLinux: platform === 'linux'
+            isRemoteLinux: platform === 'linux',
+            isBrowserUI: false
         };
     }
 
@@ -134,7 +189,8 @@ export function detectEnvironment(): EnvironmentInfo {
             icon: 'vm',
             description: 'Local Windows — use standard Windows paths (C:\\...).',
             mayHaveWindowsPaths: false,   // native Windows, no conversion needed
-            isRemoteLinux: false
+            isRemoteLinux: false,
+            isBrowserUI: false
         };
     }
     if (platform === 'darwin') {
@@ -144,7 +200,8 @@ export function detectEnvironment(): EnvironmentInfo {
             icon: 'vm',
             description: 'Local macOS — use standard POSIX paths (/Users/...).',
             mayHaveWindowsPaths: false,
-            isRemoteLinux: false
+            isRemoteLinux: false,
+            isBrowserUI: false
         };
     }
     if (platform === 'linux') {
@@ -154,7 +211,8 @@ export function detectEnvironment(): EnvironmentInfo {
             icon: 'vm',
             description: 'Local Linux — use standard POSIX paths (/home/...).',
             mayHaveWindowsPaths: false,
-            isRemoteLinux: false
+            isRemoteLinux: false,
+            isBrowserUI: false
         };
     }
 
@@ -164,7 +222,8 @@ export function detectEnvironment(): EnvironmentInfo {
         icon: 'question',
         description: 'Could not detect the VS Code environment.',
         mayHaveWindowsPaths: false,
-        isRemoteLinux: false
+        isRemoteLinux: false,
+        isBrowserUI: false
     };
 }
 
