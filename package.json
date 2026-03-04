@@ -131,6 +131,11 @@
             "type": "string"
           },
           "description": "Additional directories to scan for SWAT+ schema JSON files. Supports ${workspaceFolder}."
+        },
+        "swatplus.datasetDirectory": {
+          "type": "string",
+          "default": "workdata",
+          "description": "Directory (relative to the workspace root, or absolute) where SWAT+ dataset folders are stored. Used in SWAT+ mode (when CMake Tools is installed) as the primary dataset listing. Defaults to 'workdata'."
         }
       }
     }

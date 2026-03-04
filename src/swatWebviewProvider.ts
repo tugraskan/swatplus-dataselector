@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
-import { resolveFileCioPath } from './pathUtils';
+import { resolveFileCioPath, wslPathToWindows } from './pathUtils';
 import { detectEnvironment, hasWorkspace, isCmakeToolsInstalled, EnvironmentInfo } from './environmentUtils';
 
 /**
@@ -79,7 +79,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
             // Handle messages from the webview
-            webviewView.webview.onDidReceiveMessage(data => {
+            webviewView.webview.onDidReceiveMessage(async data => {
                 console.log('SWAT: webview message received', data);
                 try {
                     if (!data || !data.type) {
@@ -208,8 +208,35 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         case 'revealWorkdataFolder':
                             vscode.commands.executeCommand('swat-dataset-selector.revealWorkdataFolder');
                             break;
+                        case 'selectDatasetDirectory': {
+                            // Let the user pick the directory that contains dataset folders
+                            const result = await vscode.window.showOpenDialog({
+                                canSelectFiles: false,
+                                canSelectFolders: true,
+                                canSelectMany: false,
+                                openLabel: 'Select Dataset Folder',
+                                title: 'Select the directory that contains your SWAT+ dataset folders'
+                            });
+                            if (result && result.length > 0) {
+                                const chosen = result[0].fsPath;
+                                this.context.workspaceState.update('datasetDirectory', chosen);
+                                this._updateWebview();
+                            }
+                            break;
+                        }
+                        case 'revealSelectedDataset': {
+                            if (this.selectedDataset) {
+                                await vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(this.selectedDataset));
+                            }
+                            break;
+                        }
                         case 'openFolder':
                             vscode.commands.executeCommand('vscode.openFolder');
+                            break;
+                        case 'showError':
+                            if (typeof data.message === 'string') {
+                                vscode.window.showErrorMessage(data.message);
+                            }
                             break;
                         default:
                             console.warn('swat webview unknown message', data);
@@ -283,7 +310,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         const folderName = path.basename(droppedPath);
         const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        const workdataDir = workspaceRoot ? path.join(workspaceRoot, 'workdata') : undefined;
+        const workdataDir = this._resolveDatasetDirectory();
+        const datasetDirName = workdataDir ? path.basename(workdataDir) : 'workdata';
         // Use path.relative to robustly detect containment (handles separator differences)
         const isAlreadyInWorkdata = workdataDir
             ? !path.relative(workdataDir, droppedPath).startsWith('..')
@@ -295,19 +323,19 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             const choice = await vscode.window.showInformationMessage(
                 `Add "${folderName}" as a SWAT+ dataset?`,
                 'Add as-is',
-                'Copy to workdata/'
+                `Copy to ${datasetDirName}/`
             );
             if (!choice) {
                 return;
             }
-            if (choice === 'Copy to workdata/') {
+            if (choice === `Copy to ${datasetDirName}/`) {
                 if (!fs.existsSync(workdataDir)) {
                     fs.mkdirSync(workdataDir, { recursive: true });
                 }
                 const targetPath = path.join(workdataDir, folderName);
                 if (fs.existsSync(targetPath)) {
                     const confirm = await vscode.window.showWarningMessage(
-                        `"${folderName}" already exists in workdata/. Overwrite?`,
+                        `"${folderName}" already exists in ${datasetDirName}/. Overwrite?`,
                         { modal: true },
                         'Overwrite'
                     );
@@ -316,7 +344,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     }
                 }
                 await vscode.window.withProgress(
-                    { location: vscode.ProgressLocation.Notification, title: `Copying "${folderName}" to workdata/...`, cancellable: false },
+                    { location: vscode.ProgressLocation.Notification, title: `Copying "${folderName}" to ${datasetDirName}/...`, cancellable: false },
                     async () => { await fs.promises.cp(droppedPath, targetPath, { recursive: true }); }
                 );
                 finalPath = targetPath;
@@ -325,6 +353,22 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         this.setSelectedDataset(finalPath);
         vscode.window.showInformationMessage(`Dataset added: ${path.basename(finalPath)}`);
+    }
+
+    /**
+     * Resolve the configured dataset directory to an absolute path.
+     * Priority: workspace-state override → `swatplus.datasetDirectory` setting → `'workdata'` fallback.
+     * Returns `undefined` when no workspace folder is open.
+     */
+    private _resolveDatasetDirectory(): string | undefined {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!workspaceRoot) {
+            return undefined;
+        }
+        const stored = this.context.workspaceState.get<string>('datasetDirectory');
+        const configured = vscode.workspace.getConfiguration('swatplus').get<string>('datasetDirectory') || 'workdata';
+        const raw = stored || configured;
+        return path.isAbsolute(raw) ? raw : path.join(workspaceRoot, raw);
     }
 
     private getSchemaDirectories(): string[] {
@@ -812,54 +856,89 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 </div>
                </div>`;
 
-        // --- Workdata section ---
+        // --- Workdata / dataset-directory section ---
         const workspaceRootForHtml = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        const workdataDirForHtml = workspaceRootForHtml ? path.join(workspaceRootForHtml, 'workdata') : undefined;
         const hasWorkspaceOpen = hasWorkspace();
+
+        // SWAT+ mode: CMake Tools installed + workspace open → use a configurable dataset directory
+        // Inspector mode: no CMake → use workdata/ if available, but recent datasets are the primary list
+        const swatPlusMode = cmakeAvailable && hasWorkspaceOpen;
+
+        // Resolve the effective dataset directory via shared helper
+        const effectiveDatasetDir = this._resolveDatasetDirectory();
+
+        // Keep the legacy workdataDirForHtml for backward-compatible drop handling
+        const workdataDirForHtml = effectiveDatasetDir;
+
         let workdataDatasets: string[] = [];
-        if (workdataDirForHtml && fs.existsSync(workdataDirForHtml)) {
+        if (effectiveDatasetDir && fs.existsSync(effectiveDatasetDir)) {
             try {
-                workdataDatasets = fs.readdirSync(workdataDirForHtml, { withFileTypes: true })
+                workdataDatasets = fs.readdirSync(effectiveDatasetDir, { withFileTypes: true })
                     .filter(e => e.isDirectory())
-                    .map(e => path.join(workdataDirForHtml, e.name));
+                    .map(e => path.join(effectiveDatasetDir, e.name));
             } catch (e) { /* ignore */ }
         }
 
-        // Environment-specific upload tip (only used when workspace is open; workdataHtml is empty otherwise)
+        // Environment-specific upload tip
         let uploadTip = '';
         if (env.type === 'codespaces-browser') {
-            uploadTip = 'Codespaces (browser): right-click <code>workdata/</code> in the Explorer and choose <b>Upload &hellip;</b> to copy datasets from your machine.';
+            uploadTip = 'Codespaces (browser): right-click the dataset folder in the Explorer and choose <b>Upload &hellip;</b> to copy datasets from your machine.';
         } else if (env.type === 'codespaces-desktop') {
-            uploadTip = 'Codespaces (desktop): drag folders into the Explorer\'s <code>workdata/</code> folder, or use <b>Upload Dataset</b> above.';
+            uploadTip = 'Codespaces (desktop): drag folders into the dataset directory in the Explorer, or use <b>Upload Dataset</b> above.';
         } else if (env.type === 'remote-wsl') {
-            uploadTip = 'WSL: paste a Windows path (e.g. <code>C:\\Users\\&hellip;</code>) via <b>Upload Dataset &rarr; Enter a path</b>, or copy files to <code>workdata/</code>.';
+            uploadTip = 'WSL: paste a Windows path (e.g. <code>C:\\Users\\&hellip;</code>) via <b>Upload Dataset &rarr; Enter a path</b>, or copy files to the dataset folder.';
         } else if (env.type === 'remote-ssh') {
-            uploadTip = 'Remote SSH: copy datasets to <code>workdata/</code> on the remote machine, then click Refresh.';
+            uploadTip = 'Remote SSH: copy datasets to the dataset folder on the remote machine, then click Refresh.';
         } else {
-            uploadTip = 'Drop a dataset folder below, or click <b>Upload Dataset</b> above to add it to <code>workdata/</code>.';
+            uploadTip = 'Drop a dataset folder below, or click <b>Upload Dataset</b> above to add it.';
         }
+
+        const datasetDirLabel = effectiveDatasetDir
+            ? (workspaceRootForHtml && effectiveDatasetDir.startsWith(workspaceRootForHtml)
+                ? path.relative(workspaceRootForHtml, effectiveDatasetDir)
+                : effectiveDatasetDir)
+            : 'workdata';
 
         const noWorkspaceBanner = !hasWorkspaceOpen
             ? `<div class="no-workspace-banner">
                 <span class="codicon codicon-warning"></span>
-                <span>No workspace folder is open. <a href="#" id="openFolderLink">Open a folder</a> to use <code>workdata/</code> and dataset uploads.</span>
+                <span>No workspace folder is open. <a href="#" id="openFolderLink">Open a folder</a> to use the dataset directory and dataset uploads.</span>
               </div>`
+            : '';
+
+        // WSL mount path button — shown in WSL mode when a dataset is selected
+        const wslWinPath = (env.type === 'remote-wsl' && this.selectedDataset)
+            ? wslPathToWindows(this.selectedDataset)
+            : '';
+        // Only render the WSL row when conversion produced a real Windows path
+        const wslMountHtml = (wslWinPath && wslWinPath !== this.selectedDataset)
+            ? `<div class="wsl-mount-row">
+                <span class="wsl-mount-label" title="Windows path for this dataset (for WSL mounts)">
+                    ${svgs.info} Windows path: <code>${escapeHtml(wslWinPath)}</code>
+                </span>
+                <button class="icon-button" id="copyWslPathBtn" data-winpath="${escapeHtml(wslWinPath)}" title="Copy Windows path to clipboard">
+                    ${svgs.file}
+                </button>
+            </div>`
             : '';
 
         const workdataHtml = hasWorkspaceOpen ? `<div class="section" id="workdata-section">
             <div class="section-header collapsible" data-section="workdata">
                 <span class="collapse-icon">${svgs.chevronDown}</span>
                 ${svgs.folder}
-                <span class="section-title">Workdata Datasets</span>
+                <span class="section-title" title="${escapeHtml(effectiveDatasetDir || rawDatasetDir)}">${swatPlusMode ? 'Dataset Folder' : 'Workdata Datasets'}</span>
                 <span class="badge">${workdataDatasets.length}</span>
-                <button class="icon-button" id="revealWorkdataBtn" title="Reveal workdata/ folder in Explorer" style="margin-left:auto">
+                ${swatPlusMode ? `<button class="icon-button" id="changeDatasetDirBtn" title="Change dataset folder" style="margin-left:auto">
                     ${svgs.folderOpened}
-                </button>
-                <button class="icon-button" id="refreshWorkdataBtn" title="Refresh workdata/ list">
+                </button>` : `<button class="icon-button" id="revealWorkdataBtn" title="Reveal dataset folder in Explorer" style="margin-left:auto">
+                    ${svgs.folderOpened}
+                </button>`}
+                <button class="icon-button" id="refreshWorkdataBtn" title="Refresh dataset list">
                     ${svgs.refresh}
                 </button>
             </div>
             <div class="section-content" id="workdata-content">
+                ${swatPlusMode ? `<div class="dataset-dir-path" title="${escapeHtml(effectiveDatasetDir || datasetDirLabel)}">${escapeHtml(datasetDirLabel)}</div>` : ''}
                 ${workdataDatasets.length === 0 ? '' : workdataDatasets.map(p => `
                     <div class="workdata-item" data-path="${escapeHtml(p)}" title="${escapeHtml(p)}" style="cursor:pointer">
                         ${svgs.folder}
@@ -1756,6 +1835,44 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             padding: 1px 3px;
             border-radius: 2px;
         }
+
+        /* Dataset directory path label in SWAT+ mode */
+        .dataset-dir-path {
+            font-size: 10px;
+            color: var(--vscode-descriptionForeground);
+            padding: 2px 8px 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* WSL mount path row */
+        .wsl-mount-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            background-color: var(--vscode-editor-infoBackground, rgba(0,120,215,0.06));
+            border-left: 2px solid var(--vscode-editorInfo-foreground, #75beff);
+            margin: 4px 0;
+        }
+
+        .wsl-mount-label {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .wsl-mount-label code {
+            font-family: var(--vscode-editor-font-family, monospace);
+            font-size: 10px;
+            background-color: var(--vscode-textCodeBlock-background);
+            padding: 1px 3px;
+            border-radius: 2px;
+        }
     </style>
 </head>
 <body>
@@ -1781,15 +1898,17 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         <div class="divider"></div>
 
         <div class="middle">
-            ${recentDatasetsHtml}
+            ${swatPlusMode ? '' : recentDatasetsHtml}
 
             ${workdataHtml}
 
-            <!-- Divider separating Recent Datasets from Selected dataset window -->
+            <!-- Divider separating Dataset list from Selected dataset window -->
             <div class="divider" id="recent-divider" title="Recent / Selected separator"><div class="handle"></div></div>
 
             ${combinedHtml}
         </div>
+
+        ${wslMountHtml}
 
         <!-- Build Index button placed outside selected dataset section -->
         <div class="build-index-section" id="build-index-section" style="display: ${this.selectedDataset ? 'block' : 'none'};">
@@ -1811,10 +1930,13 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         </div>
 
         <div class="help-text">
-            Select a SWAT+ dataset folder to browse its inputs and outputs.
-            ${cmakeAvailable
-                ? 'Use <strong>Debug</strong> to launch a SWAT+ debug session via CMake Tools.'
-                : 'Install <strong>CMake Tools</strong> to enable debug session support.'}
+            ${swatPlusMode
+                ? `Select a dataset from the <strong>${escapeHtml(datasetDirLabel)}/</strong> folder, or drop a folder into the Dataset Folder section. Use <strong>Debug</strong> to launch a SWAT+ debug session via CMake Tools.`
+                : `Select a SWAT+ dataset folder to browse its inputs and outputs.
+                    ${cmakeAvailable
+                        ? 'Use <strong>Debug</strong> to launch a SWAT+ debug session via CMake Tools.'
+                        : 'Install <strong>CMake Tools</strong> to enable debug session support.'}`
+            }
         </div>
 
         <div class="env-badge" title="${escapeHtml(env.description)}">
@@ -2069,12 +2191,38 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 });
             }
 
-            // Workdata reveal button
+            // Workdata reveal button (inspector mode)
             const revealWorkdataBtn = $('revealWorkdataBtn');
             if (revealWorkdataBtn) {
                 revealWorkdataBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     swatHost.postMessage({ type: 'revealWorkdataFolder' });
+                });
+            }
+
+            // Change Dataset Directory button (SWAT+ mode)
+            const changeDatasetDirBtn = $('changeDatasetDirBtn');
+            if (changeDatasetDirBtn) {
+                changeDatasetDirBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    swatHost.postMessage({ type: 'selectDatasetDirectory' });
+                });
+            }
+
+            // WSL mount path copy button
+            const copyWslPathBtn = $('copyWslPathBtn');
+            if (copyWslPathBtn) {
+                copyWslPathBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const winPath = copyWslPathBtn.dataset.winpath;
+                    if (winPath) {
+                        navigator.clipboard.writeText(winPath).then(() => {
+                            try { console.log('SWAT webview: WSL Windows path copied', winPath); } catch (err) {}
+                        }).catch((copyErr) => {
+                            try { console.error('SWAT webview: clipboard copy failed', copyErr); } catch (err) {}
+                            swatHost.postMessage({ type: 'showError', message: 'Could not copy to clipboard: ' + (copyErr instanceof Error ? copyErr.message : String(copyErr)) });
+                        });
+                    }
                 });
             }
 

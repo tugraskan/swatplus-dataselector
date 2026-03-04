@@ -96,6 +96,25 @@ export function windowsPathToWsl(winPath: string): string {
 }
 
 /**
+ * Convert a WSL `/mnt/<drive>/` path back to its Windows-style equivalent.
+ *
+ * Examples:
+ *   `/mnt/c/Users/foo/bar`  → `C:\Users\foo\bar`
+ *   `/mnt/d/datasets/Ames`  → `D:\datasets\Ames`
+ *
+ * Returns the original string unchanged if it does not match a `/mnt/<drive>/` pattern.
+ */
+export function wslPathToWindows(wslPath: string): string {
+    const match = wslPath.match(/^\/mnt\/([a-z])(?:\/(.*))?$/);
+    if (!match) {
+        return wslPath;
+    }
+    const drive = match[1].toUpperCase();
+    const rest  = (match[2] || '').replace(/\//g, '\\');
+    return rest ? `${drive}:\\${rest}` : `${drive}:\\`;
+}
+
+/**
  * Normalise a file path that was stored in the index (or a persisted `index.json`
  * cache) so that it is valid for the current OS environment.
  *
