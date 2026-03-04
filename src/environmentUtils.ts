@@ -46,6 +46,17 @@ export interface EnvironmentInfo {
     mayHaveWindowsPaths: boolean;
     /** True when the extension host process runs on Linux (remote or local). */
     isRemoteLinux: boolean;
+    /**
+     * True when the environment is a browser-based UI where a native folder
+     * picker cannot browse the local machine's filesystem.
+     * Currently true only for `codespaces-browser`.
+     */
+    isBrowserUI: boolean;
+}
+
+/** Returns true when at least one workspace folder is open. */
+export function hasWorkspace(): boolean {
+    return (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
 }
 
 /**
@@ -66,7 +77,8 @@ export function detectEnvironment(): EnvironmentInfo {
             description: `Remote WSL (${distro}) — Windows drives are accessible at /mnt/<drive>/. ` +
                          `You can paste Windows paths (C:\\...) and they will be converted automatically.`,
             mayHaveWindowsPaths: true,
-            isRemoteLinux: true
+            isRemoteLinux: true,
+            isBrowserUI: false
         };
     }
 
@@ -79,7 +91,8 @@ export function detectEnvironment(): EnvironmentInfo {
                 description: 'GitHub Codespaces via browser — upload datasets using the Explorer ' +
                              'upload option (right-click → Upload) and select them here.',
                 mayHaveWindowsPaths: false,
-                isRemoteLinux: true
+                isRemoteLinux: true,
+                isBrowserUI: true
             };
         }
         return {
@@ -89,7 +102,8 @@ export function detectEnvironment(): EnvironmentInfo {
             description: 'GitHub Codespaces via VS Code desktop — upload datasets using the ' +
                          'Explorer upload option or drag-and-drop from your local machine.',
             mayHaveWindowsPaths: false,
-            isRemoteLinux: true
+            isRemoteLinux: true,
+            isBrowserUI: false
         };
     }
 
@@ -100,7 +114,8 @@ export function detectEnvironment(): EnvironmentInfo {
             icon: 'remote',
             description: 'VS Code Remote SSH — paths are relative to the remote machine filesystem.',
             mayHaveWindowsPaths: false,
-            isRemoteLinux: platform === 'linux'
+            isRemoteLinux: platform === 'linux',
+            isBrowserUI: false
         };
     }
 
@@ -111,7 +126,8 @@ export function detectEnvironment(): EnvironmentInfo {
             icon: 'package',
             description: 'Dev Container (Docker) — paths are inside the container filesystem.',
             mayHaveWindowsPaths: false,
-            isRemoteLinux: true
+            isRemoteLinux: true,
+            isBrowserUI: false
         };
     }
 
@@ -122,7 +138,8 @@ export function detectEnvironment(): EnvironmentInfo {
             icon: 'remote-explorer',
             description: 'VS Code Tunnel — paths are relative to the tunnel host filesystem.',
             mayHaveWindowsPaths: false,
-            isRemoteLinux: platform === 'linux'
+            isRemoteLinux: platform === 'linux',
+            isBrowserUI: false
         };
     }
 
@@ -134,7 +151,8 @@ export function detectEnvironment(): EnvironmentInfo {
             icon: 'vm',
             description: 'Local Windows — use standard Windows paths (C:\\...).',
             mayHaveWindowsPaths: false,   // native Windows, no conversion needed
-            isRemoteLinux: false
+            isRemoteLinux: false,
+            isBrowserUI: false
         };
     }
     if (platform === 'darwin') {
@@ -144,7 +162,8 @@ export function detectEnvironment(): EnvironmentInfo {
             icon: 'vm',
             description: 'Local macOS — use standard POSIX paths (/Users/...).',
             mayHaveWindowsPaths: false,
-            isRemoteLinux: false
+            isRemoteLinux: false,
+            isBrowserUI: false
         };
     }
     if (platform === 'linux') {
@@ -154,7 +173,8 @@ export function detectEnvironment(): EnvironmentInfo {
             icon: 'vm',
             description: 'Local Linux — use standard POSIX paths (/home/...).',
             mayHaveWindowsPaths: false,
-            isRemoteLinux: false
+            isRemoteLinux: false,
+            isBrowserUI: false
         };
     }
 
@@ -164,7 +184,8 @@ export function detectEnvironment(): EnvironmentInfo {
         icon: 'question',
         description: 'Could not detect the VS Code environment.',
         mayHaveWindowsPaths: false,
-        isRemoteLinux: false
+        isRemoteLinux: false,
+        isBrowserUI: false
     };
 }
 

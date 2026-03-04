@@ -4,7 +4,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
 import { resolveFileCioPath } from './pathUtils';
-import { detectEnvironment, EnvironmentInfo } from './environmentUtils';
+import { detectEnvironment, hasWorkspace, EnvironmentInfo } from './environmentUtils';
 
 /**
  * Escapes HTML special characters to prevent XSS attacks
@@ -207,6 +207,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                             break;
                         case 'revealWorkdataFolder':
                             vscode.commands.executeCommand('swat-dataset-selector.revealWorkdataFolder');
+                            break;
+                        case 'openFolder':
+                            vscode.commands.executeCommand('vscode.openFolder');
                             break;
                         default:
                             console.warn('swat webview unknown message', data);
@@ -809,6 +812,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         // --- Workdata section ---
         const workspaceRootForHtml = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         const workdataDirForHtml = workspaceRootForHtml ? path.join(workspaceRootForHtml, 'workdata') : undefined;
+        const hasWorkspaceOpen = hasWorkspace();
         let workdataDatasets: string[] = [];
         if (workdataDirForHtml && fs.existsSync(workdataDirForHtml)) {
             try {
@@ -818,7 +822,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             } catch (e) { /* ignore */ }
         }
 
-        // Environment-specific upload tip
+        // Environment-specific upload tip (only used when workspace is open; workdataHtml is empty otherwise)
         let uploadTip = '';
         if (env.type === 'codespaces-browser') {
             uploadTip = 'Codespaces (browser): right-click <code>workdata/</code> in the Explorer and choose <b>Upload &hellip;</b> to copy datasets from your machine.';
@@ -832,7 +836,14 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             uploadTip = 'Drop a dataset folder below, or click <b>Upload Dataset</b> above to add it to <code>workdata/</code>.';
         }
 
-        const workdataHtml = `<div class="section" id="workdata-section">
+        const noWorkspaceBanner = !hasWorkspaceOpen
+            ? `<div class="no-workspace-banner">
+                <span class="codicon codicon-warning"></span>
+                <span>No workspace folder is open. <a href="#" id="openFolderLink">Open a folder</a> to use <code>workdata/</code> and dataset uploads.</span>
+              </div>`
+            : '';
+
+        const workdataHtml = hasWorkspaceOpen ? `<div class="section" id="workdata-section">
             <div class="section-header collapsible" data-section="workdata">
                 <span class="collapse-icon">${svgs.chevronDown}</span>
                 ${svgs.folder}
@@ -861,7 +872,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 </div>
                 <div class="workdata-tip">${uploadTip}</div>
             </div>
-        </div>`;
+        </div>` : '';
 
         // The combinedHtml above now replaces the separate TXTINOUT block.
 
@@ -1385,6 +1396,42 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             text-decoration: underline;
         }
 
+        .no-workspace-banner {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            background: var(--vscode-inputValidation-warningBackground, rgba(255,204,0,0.15));
+            border: 1px solid var(--vscode-inputValidation-warningBorder, rgba(255,204,0,0.5));
+            border-radius: 4px;
+            padding: 8px 10px;
+            margin-bottom: 8px;
+            font-size: 11px;
+            color: var(--vscode-foreground);
+            line-height: 1.5;
+        }
+
+        .no-workspace-banner .codicon {
+            flex-shrink: 0;
+            margin-top: 1px;
+            color: var(--vscode-editorWarning-foreground, #ffcc00);
+        }
+
+        .no-workspace-banner a {
+            color: var(--vscode-textLink-foreground);
+            text-decoration: none;
+        }
+
+        .no-workspace-banner a:hover {
+            text-decoration: underline;
+        }
+
+        .no-workspace-banner code {
+            font-family: var(--vscode-editor-font-family, monospace);
+            background: var(--vscode-textCodeBlock-background);
+            padding: 0 3px;
+            border-radius: 3px;
+        }
+
         /* Filter toolbar at the bottom of the selected-window */
         .filter-toolbar {
             display: flex;
@@ -1710,6 +1757,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 </head>
 <body>
     <div class="container">
+        ${noWorkspaceBanner}
         <div class="actions">
             <div class="button-row">
                 <button class="action-button secondary" id="selectDatasetBtn">
@@ -1721,10 +1769,10 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     Debug
                 </button>
             </div>
-            <button class="action-button secondary" id="uploadDatasetBtn" title="Upload or import a dataset into the workdata/ folder (Codespaces &amp; WSL)">
+            ${hasWorkspaceOpen ? `<button class="action-button secondary" id="uploadDatasetBtn" title="Upload or import a dataset into the workdata/ folder (Codespaces &amp; WSL)">
                 ${svgs.cloudUpload}
                 Upload Dataset
-            </button>
+            </button>` : ''}
         </div>
 
         <div class="divider"></div>
@@ -1855,6 +1903,13 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             const uploadBtn = $('uploadDatasetBtn');
             if (uploadBtn) uploadBtn.addEventListener('click', () => {
                 swatHost.postMessage({ type: 'uploadDataset' });
+            });
+
+            const openFolderLink = document.getElementById('openFolderLink');
+            // openFolderLink only exists in the DOM when no workspace is open (rendered by noWorkspaceBanner)
+            if (openFolderLink) openFolderLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                swatHost.postMessage({ type: 'openFolder' });
             });
 
             const buildIndexBtn = $('buildIndexBtn');
