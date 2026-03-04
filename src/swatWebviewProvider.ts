@@ -4,7 +4,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
 import { resolveFileCioPath, wslPathToWindows } from './pathUtils';
-import { detectEnvironment, hasWorkspace, isCmakeToolsInstalled, EnvironmentInfo } from './environmentUtils';
+import { detectEnvironment, hasWorkspace, isCmakeToolsInstalled, isSwatPlusWorkspace, EnvironmentInfo } from './environmentUtils';
 
 /**
  * Escapes HTML special characters to prevent XSS attacks
@@ -860,9 +860,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         const workspaceRootForHtml = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         const hasWorkspaceOpen = hasWorkspace();
 
-        // SWAT+ mode: CMake Tools installed + workspace open → use a configurable dataset directory
-        // Inspector mode: no CMake → use workdata/ if available, but recent datasets are the primary list
-        const swatPlusMode = cmakeAvailable && hasWorkspaceOpen;
+        // SWAT+ mode: CMake Tools installed + CMakeLists.txt at workspace root
+        // Inspector mode: no CMake project detected → recent datasets are the primary list
+        const swatPlusMode = isSwatPlusWorkspace();
 
         // Resolve the effective dataset directory via shared helper
         const effectiveDatasetDir = this._resolveDatasetDirectory();

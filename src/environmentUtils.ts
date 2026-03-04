@@ -13,6 +13,8 @@
  */
 
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
 import { windowsPathToWsl } from './pathUtils';
 export { windowsPathToWsl };  // Re-export so existing callers don't need to change
 
@@ -68,6 +70,31 @@ export function hasWorkspace(): boolean {
  */
 export function isCmakeToolsInstalled(): boolean {
     return vscode.extensions.getExtension('ms-vscode.cmake-tools') !== undefined;
+}
+
+/**
+ * Returns true when the current workspace looks like a SWAT+ source checkout.
+ *
+ * The check uses two signals from the `swat-model/swatplus` repository layout:
+ *   1. A `CMakeLists.txt` file exists at the workspace root (every SWAT+ dev
+ *      workspace has this — it is the CMake build entry-point for the model).
+ *   2. The CMake Tools extension (`ms-vscode.cmake-tools`) is installed, which
+ *      is required to build and debug the SWAT+ model from VS Code.
+ *
+ * Both must be true; either alone would produce false-positives (e.g. a plain
+ * CMake C++ project satisfies (1), and having CMake Tools installed without a
+ * SWAT+ workspace open satisfies (2)).
+ *
+ * When false the extension falls back to "Inspector mode" where users browse
+ * individual `txtinout` dataset directories from a recent-datasets list.
+ */
+export function isSwatPlusWorkspace(): boolean {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot) {
+        return false;
+    }
+    const hasCMakeLists = fs.existsSync(path.join(workspaceRoot, 'CMakeLists.txt'));
+    return hasCMakeLists && isCmakeToolsInstalled();
 }
 
 /**
