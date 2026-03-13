@@ -385,10 +385,25 @@ export class SwatTableViewerPanel {
         }
 
         const issueCounts = new Map<string, { column: string; targetTable: string; count: number }>();
+        const missingRequiredFkCounts = new Map<string, { column: string; targetTable: string; count: number }>();
         for (const row of rows) {
             for (const [column, fkInfo] of fkColumns.entries()) {
                 const value = row.values[column];
                 if (!value) {
+                    const columnInfo = columnMetadata.get(column);
+                    if (columnInfo && columnInfo.nullable === false) {
+                        const issueKey = `${column}::${fkInfo.references.table}`;
+                        const existing = missingRequiredFkCounts.get(issueKey);
+                        if (existing) {
+                            existing.count += 1;
+                        } else {
+                            missingRequiredFkCounts.set(issueKey, {
+                                column,
+                                targetTable: fkInfo.references.table,
+                                count: 1
+                            });
+                        }
+                    }
                     continue;
                 }
                 const targetRow = this.indexer.resolveFKTarget(fkInfo.references.table, value);
@@ -470,26 +485,48 @@ export class SwatTableViewerPanel {
             </div>
         `;
 
+        const issueItems = Array.from(issueCounts.values()).sort((a, b) => {
+            const columnSort = a.column.localeCompare(b.column);
+            if (columnSort !== 0) {
+                return columnSort;
+            }
+            return a.targetTable.localeCompare(b.targetTable);
+        });
+        const missingRequiredItems = Array.from(missingRequiredFkCounts.values()).sort((a, b) => {
+            const columnSort = a.column.localeCompare(b.column);
+            if (columnSort !== 0) {
+                return columnSort;
+            }
+            return a.targetTable.localeCompare(b.targetTable);
+        });
+
         let issuesHtml = '';
-        if (issueCounts.size > 0) {
-            const issueItems = Array.from(issueCounts.values()).sort((a, b) => {
-                const columnSort = a.column.localeCompare(b.column);
-                if (columnSort !== 0) {
-                    return columnSort;
-                }
-                return a.targetTable.localeCompare(b.targetTable);
-            });
+        if (issueItems.length > 0 || missingRequiredItems.length > 0) {
             issuesHtml = `
                 <div class="issue-summary">
-                    <div class="issue-title">Issues</div>
-                    <ul>
-                        ${issueItems.map(issue => `
-                            <li>
-                                Unresolved foreign key values in <strong>${this._escapeHtml(issue.column)}</strong>
-                                → ${this._escapeHtml(issue.targetTable)} (${issue.count})
-                            </li>
-                        `).join('')}
-                    </ul>
+                    <div class="issue-title">Possible Issues</div>
+                    ${issueItems.length > 0 ? `
+                        <div class="issue-group-title">Unresolved references</div>
+                        <ul>
+                            ${issueItems.map(issue => `
+                                <li>
+                                    Foreign key values in <strong>${this._escapeHtml(issue.column)}</strong>
+                                    could not be matched to ${this._escapeHtml(issue.targetTable)} (${issue.count})
+                                </li>
+                            `).join('')}
+                        </ul>
+                    ` : ''}
+                    ${missingRequiredItems.length > 0 ? `
+                        <div class="issue-group-title">Missing required references</div>
+                        <ul>
+                            ${missingRequiredItems.map(issue => `
+                                <li>
+                                    Empty values found in required FK column <strong>${this._escapeHtml(issue.column)}</strong>
+                                    → ${this._escapeHtml(issue.targetTable)} (${issue.count})
+                                </li>
+                            `).join('')}
+                        </ul>
+                    ` : ''}
                 </div>
             `;
         }
@@ -754,8 +791,14 @@ export class SwatTableViewerPanel {
                 font-weight: 600;
                 margin-bottom: 6px;
             }
+            .issue-group-title {
+                margin-top: 8px;
+                margin-bottom: 4px;
+                font-weight: 500;
+                color: var(--vscode-descriptionForeground);
+            }
             .issue-summary ul {
-                margin: 0;
+                margin: 0 0 8px 0;
                 padding-left: 20px;
             }
             .issue-summary li {
