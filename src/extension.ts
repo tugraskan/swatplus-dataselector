@@ -13,6 +13,7 @@ import { SwatFKReferencesPanel } from './fkReferencesPanel';
 import { SwatTableViewerPanel } from './tableViewerPanel';
 import { SwatSingleTableViewerPanel } from './singleTableViewerPanel';
 import { SchemaEditorPanel } from './schemaEditorPanel';
+import { SwatDependencyGraphPanel } from './dependencyGraphPanel';
 import { normalizePathForComparison, pathStartsWith } from './pathUtils';
 import { detectEnvironment, hasWorkspace, isCmakeToolsInstalled, resolvePathForEnvironment } from './environmentUtils';
 
@@ -229,6 +230,128 @@ export function activate(context: vscode.ExtensionContext) {
 			// Automatically open file_cio table after successful index build
 			SwatSingleTableViewerPanel.createOrShow(indexer, 'file_cio');
 		}
+	});
+
+	const showDependencyGraph = vscode.commands.registerCommand('swat-dataset-selector.showDependencyGraph', async () => {
+		if (!indexer.isIndexBuilt()) {
+			vscode.window.showWarningMessage('No index available. Build or load an index first.');
+			return;
+		}
+
+		SwatDependencyGraphPanel.createOrShow(indexer);
+	});
+
+	const runDataQualityPreflight = vscode.commands.registerCommand('swat-dataset-selector.runDataQualityPreflight', async () => {
+		if (!indexer.isIndexBuilt()) {
+			vscode.window.showWarningMessage('No index available. Build or load an index first.');
+			return;
+		}
+
+		const stats = indexer.getIndexStats();
+		const allRefs = indexer.getAllFKReferences();
+		const unresolvedRefs = allRefs.filter(ref => !ref.resolved);
+		const unresolvedByTarget = new Map<string, number>();
+		const unresolvedBySourceColumn = new Map<string, number>();
+
+		for (const ref of unresolvedRefs) {
+			const targetKey = `${ref.targetTable}.${ref.targetColumn}`;
+			unresolvedByTarget.set(targetKey, (unresolvedByTarget.get(targetKey) || 0) + 1);
+			const sourceKey = `${ref.sourceTable}.${ref.sourceColumn}`;
+			unresolvedBySourceColumn.set(sourceKey, (unresolvedBySourceColumn.get(sourceKey) || 0) + 1);
+		}
+
+		const tableData = indexer.getIndexData();
+		const outboundByRow = new Map<string, number>();
+		for (const ref of allRefs) {
+			const rowKey = `${ref.sourceTable}:${ref.sourceFile}:${ref.sourceLine}`;
+			outboundByRow.set(rowKey, (outboundByRow.get(rowKey) || 0) + 1);
+		}
+
+		const orphanRows: Array<{ table: string; file: string; line: number; pk: string }> = [];
+		for (const [tableName, rows] of tableData.entries()) {
+			for (const row of rows.values()) {
+				const inbound = indexer.getReferencesToRow(tableName, row.pkValue).length;
+				const outbound = outboundByRow.get(`${tableName}:${row.file}:${row.lineNumber}`) || 0;
+				if (inbound === 0 && outbound === 0) {
+					orphanRows.push({ table: tableName, file: row.file, line: row.lineNumber, pk: row.pkValue });
+				}
+			}
+		}
+
+		orphanRows.sort((a, b) => {
+			if (a.table !== b.table) {
+				return a.table.localeCompare(b.table);
+			}
+			return a.line - b.line;
+		});
+
+		const sortMapDesc = (input: Map<string, number>): Array<[string, number]> => {
+			return Array.from(input.entries()).sort((a, b) => b[1] - a[1]);
+		};
+
+		const topUnresolvedTargets = sortMapDesc(unresolvedByTarget).slice(0, 25);
+		const topUnresolvedSources = sortMapDesc(unresolvedBySourceColumn).slice(0, 25);
+		const orphanSample = orphanRows.slice(0, 200);
+
+		const selectedPath = indexer.getDatasetPath();
+		const outputDir = selectedPath || context.extensionPath;
+		const outPath = path.join(outputDir, 'data-quality-preflight.md');
+
+		const lines: string[] = [];
+		lines.push('# SWAT+ Data Quality Preflight Report');
+		lines.push('');
+		lines.push(`Generated: ${new Date().toISOString()}`);
+		lines.push(`Dataset: ${selectedPath || '(unknown)'}`);
+		lines.push('');
+		lines.push('## Summary');
+		lines.push(`- Tables indexed: ${stats.tableCount}`);
+		lines.push(`- Rows indexed: ${stats.rowCount}`);
+		lines.push(`- Foreign key references: ${stats.fkCount}`);
+		lines.push(`- Resolved references: ${stats.resolvedFkCount}`);
+		lines.push(`- Unresolved references: ${stats.unresolvedFkCount}`);
+		lines.push(`- Potential orphan rows (no inbound and no outbound refs): ${orphanRows.length}`);
+		lines.push('');
+
+		lines.push('## Top unresolved targets');
+		if (topUnresolvedTargets.length === 0) {
+			lines.push('- None');
+		} else {
+			for (const [target, count] of topUnresolvedTargets) {
+				lines.push(`- ${target}: ${count}`);
+			}
+		}
+		lines.push('');
+
+		lines.push('## Top unresolved source columns');
+		if (topUnresolvedSources.length === 0) {
+			lines.push('- None');
+		} else {
+			for (const [source, count] of topUnresolvedSources) {
+				lines.push(`- ${source}: ${count}`);
+			}
+		}
+		lines.push('');
+
+		lines.push('## Potential orphan rows (sample, max 200)');
+		if (orphanSample.length === 0) {
+			lines.push('- None');
+		} else {
+			lines.push('| table | pk | file | line |');
+			lines.push('|---|---|---|---:|');
+			for (const row of orphanSample) {
+				lines.push(`| ${row.table} | ${row.pk} | ${row.file} | ${row.line} |`);
+			}
+			if (orphanRows.length > orphanSample.length) {
+				lines.push('');
+				lines.push(`_Only first ${orphanSample.length} rows shown._`);
+			}
+		}
+
+		fs.writeFileSync(outPath, `${lines.join('\n')}\n`, 'utf-8');
+
+		const doc = await vscode.workspace.openTextDocument(outPath);
+		await vscode.window.showTextDocument(doc, { preview: false });
+		vscode.window.showInformationMessage(`Data quality preflight report created: ${outPath}`);
 	});
 
 	// Command: Load cached index
@@ -562,6 +685,8 @@ export function activate(context: vscode.ExtensionContext) {
 		closeFile,
 		closeAllDatasetFiles,
 		buildIndex,
+		showDependencyGraph,
+		runDataQualityPreflight,
 		loadIndex,
 		rebuildIndex,
 		showFKReferences,
