@@ -1022,7 +1022,12 @@ def extract_atmo_details(row: dict, lines: List[str]) -> List[dict]:
     return child_rows
 
 
-def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> dict:
+def build_index(
+    dataset_path: Path,
+    schema_path: Path,
+    metadata_path: Path,
+    include_output_tables: bool = False
+) -> dict:
     schema = load_json(schema_path)
     metadata = load_json(metadata_path) if metadata_path.exists() else {}
 
@@ -1159,20 +1164,21 @@ def build_index(dataset_path: Path, schema_path: Path, metadata_path: Path) -> d
                 )
                 fk_references.extend(child_refs)
 
-    for extension, schema_file in WEATHER_DATA_SCHEMA_FILES.items():
-        table = schema.get("tables", {}).get(schema_file)
-        if not table:
-            continue
-        for file_path in dataset_path.glob(f"*{extension}"):
-            if file_path.name.lower() in processed_files:
+    if include_output_tables:
+        for extension, schema_file in WEATHER_DATA_SCHEMA_FILES.items():
+            table = schema.get("tables", {}).get(schema_file)
+            if not table:
                 continue
-            row_payload, file_map = build_weather_data_rows(file_path, table)
-            if not row_payload:
-                continue
-            table_name = table["table_name"]
-            tables_payload.setdefault(table_name, []).extend(row_payload)
-            file_table_map.update(file_map)
-            processed_files.add(file_path.name.lower())
+            for file_path in dataset_path.glob(f"*{extension}"):
+                if file_path.name.lower() in processed_files:
+                    continue
+                row_payload, file_map = build_weather_data_rows(file_path, table)
+                if not row_payload:
+                    continue
+                table_name = table["table_name"]
+                tables_payload.setdefault(table_name, []).extend(row_payload)
+                file_table_map.update(file_map)
+                processed_files.add(file_path.name.lower())
 
     # Process additional decision table files not covered by the schema
     for dtl_path in dataset_path.glob("*.dtl"):
@@ -1202,10 +1208,20 @@ def main() -> None:
     parser.add_argument("--schema", required=True, type=Path, help="Path to the schema JSON file")
     parser.add_argument("--metadata", required=True, type=Path, help="Path to the TxtInOut metadata JSON file")
     parser.add_argument("--output", type=Path, help="Optional output file path for JSON payload")
+    parser.add_argument(
+        "--include-output-tables",
+        action="store_true",
+        help="Include generated tables for output/weather data files (disabled by default)",
+    )
 
     args = parser.parse_args()
 
-    payload = build_index(args.dataset, args.schema, args.metadata)
+    payload = build_index(
+        args.dataset,
+        args.schema,
+        args.metadata,
+        include_output_tables=args.include_output_tables,
+    )
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         with args.output.open("w", encoding="utf-8") as handle:
