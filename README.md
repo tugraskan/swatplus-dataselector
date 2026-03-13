@@ -48,6 +48,8 @@ This extension provides the following commands:
 - `SWAT+: Build Inputs Index` - Build an index of all SWAT+ input files in the selected dataset
 - `SWAT+: Load Cached Index` - Load a cached index from the dataset folder (index.json)
 - `SWAT+: Rebuild Inputs Index` - Rebuild the index for the currently selected dataset
+- `SWAT+: Show Dependency Graph` - Open an edge-list graph of table-to-table dependencies from FK references
+- `SWAT+: Run Data Quality Preflight` - Generate a markdown report with unresolved references and potential orphan rows
 
 ## Usage
 
