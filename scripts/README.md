@@ -222,6 +222,39 @@ python3 scripts/pandas_indexer.py --dataset /path/to/TxtInOut \
   --metadata resources/schema/txtinout-metadata.json
 ```
 
+To include generated output/weather data tables (`*.pcp`, `*.tmp`, `*.slr`, `*.hmd`, `*.wnd`), opt in explicitly:
+
+```bash
+python3 scripts/pandas_indexer.py --dataset /path/to/TxtInOut \
+  --schema resources/schema/swatplus-editor-schema.json \
+  --metadata resources/schema/txtinout-metadata.json \
+  --include-output-tables
+```
+
 This prints a JSON payload containing table rows and foreign key references using the same shape consumed by the VS Code extension.
 
 The extension automatically uses this indexer when building the index. If the pandas indexer is not available (e.g., Python or pandas not installed), the extension falls back to a TypeScript-based indexer.
+
+## Quick DataFrame conversion for output JSON
+
+If your output JSON records are shaped like:
+
+```json
+{
+  "title": "...",
+  "header": ["..."],
+  "units": ["..."],
+  "data": [["..."], ["..."]]
+}
+```
+
+(or nested under keys like `outputs`, `tables`, `results`, etc.), convert them to quick DataFrame exports:
+
+```bash
+python3 scripts/output_to_dataframes.py --input /path/to/output.json --out-dir workdata/dataframes --format csv
+```
+
+Notes:
+- `header` / `units` can be arrays or whitespace-delimited strings.
+- `data` can be list rows or object rows.
+- If `units` are present, exports add a `__row_type` column and prepend a units row.
