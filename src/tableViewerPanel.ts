@@ -443,7 +443,7 @@ export class SwatTableViewerPanel {
             </div>
         `;
 
-        const columnRows = (schemaTable?.columns || []).map((col: any) => {
+        const columnRows = (schemaTable?.columns || []).filter((col: any) => col.type !== 'AutoField').map((col: any) => {
             const fkInfo = fkColumns.get(col.name);
             const pointerConfig = typeof filePointers === 'object' ? filePointers[col.name] : undefined;
             const pointerText = pointerConfig

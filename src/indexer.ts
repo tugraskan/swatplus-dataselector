@@ -609,7 +609,7 @@ export class SwatIndexer {
 
             // Handle hierarchical files
             if (isHierarchical && config && config !== 'description') {
-                let columnNames = table.columns.map(c => c.name);
+                let columnNames = table.columns.filter(c => c.type !== 'AutoField').map(c => c.name);
                 let startLine = Math.max(table.data_starts_after, 0);
                 
                 // Extract actual column names from header line if present
@@ -661,8 +661,8 @@ export class SwatIndexer {
         const rows: IndexedRow[] = [];
         const fkRefs: FKReference[] = [];
         
-        // Use schema column names
-        const columnNames = table.columns.map(c => c.name);
+        // Use schema column names, excluding AutoField columns (database-only fields like 'id' that don't exist in physical files)
+        const columnNames = table.columns.filter(c => c.type !== 'AutoField').map(c => c.name);
         let startLine = Math.max(table.data_starts_after, 0);
 
         // Don't strictly skip header lines - many SWAT+ files have metadata/headers

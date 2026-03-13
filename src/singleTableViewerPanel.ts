@@ -1905,7 +1905,7 @@ export class SwatSingleTableViewerPanel {
         let visibleColumnCount = 0;
         if (schemaTable.columns) {
             for (const column of schemaTable.columns) {
-                if (column.name !== 'id') {  // Skip auto-generated ID column
+                if (column.type !== 'AutoField') {  // Skip auto-generated ID column
                     const displayName = column.name;
                     html += `<th>${this._escapeHtml(displayName)}</th>`;
                     visibleColumnCount++;
