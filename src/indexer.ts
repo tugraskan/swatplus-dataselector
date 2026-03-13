@@ -530,6 +530,51 @@ export class SwatIndexer {
                 }
             }
 
+            // Index any extra *.dtl files present in TxtInOut that aren't covered by the schema
+            try {
+                const allFiles = fs.readdirSync(txtInOutPath);
+                const extraDtlFiles = allFiles.filter(f => f.toLowerCase().endsWith('.dtl'));
+                for (const dtlFileName of extraDtlFiles) {
+                    const derivedTableName = dtlFileName.replace(/\./g, '_').toLowerCase();
+                    if (this.index.has(derivedTableName)) {
+                        continue; // already indexed via schema
+                    }
+                    const dtlPath = path.join(txtInOutPath, dtlFileName);
+                    try {
+                        const content = fs.readFileSync(dtlPath, 'utf-8');
+                        const lines = content.split('\n');
+                        const fakeTable: SchemaTable = {
+                            file_name: dtlFileName,
+                            table_name: derivedTableName,
+                            model_class: '',
+                            has_metadata_line: false,
+                            has_header_line: false,
+                            data_starts_after: 0,
+                            columns: [],
+                            primary_keys: ['name'],
+                            foreign_keys: [],
+                            notes: ''
+                        };
+                        const { rows } = this.parseDecisionTableFile(dtlPath, fakeTable, lines);
+                        if (rows.length > 0) {
+                            const tableIndex = new Map<string, IndexedRow>();
+                            for (const row of rows) {
+                                const pkValueLower = row.pkValueLower ?? row.pkValue.toLowerCase();
+                                tableIndex.set(pkValueLower, row);
+                                this.decisionTableIndex.set(pkValueLower, row);
+                            }
+                            this.index.set(derivedTableName, tableIndex);
+                            this.dynamicFileToTableMap.set(dtlFileName.toLowerCase(), derivedTableName);
+                            console.log(`[Indexer] ✓ ${dtlFileName} (extra DTL): ${rows.length} rows`);
+                        }
+                    } catch (dtlErr) {
+                        console.warn(`[Indexer] Could not index extra DTL file ${dtlFileName}: ${dtlErr}`);
+                    }
+                }
+            } catch (scanErr) {
+                console.warn(`[Indexer] Could not scan for extra DTL files: ${scanErr}`);
+            }
+
             // Parse file.cio separately (handled later in buildIndex via parseFileCio)
             console.log(`[Indexer] TypeScript indexing complete: ${this.index.size} tables, ${totalFKCount} FK references`);
 
@@ -939,6 +984,13 @@ export class SwatIndexer {
 
     /**
      * Parse decision table files (*.dtl)
+     * Format per sub-table:
+     *   (global column header line: NAME CONDS ALTS ACTS — appears once after the count, skipped)
+     *   name  num_conds  num_alts  num_acts
+     *   [if num_conds > 0] conditions section header line (VAR OBJ OB_NUM...) — skipped
+     *   [num_conds condition lines]:  cond_var  obj  obj_num  lim_var  lim_op  lim_const  alt1..altN
+     *   [if num_acts > 0] actions section header line (ACT_TYP OBJ OBJ_NUM...) — skipped
+     *   [num_acts  action lines]:     act_typ   obj  obj_num  act_name act_option const const2 fp out1..outN
      */
     private parseDecisionTableFile(filePath: string, table: SchemaTable, lines: string[]): {
         rows: IndexedRow[];
@@ -949,54 +1001,122 @@ export class SwatIndexer {
             const rows: IndexedRow[] = [];
             const fkRefs: FKReference[] = [];
 
-            // Simplified DTL parsing - read main table names
             let lineNum = 1; // Skip title line
-            if (lineNum < lines.length) {
-                try {
-                    const numTables = parseInt(lines[lineNum].trim());
+            if (lineNum >= lines.length) {
+                return { rows, fkRefs, fileTableMap: true };
+            }
+
+            const numTables = parseInt(lines[lineNum].trim(), 10);
+            lineNum++;
+            if (!Number.isFinite(numTables) || numTables <= 0) {
+                return { rows, fkRefs, fileTableMap: true };
+            }
+
+            // Skip the global column header line "NAME CONDS ALTS ACTS" that follows the count
+            while (lineNum < lines.length && !lines[lineNum].trim()) { lineNum++; }
+            if (lineNum < lines.length && /^[a-z_\s]+$/i.test(lines[lineNum].trim()) && isNaN(parseInt(lines[lineNum].trim().split(/\s+/)[1], 10))) {
+                lineNum++; // skip the column header (e.g. "NAME CONDS ALTS ACTS")
+            }
+
+            for (let t = 0; t < numTables && lineNum < lines.length; t++) {
+                // Skip blank lines between sub-tables
+                while (lineNum < lines.length && !lines[lineNum].trim()) {
                     lineNum++;
-
-                    for (let t = 0; t < numTables && lineNum < lines.length; t++) {
-                        // Skip blank lines
-                        while (lineNum < lines.length && !lines[lineNum].trim()) {
-                            lineNum++;
-                        }
-
-                        if (lineNum >= lines.length) {
-                            break;
-                        }
-
-                        const headerLine = lines[lineNum].trim();
-                        const headerParts = headerLine.split(/\s+/);
-                        
-                        if (headerParts.length >= 4) {
-                            const dtlName = headerParts[0];
-                            const conds = headerParts[1];
-                            const alts = headerParts[2];
-                            const acts = headerParts[3];
-
-                            const row: IndexedRow = {
-                                file: filePath,
-                                tableName: table.table_name,
-                                lineNumber: lineNum + 1,
-                                pkValue: dtlName,
-                                pkValueLower: dtlName.toLowerCase(),
-                                values: {
-                                    name: dtlName,
-                                    conds,
-                                    alts,
-                                    acts
-                                }
-                            };
-
-                            rows.push(row);
-                        }
-
-                        lineNum++;
-                    }
-                } catch (e) {
-                    // Silent fail for DTL parsing errors
                 }
+                if (lineNum >= lines.length) { break; }
+
+                // Skip repeated column header lines (e.g. "DTBL_NAME CONDS ALTS ACTS")
+                // that appear before every sub-table, not just the first one.
+                {
+                    const peekParts = lines[lineNum].trim().split(/\s+/);
+                    if (peekParts.length >= 2 && /^[a-z_]+$/i.test(peekParts[0]) && isNaN(parseInt(peekParts[1], 10))) {
+                        lineNum++; // skip column header line
+                        while (lineNum < lines.length && !lines[lineNum].trim()) { lineNum++; }
+                    }
+                }
+                if (lineNum >= lines.length) { break; }
+
+                const headerLine = lines[lineNum].trim();
+                const headerLineNum = lineNum + 1; // 1-based
+                lineNum++; // advance past header
+
+                const headerParts = headerLine.split(/\s+/);
+                if (headerParts.length < 4) {
+                    continue;
+                }
+
+                const dtlName = headerParts[0];
+                const condsStr = headerParts[1];
+                const altsStr = headerParts[2];
+                const actsStr = headerParts[3];
+
+                const numConds = parseInt(condsStr, 10) || 0;
+                const numAlts = parseInt(altsStr, 10) || 0;
+                const numActs = parseInt(actsStr, 10) || 0;
+
+                const childRows: Array<{ lineNumber: number; values: { [key: string]: string } }> = [];
+
+                // Skip conditions section header (e.g. "VAR OBJ OB_NUM LIM_VAR LIM_OP LIM_CONST ALT1...")
+                if (numConds > 0 && lineNum < lines.length) {
+                    lineNum++;
+                }
+
+                // Parse condition rows
+                for (let c = 0; c < numConds && lineNum < lines.length; c++) {
+                    const condLine = lines[lineNum].trim();
+                    lineNum++;
+                    if (!condLine) { c--; continue; } // blank line: don't count against numConds
+                    const p = condLine.split(/\s+/);
+                    const v: { [key: string]: string } = { section: 'condition' };
+                    v['cond_var']  = p[0] || '';
+                    v['obj']       = p[1] || '';
+                    v['obj_num']   = p[2] || '';
+                    v['lim_var']   = p[3] || '';
+                    v['lim_op']    = p[4] || '';
+                    v['lim_const'] = p[5] || '';
+                    for (let a = 0; a < numAlts; a++) {
+                        v[`alt${a + 1}`] = p[6 + a] || '';
+                    }
+                    childRows.push({ lineNumber: lineNum, values: v });
+                }
+
+                // Skip actions section header (e.g. "ACT_TYP OBJ OBJ_NUM NAME OPTION CONST CONST2 FP OUTCOMES...")
+                if (numActs > 0 && lineNum < lines.length) {
+                    lineNum++;
+                }
+
+                // Parse action rows
+                for (let a = 0; a < numActs && lineNum < lines.length; a++) {
+                    const actLine = lines[lineNum].trim();
+                    lineNum++;
+                    if (!actLine) { a--; continue; } // blank line: don't count against numActs
+                    const p = actLine.split(/\s+/);
+                    const v: { [key: string]: string } = { section: 'action' };
+                    v['act_typ']    = p[0] || '';
+                    v['obj']        = p[1] || '';
+                    v['obj_num']    = p[2] || '';
+                    v['act_name']   = p[3] || '';
+                    v['act_option'] = p[4] || '';
+                    v['const']      = p[5] || '';
+                    v['const2']     = p[6] || '';
+                    v['fp']         = p[7] || '';
+                    for (let o = 0; o < numAlts; o++) {
+                        v[`out${o + 1}`] = p[8 + o] || '';
+                    }
+                    childRows.push({ lineNumber: lineNum, values: v });
+                }
+
+                const row: IndexedRow = {
+                    file: filePath,
+                    tableName: table.table_name,
+                    lineNumber: headerLineNum,
+                    pkValue: dtlName,
+                    pkValueLower: dtlName.toLowerCase(),
+                    values: { name: dtlName, conds: condsStr, alts: altsStr, acts: actsStr },
+                    childRows
+                };
+
+                rows.push(row);
             }
 
             return { rows, fkRefs, fileTableMap: true };

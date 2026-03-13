@@ -186,6 +186,26 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                 this._updateWebview();
                             }
                             break;
+                        case 'uploadSchema':
+                            (async () => {
+                                const picks = await vscode.window.showOpenDialog({
+                                    canSelectFiles: true,
+                                    canSelectFolders: false,
+                                    canSelectMany: false,
+                                    filters: { 'JSON Schema': ['json'] },
+                                    title: 'Select SWAT+ schema file'
+                                });
+                                if (!picks || picks.length === 0) { return; }
+                                const srcPath = picks[0].fsPath;
+                                const destDir = path.join(this.context.globalStorageUri.fsPath, 'schemas');
+                                if (!fs.existsSync(destDir)) { fs.mkdirSync(destDir, { recursive: true }); }
+                                const destPath = path.join(destDir, path.basename(srcPath));
+                                fs.copyFileSync(srcPath, destPath);
+                                this.indexer.setSchemaPath(destPath);
+                                vscode.window.showInformationMessage(`Schema "${path.basename(destPath)}" uploaded and selected.`);
+                                this._updateWebview();
+                            })();
+                            break;
                         case 'uploadDataset':
                             vscode.commands.executeCommand('swat-dataset-selector.uploadDataset');
                             break;
@@ -227,6 +247,90 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         case 'revealSelectedDataset': {
                             if (this.selectedDataset) {
                                 await vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(this.selectedDataset));
+                            }
+                            break;
+                        }
+                        case 'revealInOSExplorer': {
+                            if (data.path && typeof data.path === 'string') {
+                                const revealEnv = detectEnvironment();
+                                const isRemote = [
+                                    'codespaces-browser', 'codespaces-desktop',
+                                    'remote-container', 'remote-ssh', 'tunnel'
+                                ].includes(revealEnv.type);
+                                if (isRemote) {
+                                    vscode.window.showInformationMessage(
+                                        `File Explorer is not available in remote environments. The file is located at: ${data.path}`
+                                    );
+                                } else {
+                                    const fsPath = data.path;
+                                    // Convert to a Windows drive-letter path (C:\...).
+                                    // /mnt/c/... (WSL) → C:\...
+                                    // C:\... or C:/... (already Windows) → normalise slashes
+                                    let winPath: string;
+                                    if (/^[A-Za-z]:[\\\/]/.test(fsPath)) {
+                                        winPath = fsPath.replace(/\//g, '\\');
+                                    } else {
+                                        winPath = wslPathToWindows(fsPath).replace(/\//g, '\\');
+                                    }
+
+                                    const cp = require('child_process') as typeof import('child_process');
+
+                                    if (/^[A-Za-z]:\\/.test(winPath)) {
+                                        // Drive-letter path (C:\...) — covers /mnt/c/... and already-Windows paths
+                                        if (process.platform === 'win32') {
+                                            // Native Windows: explorer.exe is in PATH
+                                            cp.exec(`explorer.exe /select,"${winPath}"`, (err) => {
+                                                if (err) {
+                                                    vscode.window.showErrorMessage(`Could not open File Explorer: ${err.message}`);
+                                                }
+                                            });
+                                        } else {
+                                            // WSL: use absolute path to explorer.exe.
+                                            // Forward slashes for the path: sh strips escapes but
+                                            // explorer.exe / cmd.exe both accept forward slashes.
+                                            const fwdPath = winPath.replace(/\\/g, '/');
+                                            const explorerExe = '/mnt/c/Windows/explorer.exe';
+                                            cp.exec(`"${explorerExe}" /select,"${fwdPath}"`, (err) => {
+                                                if (err) {
+                                                    // Fallback: open parent folder via cmd.exe
+                                                    const cmdExe = '/mnt/c/Windows/System32/cmd.exe';
+                                                    const dirPath = fwdPath.substring(0, fwdPath.lastIndexOf('/')) || fwdPath;
+                                                    cp.exec(`"${cmdExe}" /c start "" "${dirPath}"`, (err2) => {
+                                                        if (err2) {
+                                                            vscode.window.showErrorMessage(`Could not open File Explorer: ${err2.message}\nPath: ${winPath}`);
+                                                        }
+                                                    });
+                                                }
+                                            });
+                                        }
+                                    } else if (fsPath.startsWith('/') && process.platform === 'linux') {
+                                        // Native WSL path (e.g. /home/user/...) — not under /mnt/<drive>/.
+                                        // Convert to a Windows UNC path: \\wsl.localhost\<distro>\home\user\...
+                                        // WSL_DISTRO_NAME is set automatically by WSL (e.g. "Ubuntu", "Ubuntu-22.04").
+                                        const wslDistro = process.env['WSL_DISTRO_NAME'];
+                                        if (wslDistro) {
+                                            const backslashPath = fsPath.replace(/\//g, '\\');
+                                            const uncPath = `\\\\wsl.localhost\\${wslDistro}${backslashPath}`;
+                                            // /select,<path> opens the parent folder with the item selected,
+                                            // matching VS Code's built-in "Reveal in File Explorer" behaviour.
+                                            // Use spawn (no shell) so UNC backslashes are passed verbatim.
+                                            const proc = cp.spawn('/mnt/c/Windows/explorer.exe', [`/select,${uncPath}`], {
+                                                detached: true,
+                                                stdio: 'ignore'
+                                            });
+                                            proc.on('error', (spawnErr: Error) => {
+                                                vscode.window.showErrorMessage(`Could not open File Explorer: ${spawnErr.message}\nPath: /select,${uncPath}`);
+                                            });
+                                            proc.unref();
+                                        } else {
+                                            // No distro name available — fall back to VS Code built-in
+                                            await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(fsPath));
+                                        }
+                                    } else {
+                                        // All other paths — VS Code built-in handles them
+                                        await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(fsPath));
+                                    }
+                                }
                             }
                             break;
                         }
@@ -402,8 +506,10 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
     private getAvailableSchemas(): SchemaOption[] {
         const schemaOptions: SchemaOption[] = [];
         const seen = new Set<string>();
+        const globalSchemasDir = path.join(this.context.globalStorageUri.fsPath, 'schemas');
         const schemaDirs = [
             path.join(this.context.extensionPath, 'resources', 'schema'),
+            globalSchemasDir,
             ...this.getSchemaDirectories()
         ];
 
@@ -470,7 +576,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             database: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="12" cy="5" rx="9" ry="3" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>`,
             file: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="currentColor" stroke-width="1" fill="none"/></svg>`,
             star: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 .587l3.668 7.431L23 9.75l-5.5 5.367L18.335 24 12 20.202 5.665 24l1.835-8.883L1 9.75l7.332-1.732L12 .587z" fill="currentColor"/></svg>`,
-            refresh: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4v6h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 20v-6h-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 10a8 8 0 0 0-14.14-4.95L4 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 14a8 8 0 0 0 14.14 4.95L20 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+            refresh: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4v6h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 20v-6h-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 10a8 8 0 0 0-14.14-4.95L4 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 14a8 8 0 0 0 14.14 4.95L20 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+            reveal: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 2h6v6M22 2L12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
         };
         const availableSchemas = this.getAvailableSchemas();
         const selectedSchemaPath = this.indexer.getSchemaPath();
@@ -488,8 +595,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 <option value="${escapeHtml(option.path)}"${option.path === selectedSchemaPath ? ' selected' : ''}>
                     ${escapeHtml(option.label)}
                 </option>
-            `).join('')
-            : `<option value="" disabled selected>No schemas found</option>`;
+            `).join('') + `<option value="__upload__">Upload schema…</option>`
+            : `<option value="__upload__">Upload schema…</option>`;
 
         const fileCioInfo = this.indexer.getFileCioHeaderInfo();
         const fileCioVersionText = fileCioInfo?.editorVersion || fileCioInfo?.swatRevision
@@ -528,8 +635,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 // If File.cio is missing, show a friendly message instead of the directory listing
                 if (!fs.existsSync(fileCioPath)) {
                     combinedHtml = `<div class="selected-window">
-                        <div class="selected-window-header">
+                        <div class="selected-window-header" id="selected-window-header" style="cursor:pointer" title="Click to collapse/expand">
                             <div class="selected-window-header-left">
+                                <span class="collapse-icon" id="selected-window-collapse-icon">${svgs.chevronDown}</span>
                                 ${svgs.folder}
                                 <div style="display:flex;flex-direction:column;gap:2px;width:100%">
                                     <span class="section-title">Selected dataset:</span>
@@ -538,18 +646,18 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                     </div>
                                 </div>
                             </div>
-                            <button class="icon-button close-txt-btn close-all-btn" title="Close all files">
-                                ${svgs.close}
-                            </button>
+                            <div style="display:inline-flex;gap:4px;align-items:center;flex-shrink:0">
+                                <button class="icon-button" id="revealDatasetBtn" data-path="${escapeHtml(this.selectedDataset)}" title="Open in File Explorer" style="opacity:1">
+                                    ${svgs.reveal}
+                                </button>
+                                <button class="icon-button close-txt-btn close-all-btn" title="Close all files">
+                                    ${svgs.close}
+                                </button>
+                            </div>
                         </div>
+                        <div id="selected-window-body-wrapper">
                         <div class="selected-window-path-scroll" title="${escapeHtml(this.selectedDataset)}">
                             <div class="dataset-header-path">${escapeHtml(this.selectedDataset)}</div>
-                        </div>
-                        <div class="selected-window-actions">
-                            <button class="action-button primary disabled" id="buildIndexBtn" disabled>
-                                ${svgs.database}
-                                ${buildIndexLabel}
-                            </button>
                         </div>
                         <div class="selected-window-body">
                             <div class="section-content" id="selected-files-content">
@@ -558,6 +666,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                     <span>No file.cio found in dir</span>
                                 </div>
                             </div>
+                        </div>
                         </div>
                        </div>`;
                 } else {
@@ -752,8 +861,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     }).join('');
 
                     combinedHtml = `<div class="selected-window">
-                        <div class="selected-window-header">
+                        <div class="selected-window-header" id="selected-window-header" style="cursor:pointer" title="Click to collapse/expand">
                             <div class="selected-window-header-left">
+                                <span class="collapse-icon" id="selected-window-collapse-icon">${svgs.chevronDown}</span>
                                 ${svgs.folder}
                                 <div style="display:flex;flex-direction:column;gap:2px;width:100%">
                                     <span class="section-title">Selected dataset:</span>
@@ -762,10 +872,16 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                     </div>
                                 </div>
                             </div>
-                            <button class="icon-button close-txt-btn close-all-btn" title="Close all files">
-                                ${svgs.close}
-                            </button>
+                            <div style="display:inline-flex;gap:4px;align-items:center;flex-shrink:0">
+                                <button class="icon-button" id="revealDatasetBtn" data-path="${escapeHtml(this.selectedDataset)}" title="Open in File Explorer" style="opacity:1">
+                                    ${svgs.reveal}
+                                </button>
+                                <button class="icon-button close-txt-btn close-all-btn" title="Close all files">
+                                    ${svgs.close}
+                                </button>
+                            </div>
                         </div>
+                        <div id="selected-window-body-wrapper">
                         <!-- Dedicated horizontal scroller for the full dataset path -->
                         <div class="selected-window-path-scroll" title="${escapeHtml(this.selectedDataset)}">
                             <div class="dataset-header-path">${escapeHtml(this.selectedDataset)}</div>
@@ -774,7 +890,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         <!-- Inputs Section -->
                         <div class="dataset-section">
                             <div class="section-header collapsible" data-section="inputs">
-                                ${svgs.chevronDown}
+                                <span class="collapse-icon">${svgs.chevronDown}</span>
                                 <span class="section-title">📥 Inputs</span>
                                 <span class="badge" id="inputs-badge">${inputEntries.length}</span>
                             </div>
@@ -783,22 +899,29 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                     ${backButtonHtmlInputs}
                                     ${inputsHtml}
                                 </div>
-                                <div class="filter-toolbar" id="selected-filter-toolbar">
-                                    <label style="width: 100%; margin-bottom: 8px; font-weight: 600; border-bottom: 1px solid var(--vscode-panel-border); padding-bottom: 6px;">
-                                        <input type="checkbox" id="select-all-checkbox" checked> Select All
-                                    </label>
-                                    <label><input type="checkbox" id="filter-simulation" class="filter-checkbox" data-cat="simulation" checked> ⚙️ Simulation Control</label>
-                                    <label><input type="checkbox" id="filter-climate" class="filter-checkbox" data-cat="climate" checked> 🌤️ Climate</label>
-                                    <label><input type="checkbox" id="filter-spatial" class="filter-checkbox" data-cat="spatial" checked> 🗺️ Spatial Objects</label>
-                                    <label><input type="checkbox" id="filter-land" class="filter-checkbox" data-cat="land" checked> 🏔️ Land Properties</label>
-                                    <label><input type="checkbox" id="filter-landuse" class="filter-checkbox" data-cat="landuse" checked> 🌾 Land Use & Management</label>
-                                    <label><input type="checkbox" id="filter-operations" class="filter-checkbox" data-cat="operations" checked> 🚜 Operations & Practices</label>
-                                    <label><input type="checkbox" id="filter-waterbodies" class="filter-checkbox" data-cat="waterbodies" checked> 🏞️ Water Bodies</label>
-                                    <label><input type="checkbox" id="filter-channels" class="filter-checkbox" data-cat="channels" checked> 〰️ Channels</label>
-                                    <label><input type="checkbox" id="filter-groundwater" class="filter-checkbox" data-cat="groundwater" checked> 💧 Groundwater</label>
-                                    <label><input type="checkbox" id="filter-connectivity" class="filter-checkbox" data-cat="connectivity" checked> 🔗 Connectivity</label>
-                                    <label><input type="checkbox" id="filter-initialization" class="filter-checkbox" data-cat="initialization" checked> 🔢 Initialization Files</label>
-                                    <label><input type="checkbox" id="filter-databases" class="filter-checkbox" data-cat="databases" checked> 📚 Databases</label>
+                                <!-- Categories collapsible sub-section -->
+                                <div class="section-header collapsible" data-section="categories" style="margin:4px 0 0;border-radius:3px;">
+                                    <span class="collapse-icon">${svgs.chevronDown}</span>
+                                    <span class="section-title">🏷️ Categories</span>
+                                </div>
+                                <div class="section-content" id="categories-content">
+                                    <div class="filter-toolbar" id="selected-filter-toolbar">
+                                        <label style="width: 100%; margin-bottom: 8px; font-weight: 600; border-bottom: 1px solid var(--vscode-panel-border); padding-bottom: 6px;">
+                                            <input type="checkbox" id="select-all-checkbox" checked> Select All
+                                        </label>
+                                        <label><input type="checkbox" id="filter-simulation" class="filter-checkbox" data-cat="simulation" checked> ⚙️ Simulation Control</label>
+                                        <label><input type="checkbox" id="filter-climate" class="filter-checkbox" data-cat="climate" checked> 🌤️ Climate</label>
+                                        <label><input type="checkbox" id="filter-spatial" class="filter-checkbox" data-cat="spatial" checked> 🗺️ Spatial Objects</label>
+                                        <label><input type="checkbox" id="filter-land" class="filter-checkbox" data-cat="land" checked> 🏔️ Land Properties</label>
+                                        <label><input type="checkbox" id="filter-landuse" class="filter-checkbox" data-cat="landuse" checked> 🌾 Land Use & Management</label>
+                                        <label><input type="checkbox" id="filter-operations" class="filter-checkbox" data-cat="operations" checked> 🚜 Operations & Practices</label>
+                                        <label><input type="checkbox" id="filter-waterbodies" class="filter-checkbox" data-cat="waterbodies" checked> 🏞️ Water Bodies</label>
+                                        <label><input type="checkbox" id="filter-channels" class="filter-checkbox" data-cat="channels" checked> 〰️ Channels</label>
+                                        <label><input type="checkbox" id="filter-groundwater" class="filter-checkbox" data-cat="groundwater" checked> 💧 Groundwater</label>
+                                        <label><input type="checkbox" id="filter-connectivity" class="filter-checkbox" data-cat="connectivity" checked> 🔗 Connectivity</label>
+                                        <label><input type="checkbox" id="filter-initialization" class="filter-checkbox" data-cat="initialization" checked> 🔢 Initialization Files</label>
+                                        <label><input type="checkbox" id="filter-databases" class="filter-checkbox" data-cat="databases" checked> 📚 Databases</label>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -806,7 +929,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         <!-- Outputs Section -->
                         <div class="dataset-section">
                             <div class="section-header collapsible" data-section="outputs">
-                                ${svgs.chevronDown}
+                                <span class="collapse-icon">${svgs.chevronDown}</span>
                                 <span class="section-title">📤 Outputs</span>
                                 <span class="badge">${outputEntries.length}</span>
                             </div>
@@ -816,6 +939,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                     ${outputsHtml}
                                 </div>
                             </div>
+                        </div>
                         </div>
 
                        </div>`;
@@ -834,18 +958,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             }
         }
 
-        // Per-environment drop zone hint for the recent-datasets section
-        const recentDropHint = env.isBrowserUI
-            ? `${svgs.cloudUpload} Use right-click &rarr; Upload in the Explorer to add datasets`
-            : (env.isRemoteLinux && !env.mayHaveWindowsPaths)
-                ? `${svgs.folder} Drop here to open a folder picker (remote host)`
-                : (env.mayHaveWindowsPaths
-                    ? `${svgs.folder} Drop a dataset folder here (Windows paths supported)`
-                    : `${svgs.folder} Drop a dataset folder here to add it`);
-
         const recentDatasetsHtml = `<div class="section" id="recent-section">
                 <div class="section-header collapsible" data-section="recent">
-                    ${svgs.chevronDown}
+                    <span class="collapse-icon">${svgs.chevronDown}</span>
                     ${svgs.history}
                     <span class="section-title">Recent Datasets</span>
                     <span class="badge">${this.recentDatasets.length}</span>
@@ -863,9 +978,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                             </button>
                         </div>
                     `).join('')}
-                    <div class="drop-zone-hint${this.recentDatasets.length === 0 ? ' drop-zone-hint-empty' : ''}">
-                        ${recentDropHint}
-                    </div>
                 </div>
                </div>`;
 
@@ -876,6 +988,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         // SWAT+ mode: CMake Tools installed + CMakeLists.txt at workspace root
         // Inspector mode: no CMake project detected → recent datasets are the primary list
         const swatPlusMode = isSwatPlusWorkspace();
+        const hasCmakeLists = workspaceRootForHtml
+            ? fs.existsSync(path.join(workspaceRootForHtml, 'CMakeLists.txt'))
+            : false;
 
         // Resolve the effective dataset directory via shared helper
         const effectiveDatasetDir = this._resolveDatasetDirectory();
@@ -892,19 +1007,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             } catch (e) { /* ignore */ }
         }
 
-        // Environment-specific upload tip
-        let uploadTip = '';
-        if (env.type === 'codespaces-browser') {
-            uploadTip = 'Codespaces (browser): right-click the dataset folder in the Explorer and choose <b>Upload &hellip;</b> to copy datasets from your machine.';
-        } else if (env.type === 'codespaces-desktop') {
-            uploadTip = 'Codespaces (desktop): drag folders into the dataset directory in the Explorer, or use <b>Upload Dataset</b> above.';
-        } else if (env.type === 'remote-wsl') {
-            uploadTip = 'WSL: paste a Windows path (e.g. <code>C:\\Users\\&hellip;</code>) via <b>Upload Dataset &rarr; Enter a path</b>, or copy files to the dataset folder.';
-        } else if (env.type === 'remote-ssh') {
-            uploadTip = 'Remote SSH: copy datasets to the dataset folder on the remote machine, then click Refresh.';
-        } else {
-            uploadTip = 'Drop a dataset folder below, or click <b>Upload Dataset</b> above to add it.';
-        }
+        const uploadTip = 'Click <b>Upload Dataset</b> above to copy a dataset from another location into this folder.';
 
         const datasetDirLabel = effectiveDatasetDir
             ? (workspaceRootForHtml && effectiveDatasetDir.startsWith(workspaceRootForHtml)
@@ -919,28 +1022,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
               </div>`
             : '';
 
-        // WSL mount path button — shown in WSL mode when a dataset is selected
-        const wslWinPath = (env.type === 'remote-wsl' && this.selectedDataset)
-            ? wslPathToWindows(this.selectedDataset)
-            : '';
-        // Only render the WSL row when conversion produced a real Windows path
-        const wslMountHtml = (wslWinPath && wslWinPath !== this.selectedDataset)
-            ? `<div class="wsl-mount-row">
-                <span class="wsl-mount-label" title="Windows path for this dataset (for WSL mounts)">
-                    ${svgs.info} Windows path: <code>${escapeHtml(wslWinPath)}</code>
-                </span>
-                <button class="icon-button" id="copyWslPathBtn" data-winpath="${escapeHtml(wslWinPath)}" title="Copy Windows path to clipboard">
-                    ${svgs.file}
-                </button>
-            </div>`
-            : '';
-
-        // Per-environment drop zone hint for the workdata/dataset-folder section
-        const workdataDropHint = env.isRemoteLinux && !env.mayHaveWindowsPaths
-            ? 'Drop to open a folder picker (remote host)'
-            : env.mayHaveWindowsPaths
-                ? 'Drop a dataset folder here (Windows paths supported)'
-                : 'Drop a dataset folder here';
+        const wslMountHtml = ''; // WSL path row removed
 
         const workdataHtml = hasWorkspaceOpen ? `<div class="section" id="workdata-section">
             <div class="section-header collapsible" data-section="workdata">
@@ -968,10 +1050,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         </div>
                     </div>
                 `).join('')}
-                ${!env.isBrowserUI ? `<div class="workdata-drop-zone${workdataDatasets.length === 0 ? ' workdata-drop-zone-empty' : ''}" id="workdata-drop-zone">
-                    ${svgs.cloudUpload}
-                    <span>${workdataDropHint}</span>
-                </div>` : ''}
                 <div class="workdata-tip">${uploadTip}</div>
             </div>
         </div>` : '';
@@ -1043,7 +1121,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             transform: rotate(-90deg);
         }
 
-        .section-content.hidden {
+        .section-content.hidden,
+        .selected-window-body-wrapper.hidden,
+        .selected-window-body.hidden {
             display: none;
         }
 
@@ -1244,10 +1324,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         .dataset-header-info { max-width: calc(100% - 120px); }
 
         .close-all-btn {
-            position: absolute;
-            right: 8px;
-            top: 50%;
-            transform: translateY(-50%);
             background-color: #b91c1c;
             color: white;
             border: none;
@@ -1257,7 +1333,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            z-index: 50;
+            flex-shrink: 0;
             box-shadow: 0 2px 6px rgba(0,0,0,0.2);
             opacity: 1 !important; /* ensure always visible even though .icon-button defaults to hidden */
             pointer-events: auto !important;
@@ -1574,64 +1650,42 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             color: var(--vscode-foreground);
         }
 
-        .build-index-button {
+        /* Schema selector row — styled like env-badge/mode-badge */
+        .schema-select-row {
             display: flex;
             align-items: center;
-            gap: 10px;
-            padding-left: 48px;
-            position: relative;
-        }
-
-        .build-index-row {
-            position: relative;
-        }
-
-        .build-index-icon {
-            display: inline-flex;
-            align-items: center;
-            position: absolute;
-            left: 14px;
-        }
-
-        .build-index-label {
-            display: inline-flex;
-            align-items: center;
-        }
-
-        .build-index-select {
-            -webkit-appearance: none;
-            -moz-appearance: none;
-            appearance: none;
-            background-color: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border: 1px solid var(--vscode-input-border);
+            gap: 6px;
+            padding: 5px 8px;
+            margin-top: 4px;
+            background-color: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-panel-border);
             border-radius: 4px;
-            padding: 0 22px 0 6px;
-            font-size: 12px;
-            width: 28px;
-            height: 28px;
-            position: absolute;
-            top: 50%;
-            left: 32px;
-            transform: translateY(-50%);
-            text-transform: none;
-            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23c5c5c5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
-            background-repeat: no-repeat;
-            background-position: center;
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+        }
+
+        .schema-select-label {
+            flex-shrink: 0;
+            font-weight: 600;
+            color: var(--vscode-foreground);
+        }
+
+        .schema-select-inline {
+            flex: 1;
+            min-width: 0;
+            appearance: none;
+            -webkit-appearance: none;
+            background: transparent;
+            border: none;
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
             cursor: pointer;
+            outline: none;
+            padding: 0;
         }
 
-        .build-index-select:hover {
-            background-color: #f4f4f4;
-        }
-
-        .build-index-select:focus {
-            outline: 1px solid var(--vscode-focusBorder);
-        }
-
-        .build-index-button.disabled + .build-index-select,
-        .build-index-select:disabled {
-            opacity: 0.6;
+        .schema-select-inline:disabled {
+            opacity: 0.5;
             cursor: not-allowed;
         }
 
@@ -1766,32 +1820,31 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             white-space: nowrap;
         }
 
-        /* Drag-and-drop styles for recent datasets */
-        #recent-section.drag-over .section-content {
-            background-color: var(--vscode-list-dropBackground, rgba(0, 120, 215, 0.1));
-            border: 1px dashed var(--vscode-focusBorder);
-            border-radius: 4px;
-        }
-
-        .drop-zone-hint {
+        /* SWAT+ mode status badge */
+        .mode-badge {
             display: flex;
             align-items: center;
-            justify-content: center;
             gap: 6px;
-            padding: 4px 8px;
+            padding: 5px 8px;
             margin-top: 4px;
+            background-color: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 4px;
+            cursor: default;
             font-size: 11px;
             color: var(--vscode-descriptionForeground);
-            opacity: 0.6;
-            border: 1px dashed var(--vscode-panel-border);
-            border-radius: 4px;
-            pointer-events: none;
         }
 
-        .drop-zone-hint-empty {
-            margin-top: 0;
-            padding: 12px 8px;
+        .mode-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
         }
+
+        .mode-dot.active   { background-color: #16a34a; box-shadow: 0 0 0 2px rgba(22,163,74,0.2); }
+        .mode-dot.partial  { background-color: #d97706; box-shadow: 0 0 0 2px rgba(217,119,6,0.2); }
+        .mode-dot.inactive { background-color: var(--vscode-descriptionForeground); opacity: 0.4; }
 
         #recent-content {
             min-height: 40px;
@@ -1810,31 +1863,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         .workdata-item:hover {
             background-color: var(--vscode-list-hoverBackground);
-        }
-
-        .workdata-drop-zone {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            padding: 8px;
-            margin-top: 4px;
-            font-size: 11px;
-            color: var(--vscode-descriptionForeground);
-            border: 1px dashed var(--vscode-panel-border);
-            border-radius: 4px;
-            transition: background-color 0.1s, border-color 0.1s;
-        }
-
-        .workdata-drop-zone-empty {
-            padding: 14px 8px;
-        }
-
-        .workdata-drop-zone.drag-over,
-        #workdata-section.drag-over .workdata-drop-zone {
-            background-color: var(--vscode-list-dropBackground, rgba(0, 120, 215, 0.1));
-            border-color: var(--vscode-focusBorder);
-            border-style: solid;
         }
 
         .workdata-tip {
@@ -1918,9 +1946,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         <div class="divider"></div>
 
         <div class="middle">
-            ${swatPlusMode ? '' : recentDatasetsHtml}
-
-            ${workdataHtml}
+            ${swatPlusMode ? workdataHtml : recentDatasetsHtml}
 
             <!-- Divider separating Dataset list from Selected dataset window -->
             <div class="divider" id="recent-divider" title="Recent / Selected separator"><div class="handle"></div></div>
@@ -1932,12 +1958,13 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         <!-- Build Index button placed outside selected dataset section -->
         <div class="build-index-section" id="build-index-section" style="display: ${this.selectedDataset ? 'block' : 'none'};">
-            <div class="build-index-row">
-                <button class="action-button primary build-index-button${hasFileCio ? '' : ' disabled'}" id="buildIndexBtn" style="width: 100%; margin-top: 12px;" ${hasFileCio ? '' : 'disabled'}>
-                    <span class="build-index-icon">${svgs.database}</span>
-                    <span class="build-index-label">${buildIndexLabel}</span>
-                </button>
-                <select id="schema-select" class="build-index-select"${availableSchemas.length === 0 ? ' disabled' : ''} aria-label="Schema version" title="Select schema version">
+            <button class="action-button primary${hasFileCio ? '' : ' disabled'}" id="buildIndexBtn" style="width: 100%; margin-top: 12px;" ${hasFileCio ? '' : 'disabled'}>
+                ${svgs.database}
+                ${buildIndexLabel}
+            </button>
+            <div class="schema-select-row">
+                <span class="schema-select-label">Schema</span>
+                <select id="schema-select" class="schema-select-inline"${availableSchemas.length === 0 ? ' disabled' : ''} aria-label="Schema version" title="Select schema version">
                     ${schemaOptionsHtml}
                 </select>
             </div>
@@ -1951,7 +1978,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         <div class="help-text">
             ${swatPlusMode
-                ? `Select a dataset from the <strong>${escapeHtml(datasetDirLabel)}/</strong> folder, or drop a folder into the Dataset Folder section. Use <strong>Debug</strong> to launch a SWAT+ debug session via CMake Tools.`
+                ? `Select a dataset from the <strong>${escapeHtml(datasetDirLabel)}/</strong> folder. Use <strong>Debug</strong> to launch a SWAT+ debug session via CMake Tools.`
                 : `Select a SWAT+ dataset folder to browse its inputs and outputs.
                     ${cmakeAvailable
                         ? 'Use <strong>Debug</strong> to launch a SWAT+ debug session via CMake Tools.'
@@ -1963,34 +1990,49 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             <span class="codicon codicon-${escapeHtml(env.icon)}"></span>
             <span class="env-badge-label">${escapeHtml(env.label)}</span>
         </div>
+        ${swatPlusMode
+            ? `<div class="mode-badge" title="CMakeLists.txt found and CMake Tools installed — SWAT+ mode active">
+                <span class="mode-dot active"></span>
+                <span>SWAT+ Mode</span>
+              </div>`
+            : hasCmakeLists
+                ? `<div class="mode-badge" title="CMakeLists.txt found but CMake Tools extension is not installed — install it to enable SWAT+ mode">
+                    <span class="mode-dot partial"></span>
+                    <span>CMakeLists.txt found (install CMake Tools)</span>
+                  </div>`
+                : `<div class="mode-badge" title="No CMakeLists.txt in workspace root — running in Inspector Mode">
+                    <span class="mode-dot inactive"></span>
+                    <span>Inspector Mode (no CMakeLists.txt)</span>
+                  </div>`
+        }
     </div>
 
     <script nonce="${nonce}">
         (function() {
             // Environment info injected from the extension host at render time.
-            // Used by drop handlers to adapt behaviour per environment.
-            // Declared inside the IIFE so that any unexpected error here is contained
-            // within the IIFE scope and does not prevent event handlers from registering.
             const SWAT_ENV = ${JSON.stringify({
                 type: env.type,
                 isBrowserUI: env.isBrowserUI,
                 isRemoteLinux: env.isRemoteLinux,
                 mayHaveWindowsPaths: env.mayHaveWindowsPaths
             })};
-            document.addEventListener('DOMContentLoaded', () => {
+
+            document.addEventListener('DOMContentLoaded', function() {
                 try {
                     const vscode = acquireVsCodeApi();
-                    // Wrapper that logs outgoing messages so we can trace them in the webview console
                     const swatHost = {
                         postMessage: (msg) => {
-                            try { console.log('SWAT webview: sending', msg); } catch (e) { }
-                            try { vscode.postMessage(msg); } catch (e) { try { console.error('SWAT webview: failed to postMessage', e); } catch (ee) {} }
+                            try { 
+                                console.log('SWAT webview: sending', msg); 
+                                vscode.postMessage(msg); 
+                            } catch (e) { 
+                                console.error('SWAT webview: postMessage failed', e); 
+                            }
                         }
                     };
 
                     try { console.log('SWAT webview: DOMContentLoaded - init'); } catch (e) { }
 
-                    // Log any messages sent from the extension host into the webview
                     try {
                         window.addEventListener('message', (ev) => {
                             try { console.log('SWAT webview: received message from host', ev && ev.data); } catch (e) { }
@@ -2086,9 +2128,17 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
             const schemaSelect = $('schema-select');
             if (schemaSelect) {
+                let lastSchemaValue = schemaSelect.value;
                 schemaSelect.addEventListener('change', (event) => {
                     const target = event.target;
                     const value = target && target.value ? target.value : '';
+                    if (value === '__upload__') {
+                        // Revert selection immediately, then ask host to open file picker
+                        schemaSelect.value = lastSchemaValue;
+                        swatHost.postMessage({ type: 'uploadSchema' });
+                        return;
+                    }
+                    lastSchemaValue = value;
                     swatHost.postMessage({ type: 'schemaSelectionChanged', path: value });
                 });
                 schemaSelect.addEventListener('click', (event) => {
@@ -2120,118 +2170,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     swatHost.postMessage({ type: 'removeRecentDataset', path });
                 });
             });
-
-            // Drag-and-drop helpers shared by both drop zones
-
-            /**
-             * Returns true when the dataTransfer contains file-like data.
-             * Checks both 'Files' (Electron/OS file drag) and 'text/uri-list'
-             * (present even when 'Files' is absent in VS Code webview sandboxes).
-             *
-             * Returns false in browser-based UIs (Codespaces browser) where the
-             * browser security model prevents OS filesystem paths from being
-             * exposed via drag-and-drop.
-             */
-            function hasDragFiles(dataTransfer) {
-                // Codespaces browser: OS → browser DnD is blocked by browser security.
-                // Returning false prevents misleading drag-highlight feedback.
-                if (SWAT_ENV.isBrowserUI) { return false; }
-                if (!dataTransfer) { return false; }
-                const types = Array.from(dataTransfer.types);
-                return types.includes('Files') || types.includes('text/uri-list');
-            }
-
-            /**
-             * Extracts an OS filesystem path from a drop event.
-             *
-             * Strategy (in order):
-             *  1. file.path  — Electron extension, works in the main renderer but
-             *                  NOT inside VS Code webview sandboxes.
-             *  2. text/uri-list — standard; Electron DOES populate this even in
-             *                     sandboxed webviews when the source is the OS/Explorer.
-             *  3. Returns '' if neither method yields a path.
-             *
-             * Note: WSL Windows paths (C:\\...) are sent as-is to the extension host
-             * where resolvePathForEnvironment() converts them to /mnt/<drive>/...
-             */
-            function getDroppedFsPath(e) {
-                const dt = e.dataTransfer;
-                if (!dt) { return ''; }
-                // Method 1: Electron File.path (only works outside the webview sandbox)
-                const files = dt.files;
-                if (files && files.length > 0 && files[0].path) {
-                    return files[0].path;
-                }
-                // Method 2: text/uri-list (works in most local Electron drag scenarios)
-                try {
-                    const uriList = dt.getData('text/uri-list');
-                    if (uriList) {
-                        const firstUri = uriList.split(/\r?\n/).find(line => line.trim() && !line.startsWith('#'));
-                        if (firstUri) {
-                            const url = new URL(firstUri.trim());
-                            if (url.protocol === 'file:') {
-                                let fsPath = decodeURIComponent(url.pathname);
-                                // Windows paths arrive as /C:/Users/... — strip the leading slash
-                                if (/^\/[A-Za-z]:\//.test(fsPath)) { fsPath = fsPath.slice(1); }
-                                return fsPath;
-                            }
-                        }
-                    }
-                } catch (err) { /* invalid URI — ignore */ }
-                return '';
-            }
-
-            /**
-             * Handle a drop event on either drop zone.
-             * - Local environments: extract the filesystem path and send it to the host.
-             * - WSL: path is sent as-is (Windows C:\... format); the host converts it.
-             * - Remote Linux without Windows path access (Codespaces desktop, SSH, tunnel):
-             *   the path is a local client path that the remote host can't access, so we
-             *   fall back to the folder picker which browses the remote filesystem.
-             * - Browser UI: hasDragFiles() already returns false so this is never called.
-             */
-            function handleDrop(e, messageType) {
-                e.preventDefault();
-                // Remote (non-WSL) Linux hosts can't access the local client path —
-                // open the folder picker so the user can browse the remote filesystem.
-                if (SWAT_ENV.isRemoteLinux && !SWAT_ENV.mayHaveWindowsPaths) {
-                    // try/catch guards console.log in sandboxed webview contexts where
-                    // the global console object may not always be available.
-                    try { console.log('SWAT webview: remote drop — falling back to folder picker'); } catch (err) {}
-                    swatHost.postMessage({ type: 'selectDataset' });
-                    return;
-                }
-                const filePath = getDroppedFsPath(e);
-                if (filePath) {
-                    try { console.log('SWAT webview: drop', messageType, filePath); } catch (err) {}
-                    swatHost.postMessage({ type: 'dropDataset', path: filePath });
-                } else {
-                    // Path not available (sandboxed env) — open the folder picker
-                    try { console.log('SWAT webview: drop — no path, falling back to folder picker'); } catch (err) {}
-                    swatHost.postMessage({ type: 'selectDataset' });
-                }
-            }
-
-            // Drag-and-drop: allow dropping a folder onto the recent datasets section
-            const recentSection = document.getElementById('recent-section');
-            if (recentSection) {
-                recentSection.addEventListener('dragover', (e) => {
-                    if (!hasDragFiles(e.dataTransfer)) { return; }
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'copy';
-                    recentSection.classList.add('drag-over');
-                });
-                recentSection.addEventListener('dragleave', (e) => {
-                    const rt = e.relatedTarget;
-                    if (!rt || !recentSection.contains(/** @type {Node} */ (rt))) {
-                        recentSection.classList.remove('drag-over');
-                    }
-                });
-                recentSection.addEventListener('drop', (e) => {
-                    recentSection.classList.remove('drag-over');
-                    handleDrop(e, 'recent');
-                });
-            }
 
             // Workdata section: click-to-select items
             document.querySelectorAll('.workdata-item').forEach(item => {
@@ -2271,6 +2209,38 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 });
             }
 
+            // Selected window collapse toggle
+            const selectedWindowHeader = $('selected-window-header');
+            const selectedWindowBodyWrapper = $('selected-window-body-wrapper');
+            if (selectedWindowHeader && selectedWindowBodyWrapper) {
+                selectedWindowHeader.addEventListener('click', (e) => {
+                    const tgt = e.target;
+                    if (tgt && typeof tgt.closest === 'function') {
+                        if (tgt.closest('.close-all-btn')) return;
+                        if (tgt.closest('#revealDatasetBtn')) return;
+                    }
+                    const isCollapsed = selectedWindowBodyWrapper.style.display === 'none';
+                    selectedWindowBodyWrapper.style.display = isCollapsed ? '' : 'none';
+                    const collapseIcon = $('selected-window-collapse-icon');
+                    if (collapseIcon) {
+                        collapseIcon.style.transform = isCollapsed ? '' : 'rotate(-90deg)';
+                    }
+                });
+            }
+
+            // Reveal dataset in OS file explorer
+            const revealDatasetBtn = $('revealDatasetBtn');
+            if (revealDatasetBtn) {
+                revealDatasetBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const p = revealDatasetBtn.dataset.path;
+                    if (p) {
+                        try { console.log('SWAT webview: revealDataset clicked', p); } catch (e) {}
+                        swatHost.postMessage({ type: 'revealInOSExplorer', path: p });
+                    }
+                });
+            }
+
             // WSL mount path copy button
             const copyWslPathBtn = $('copyWslPathBtn');
             if (copyWslPathBtn) {
@@ -2285,28 +2255,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                             swatHost.postMessage({ type: 'showError', message: 'Could not copy to clipboard: ' + (copyErr instanceof Error ? copyErr.message : String(copyErr)) });
                         });
                     }
-                });
-            }
-
-            // Drag-and-drop: workdata drop zone
-            const workdataDropZone = $('workdata-drop-zone');
-            const workdataSection = $('workdata-section');
-            if (workdataDropZone && workdataSection) {
-                workdataSection.addEventListener('dragover', (e) => {
-                    if (!hasDragFiles(e.dataTransfer)) { return; }
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'copy';
-                    workdataDropZone.classList.add('drag-over');
-                });
-                workdataSection.addEventListener('dragleave', (e) => {
-                    const relatedTarget = e.relatedTarget;
-                    if (!relatedTarget || !workdataSection.contains(/** @type {Node} */ (relatedTarget))) {
-                        workdataDropZone.classList.remove('drag-over');
-                    }
-                });
-                workdataSection.addEventListener('drop', (e) => {
-                    workdataDropZone.classList.remove('drag-over');
-                    handleDrop(e, 'workdata');
                 });
             }
 
@@ -2338,33 +2286,48 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     }
                 });
                 
-                // Add context menu handler for input items
+                // Context menu handler for all items
                 item.addEventListener('contextmenu', (e) => {
                     e.preventDefault();
-                    
+
                     const p = item.dataset.path;
                     const isDir = item.dataset.isdir === 'true';
                     const section = item.dataset.section || 'inputs';
-                    
-                    // Only show context menu for input files (not directories or outputs)
-                    if (p && !isDir && section === 'inputs') {
-                        // Create and show context menu
-                        showContextMenu(e, [
-                            {
+
+                    if (p) {
+                        const menuItems = [];
+                        if (!isDir && section === 'inputs') {
+                            menuItems.push({
                                 label: 'Open File in Editor',
                                 action: () => {
                                     try { console.log('SWAT webview: open input in editor via context menu', p); } catch (e) {}
                                     swatHost.postMessage({ type: 'openInputInEditor', path: p });
                                 }
-                            },
-                            {
+                            });
+                            menuItems.push({
                                 label: 'View as Table (default)',
                                 action: () => {
                                     try { console.log('SWAT webview: view as table via context menu', p); } catch (e) {}
                                     swatHost.postMessage({ type: 'openFile', path: p, section: section });
                                 }
+                            });
+                        } else if (!isDir) {
+                            menuItems.push({
+                                label: 'Open File in Editor',
+                                action: () => {
+                                    try { console.log('SWAT webview: open output in editor via context menu', p); } catch (e) {}
+                                    swatHost.postMessage({ type: 'openInputInEditor', path: p });
+                                }
+                            });
+                        }
+                        menuItems.push({
+                            label: isDir ? 'Open in File Explorer' : 'Reveal in File Explorer',
+                            action: () => {
+                                try { console.log('SWAT webview: reveal in explorer via context menu', p); } catch (e) {}
+                                swatHost.postMessage({ type: 'revealInOSExplorer', path: p });
                             }
-                        ], e.clientX, e.clientY);
+                        });
+                        showContextMenu(e, menuItems, e.clientX, e.clientY);
                     }
                 });
             });
@@ -2473,6 +2436,13 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         const path = container ? container.dataset.path : undefined;
                         try { console.log('SWAT webview: delegated workdata-item click', path); } catch (e) {}
                         if (path) swatHost.postMessage({ type: 'selectWorkdataDataset', path });
+                        return;
+                    }
+                    if (closest && closest('#revealDatasetBtn')) {
+                        const btn = tgt.closest('#revealDatasetBtn');
+                        const p = btn ? btn.dataset.path : undefined;
+                        try { console.log('SWAT webview: delegated revealDataset click', p); } catch (e) {}
+                        if (p) swatHost.postMessage({ type: 'revealInOSExplorer', path: p });
                         return;
                     }
                     if (closest && closest('#revealWorkdataBtn')) {
@@ -2616,10 +2586,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 updateSelectAllCheckbox();
                 applyFilter();
             })();
-
-                    // No bottom draggable divider in the simplified layout; nothing to resize here.
                 } catch (err) {
-                    // Catch any initialization errors in the webview script so they don't stop other handlers
                     try { console.error('SWAT webview script error', err); } catch (e) { /* ignore */ }
                 }
             });
