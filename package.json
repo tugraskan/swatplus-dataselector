@@ -16,7 +16,10 @@
     "Other"
   ],
   "activationEvents": [
-    "onLanguage:plaintext",
+    "onStartupFinished",
+    "onView:swatDatasetView",
+    "onCommand:swat-dataset-selector.selectDataset",
+    "onCommand:swat-dataset-selector.uploadDataset",
     "onCommand:swat-dataset-selector.buildIndex",
     "onCommand:swat-dataset-selector.loadIndex",
     "onCommand:swat-dataset-selector.rebuildIndex"
@@ -92,8 +95,37 @@
         "command": "swat-dataset-selector.uploadDataset",
         "title": "SWAT+: Upload Dataset to Workspace",
         "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "swat-dataset-selector.revealWorkdataFolder",
+        "title": "SWAT+: Reveal workdata/ Folder in Explorer",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "swat-dataset-selector.switchDataset",
+        "title": "SWAT+: Switch Dataset",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "swat-dataset-selector.useAsDataset",
+        "title": "Use as SWAT+ Dataset",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "swat-dataset-selector.editSchema",
+        "title": "SWAT+: Edit / Create Schema",
+        "icon": "$(edit)"
       }
     ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "swat-dataset-selector.useAsDataset",
+          "when": "explorerResourceIsFolder",
+          "group": "2_workspace@100"
+        }
+      ]
+    },
     "configuration": {
       "title": "SWAT+ Dataset Selector",
       "properties": {
@@ -104,6 +136,11 @@
             "type": "string"
           },
           "description": "Additional directories to scan for SWAT+ schema JSON files. Supports ${workspaceFolder}."
+        },
+        "swatplus.datasetDirectory": {
+          "type": "string",
+          "default": "workdata",
+          "description": "Directory (relative to the workspace root, or absolute) where SWAT+ dataset folders are stored. Used in SWAT+ mode (when CMake Tools is installed) as the primary dataset listing. Defaults to 'workdata'."
         }
       }
     }
