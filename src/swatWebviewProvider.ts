@@ -119,6 +119,12 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                 vscode.commands.executeCommand('swat-dataset-selector.openFile', data.path);
                             }
                             break;
+                        case 'openOutputAsDataFrame':
+                            if (data.path && typeof data.path === 'string') {
+                                // Open output file in table viewer (DataFrame-style)
+                                vscode.commands.executeCommand('swat-dataset-selector.showTableViewer', data.path);
+                            }
+                            break;
                         case 'navigateToDirectory':
                             if (data.path && typeof data.path === 'string') {
                                 const section = data.section || 'inputs'; // Default to inputs for backward compatibility
@@ -2336,6 +2342,13 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                 }
                             });
                         } else if (!isDir) {
+                            menuItems.push({
+                                label: 'Open as DataFrame',
+                                action: () => {
+                                    try { console.log('SWAT webview: open output as dataframe via context menu', p); } catch (e) {}
+                                    swatHost.postMessage({ type: 'openOutputAsDataFrame', path: p });
+                                }
+                            });
                             menuItems.push({
                                 label: 'Open File in Editor',
                                 action: () => {
