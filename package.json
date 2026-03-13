@@ -110,6 +110,11 @@
         "command": "swat-dataset-selector.useAsDataset",
         "title": "Use as SWAT+ Dataset",
         "icon": "$(folder-opened)"
+      },
+      {
+        "command": "swat-dataset-selector.editSchema",
+        "title": "SWAT+: Edit / Create Schema",
+        "icon": "$(edit)"
       }
     ],
     "menus": {

@@ -12,6 +12,7 @@ import { SwatFKHoverProvider } from './fkHoverProvider';
 import { SwatFKReferencesPanel } from './fkReferencesPanel';
 import { SwatTableViewerPanel } from './tableViewerPanel';
 import { SwatSingleTableViewerPanel } from './singleTableViewerPanel';
+import { SchemaEditorPanel } from './schemaEditorPanel';
 import { normalizePathForComparison, pathStartsWith } from './pathUtils';
 import { detectEnvironment, hasWorkspace, isCmakeToolsInstalled, resolvePathForEnvironment } from './environmentUtils';
 
@@ -404,6 +405,11 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
+	// Command: Open schema editor for a given schema file path
+	const editSchema = vscode.commands.registerCommand('swat-dataset-selector.editSchema', (schemaPath?: string) => {
+		SchemaEditorPanel.createOrShow(context, schemaPath);
+	});
+
 	// Command: Reveal workdata/ folder in the VS Code Explorer
 	const revealWorkdataFolder = vscode.commands.registerCommand('swat-dataset-selector.revealWorkdataFolder', async () => {
 		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -566,6 +572,7 @@ export function activate(context: vscode.ExtensionContext) {
 		revealWorkdataFolder,
 		useAsDataset,
 		switchDataset,
+		editSchema,
 		statusBarItem
 	);
 	} catch (err) {

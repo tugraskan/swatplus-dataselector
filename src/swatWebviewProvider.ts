@@ -206,6 +206,12 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                 this._updateWebview();
                             })();
                             break;
+                        case 'viewEditSchema':
+                            vscode.commands.executeCommand(
+                                'swat-dataset-selector.editSchema',
+                                typeof data.path === 'string' && data.path ? data.path : undefined
+                            );
+                            break;
                         case 'uploadDataset':
                             vscode.commands.executeCommand('swat-dataset-selector.uploadDataset');
                             break;
@@ -1962,18 +1968,24 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 ${svgs.database}
                 ${buildIndexLabel}
             </button>
-            <div class="schema-select-row">
-                <span class="schema-select-label">Schema</span>
-                <select id="schema-select" class="schema-select-inline"${availableSchemas.length === 0 ? ' disabled' : ''} aria-label="Schema version" title="Select schema version">
-                    ${schemaOptionsHtml}
-                </select>
-            </div>
             ${hasCachedIndex ? `
                 <div class="schema-version schema-version-inline">
                     <span class="schema-version-label">file.cio:</span>
                     <span>${escapeHtml(fileCioVersionText)}</span>
                 </div>
             ` : ''}
+        </div>
+
+        <!-- Schema section — always visible -->
+        <div class="schema-select-row" style="margin-top:8px">
+            <span class="schema-select-label">Schema</span>
+            <select id="schema-select" class="schema-select-inline"${availableSchemas.length === 0 ? ' disabled' : ''} aria-label="Schema version" title="Select schema version">
+                ${schemaOptionsHtml}
+            </select>
+            <button id="editSchemaBtn" title="View / Edit selected schema — or create a new one"
+                style="flex-shrink:0;padding:3px 8px;border-radius:3px;border:1px solid var(--vscode-button-secondaryBackground);background:var(--vscode-button-secondaryBackground);color:var(--vscode-button-secondaryForeground);cursor:pointer;font-size:11px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px">
+                ✏️ Edit
+            </button>
         </div>
 
         <div class="help-text">
@@ -2146,6 +2158,18 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 });
                 schemaSelect.addEventListener('mousedown', (event) => {
                     event.stopPropagation();
+                });
+            }
+
+            const editSchemaBtn = $('editSchemaBtn');
+            if (editSchemaBtn) {
+                editSchemaBtn.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    const schemaSelect = $('schema-select');
+                    const currentPath = schemaSelect ? schemaSelect.value : '';
+                    // Don't pass __upload__ as a path
+                    const pathArg = (currentPath && currentPath !== '__upload__') ? currentPath : '';
+                    swatHost.postMessage({ type: 'viewEditSchema', path: pathArg });
                 });
             }
 
