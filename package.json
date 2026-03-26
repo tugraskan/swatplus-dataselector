@@ -125,6 +125,11 @@
         "command": "swat-dataset-selector.runDataQualityPreflight",
         "title": "SWAT+: Run Data Quality Preflight",
         "icon": "$(checklist)"
+      },
+      {
+        "command": "swat-dataset-selector.exportAiContext",
+        "title": "SWAT+: Export AI Context Document",
+        "icon": "$(robot)"
       }
     ],
     "menus": {
