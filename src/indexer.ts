@@ -1789,6 +1789,254 @@ export class SwatIndexer {
     }
 
     /**
+     * Generate a structured Markdown document optimized for AI agent consumption.
+     *
+     * The document includes:
+     *  - Dataset summary (table count, row count, FK resolution rate)
+     *  - Per-file sections grouped by category with schema, sample data, and FK stats
+     *  - A cross-file FK relationship map
+     *  - Data quality issues (unresolved FK targets, orphan rows)
+     *  - file.cio classification summary
+     *
+     * Returns the Markdown string, or null if the index has not been built yet.
+     */
+    public generateAiContextDocument(): string | null {
+        if (!this.isIndexBuilt()) {
+            return null;
+        }
+
+        const stats = this.getIndexStats();
+        const allRefs = this.getAllFKReferences();
+        const resolvedRate = stats.fkCount > 0
+            ? ((stats.resolvedFkCount / stats.fkCount) * 100).toFixed(1)
+            : '100.0';
+
+        const lines: string[] = [];
+
+        // ── Header ──────────────────────────────────────────────────────────
+        lines.push('# SWAT+ Dataset AI Context Document');
+        lines.push('');
+        lines.push(`Generated: ${new Date().toISOString()}`);
+        lines.push(`Dataset: ${this.datasetPath || '(unknown)'}`);
+        lines.push('');
+
+        // ── Summary ─────────────────────────────────────────────────────────
+        lines.push('## Summary');
+        lines.push('');
+        lines.push('| Metric | Value |');
+        lines.push('|--------|-------|');
+        lines.push(`| Tables indexed | ${stats.tableCount} |`);
+        lines.push(`| Total rows | ${stats.rowCount} |`);
+        lines.push(`| Foreign key references | ${stats.fkCount} |`);
+        lines.push(`| Resolved FK references | ${stats.resolvedFkCount} (${resolvedRate}%) |`);
+        lines.push(`| Unresolved FK references | ${stats.unresolvedFkCount} |`);
+        lines.push('');
+
+        // ── File groups by category ──────────────────────────────────────────
+        lines.push('## Input Files by Category');
+        lines.push('');
+        lines.push('Each section describes one SWAT+ input file: its purpose, column schema, sample data rows, and FK reference counts.');
+        lines.push('');
+
+        // Group indexed tables by category; uncategorized tables go into "Other"
+        const categories = new Map<string, string[]>();
+        for (const tableName of this.index.keys()) {
+            const fileName = this.getFileNameForTable(tableName) || tableName;
+            const category = this.getFileCategory(fileName) || 'Other';
+            if (!categories.has(category)) {
+                categories.set(category, []);
+            }
+            categories.get(category)!.push(tableName);
+        }
+
+        // Sort categories alphabetically; "Other" goes last
+        const sortedCategories = Array.from(categories.keys()).sort((a, b) =>
+            a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b)
+        );
+
+        for (const category of sortedCategories) {
+            const tableNames = categories.get(category)!.sort();
+            lines.push(`### ${category}`);
+            lines.push('');
+
+            for (const tableName of tableNames) {
+                const tableRows = this.index.get(tableName);
+                if (!tableRows) {
+                    continue;
+                }
+                const fileName = this.getFileNameForTable(tableName) || tableName;
+                const purpose = this.getFilePurpose(fileName) || 'No description available.';
+                const schemaTable = this.schema?.tables[fileName];
+
+                lines.push(`#### \`${fileName}\``);
+                lines.push('');
+                lines.push(`**Purpose**: ${purpose}`);
+                lines.push(`**Table name**: \`${tableName}\``);
+                lines.push(`**Rows**: ${tableRows.size}`);
+                lines.push('');
+
+                // Schema section
+                if (schemaTable && schemaTable.columns.length > 0) {
+                    lines.push('**Schema**:');
+                    lines.push('');
+                    lines.push('| Column | Type | PK | FK Target |');
+                    lines.push('|--------|------|----|-----------|');
+                    for (const col of schemaTable.columns) {
+                        const pk = col.is_primary_key ? '✓' : '';
+                        const fkTarget = col.is_foreign_key && col.fk_target
+                            ? `\`${col.fk_target.table}\` → \`${col.fk_target.column}\``
+                            : '';
+                        lines.push(`| \`${col.name}\` | ${col.type} | ${pk} | ${fkTarget} |`);
+                    }
+                    lines.push('');
+                }
+
+                // Sample data (up to 3 rows)
+                const sampleRows = Array.from(tableRows.values()).slice(0, 3);
+                if (sampleRows.length > 0) {
+                    const firstRow = sampleRows[0];
+                    const colNames = Object.keys(firstRow.values);
+                    if (colNames.length > 0) {
+                        lines.push('**Sample data** (first 3 rows):');
+                        lines.push('');
+                        lines.push(`| pk | ${colNames.join(' | ')} |`);
+                        lines.push(`|----|-${colNames.map(() => '--').join('-|-')}-|`);
+                        for (const row of sampleRows) {
+                            const cells = colNames.map(c => row.values[c] ?? '');
+                            lines.push(`| ${row.pkValue} | ${cells.join(' | ')} |`);
+                        }
+                        lines.push('');
+                    }
+                }
+
+                // FK stats for this table
+                const tableRefs = allRefs.filter(r => r.sourceTable === tableName);
+                if (tableRefs.length > 0) {
+                    const resolved = tableRefs.filter(r => r.resolved).length;
+                    lines.push(`**FK references**: ${tableRefs.length} total, ${resolved} resolved, ${tableRefs.length - resolved} unresolved`);
+                    lines.push('');
+                }
+            }
+        }
+
+        // ── Cross-file relationship map ──────────────────────────────────────
+        lines.push('## Cross-File FK Relationships');
+        lines.push('');
+        lines.push('Format: `source_table.source_column → target_table` with reference counts.');
+        lines.push('');
+
+        const relMap = new Map<string, { count: number; resolved: number }>();
+        for (const ref of allRefs) {
+            const key = `${ref.sourceTable}.${ref.sourceColumn} → ${ref.targetTable}`;
+            if (!relMap.has(key)) {
+                relMap.set(key, { count: 0, resolved: 0 });
+            }
+            const entry = relMap.get(key)!;
+            entry.count++;
+            if (ref.resolved) {
+                entry.resolved++;
+            }
+        }
+
+        const sortedRels = Array.from(relMap.entries()).sort((a, b) => b[1].count - a[1].count);
+        if (sortedRels.length === 0) {
+            lines.push('_No FK relationships detected._');
+        } else {
+            lines.push('| Relationship | Total | Resolved | Unresolved |');
+            lines.push('|---|---:|---:|---:|');
+            for (const [key, val] of sortedRels) {
+                lines.push(`| \`${key}\` | ${val.count} | ${val.resolved} | ${val.count - val.resolved} |`);
+            }
+        }
+        lines.push('');
+
+        // ── Data quality issues ──────────────────────────────────────────────
+        lines.push('## Data Quality Issues');
+        lines.push('');
+
+        // Top unresolved FK targets
+        const unresolvedRefs = allRefs.filter(r => !r.resolved);
+        const unresolvedByTarget = new Map<string, number>();
+        for (const ref of unresolvedRefs) {
+            const key = `${ref.targetTable}.${ref.targetColumn}`;
+            unresolvedByTarget.set(key, (unresolvedByTarget.get(key) || 0) + 1);
+        }
+
+        lines.push('### Unresolved FK Targets (top 20)');
+        lines.push('');
+        const topUnresolved = Array.from(unresolvedByTarget.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 20);
+        if (topUnresolved.length === 0) {
+            lines.push('_No unresolved FK references — all references resolved successfully._');
+        } else {
+            lines.push('| Target | Unresolved Count |');
+            lines.push('|--------|---:|');
+            for (const [target, count] of topUnresolved) {
+                lines.push(`| \`${target}\` | ${count} |`);
+            }
+        }
+        lines.push('');
+
+        // Orphan rows (no inbound or outbound FK references)
+        lines.push('### Orphan Rows (no inbound or outbound FK references, sample up to 50)');
+        lines.push('');
+
+        const outboundByRow = new Map<string, number>();
+        for (const ref of allRefs) {
+            const rowKey = `${ref.sourceTable}:${ref.sourceFile}:${ref.sourceLine}`;
+            outboundByRow.set(rowKey, (outboundByRow.get(rowKey) || 0) + 1);
+        }
+
+        const orphanRows: Array<{ table: string; pk: string; line: number }> = [];
+        for (const [tableName, tableRows] of this.index.entries()) {
+            for (const row of tableRows.values()) {
+                const inbound = this.getReferencesToRow(tableName, row.pkValue).length;
+                const outbound = outboundByRow.get(`${tableName}:${row.file}:${row.lineNumber}`) || 0;
+                if (inbound === 0 && outbound === 0) {
+                    orphanRows.push({ table: tableName, pk: row.pkValue, line: row.lineNumber });
+                }
+            }
+        }
+
+        if (orphanRows.length === 0) {
+            lines.push('_No orphan rows detected._');
+        } else {
+            lines.push(`Total orphan rows: ${orphanRows.length}`);
+            lines.push('');
+            lines.push('| Table | Primary Key | Line |');
+            lines.push('|-------|-------------|---:|');
+            for (const row of orphanRows.slice(0, 50)) {
+                lines.push(`| \`${row.table}\` | ${row.pk} | ${row.line} |`);
+            }
+            if (orphanRows.length > 50) {
+                lines.push('');
+                lines.push(`_Only first 50 rows shown. Total: ${orphanRows.length}._`);
+            }
+        }
+        lines.push('');
+
+        // ── file.cio classification summary ─────────────────────────────────
+        if (this.fileCioData.size > 0) {
+            lines.push('## file.cio Classification Summary');
+            lines.push('');
+            lines.push('Active (non-null) files per classification group.');
+            lines.push('');
+            lines.push('| Classification | Active Files |');
+            lines.push('|----------------|-------------|');
+            for (const [classification, data] of this.fileCioData.entries()) {
+                const activeFiles = data.files.filter((f, i) => !data.isDefault[i] && /\.\w+$/.test(f));
+                if (activeFiles.length > 0) {
+                    lines.push(`| ${classification} | ${activeFiles.join(', ')} |`);
+                }
+            }
+            lines.push('');
+        }
+
+        return lines.join('\n');
+    }
+
+    /**
      * Export the current index to a JSON file for inspection.
      * Returns the path to the written file or undefined on error.
      */

@@ -447,6 +447,33 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
+	// Command: Export AI-readable context document from the current index
+	const exportAiContext = vscode.commands.registerCommand('swat-dataset-selector.exportAiContext', async () => {
+		if (!indexer.isIndexBuilt()) {
+			vscode.window.showWarningMessage('Index has not been built yet. Run Build Inputs Index first.');
+			return;
+		}
+
+		const content = indexer.generateAiContextDocument();
+		if (!content) {
+			vscode.window.showErrorMessage('Failed to generate AI context document.');
+			return;
+		}
+
+		const selectedPath = indexer.getDatasetPath();
+		const outputDir = selectedPath || context.extensionPath;
+		const outPath = path.join(outputDir, 'ai-context.md');
+
+		try {
+			fs.writeFileSync(outPath, content, 'utf-8');
+			const doc = await vscode.workspace.openTextDocument(outPath);
+			await vscode.window.showTextDocument(doc, { preview: false });
+			vscode.window.showInformationMessage(`AI context document exported: ${outPath}`);
+		} catch (err) {
+			vscode.window.showErrorMessage('Failed to write AI context document: ' + (err instanceof Error ? err.message : String(err)));
+		}
+	});
+
 	// Debug helper: seed test data so the webview shows content for troubleshooting
 	const seedTestData = vscode.commands.registerCommand('swat-dataset-selector.seedTestData', async () => {
 		try {
@@ -692,6 +719,7 @@ export function activate(context: vscode.ExtensionContext) {
 		showFKReferences,
 		showTableViewer,
 		exportIndexCmd,
+		exportAiContext,
 		seedTestData,
 		uploadDataset,
 		revealWorkdataFolder,
