@@ -137,6 +137,15 @@ export interface FKReference {
     targetRow?: IndexedRow;
 }
 
+export interface FilePointerIssue {
+    sourceFile: string;      // absolute path to the source file containing the reference
+    sourceLine: number;      // 1-based line number in the source file
+    sourceTable: string;     // table name in the index
+    sourceColumn: string;    // column name that contains the file pointer
+    referencedFile: string;  // the file name/path that was referenced but does not exist
+    columnDescription?: string; // human-readable description of the pointer column
+}
+
 export class SwatIndexer {
     private schema: Schema | null = null;
     private metadata: TxtInOutMetadata | null = null;
@@ -1863,5 +1872,86 @@ export class SwatIndexer {
             });
         }
         return Array.from(files);
+    }
+
+    /**
+     * Check all file pointer columns across indexed tables and return issues where
+     * the referenced file does not exist on disk.
+     *
+     * File pointer columns are defined in the metadata's `file_pointer_columns` map.
+     * Each entry maps a source file name to an object whose keys (excluding the
+     * special "description" key) are column names that contain file name references.
+     */
+    public getFilePointerIssues(): FilePointerIssue[] {
+        if (!this.metadata?.file_pointer_columns || !this.txtInOutPath) {
+            return [];
+        }
+
+        const issues: FilePointerIssue[] = [];
+        const nullSet = new Set(this.fkNullValues.map(v => v.toLowerCase()));
+        const filePointerColumns = this.metadata.file_pointer_columns;
+
+        for (const [fileName, columnDefs] of Object.entries(filePointerColumns)) {
+            // Skip the top-level "description" key (metadata, not a file entry)
+            if (fileName === 'description' || typeof columnDefs !== 'object' || Array.isArray(columnDefs)) {
+                continue;
+            }
+
+            // Find the indexed table name for this file
+            const tableName = this.fileToTableMap.get(fileName.toLowerCase()) ||
+                this.dynamicFileToTableMap.get(fileName.toLowerCase());
+            if (!tableName) {
+                continue;
+            }
+
+            const tableIndex = this.index.get(tableName);
+            if (!tableIndex) {
+                continue;
+            }
+
+            // Collect the pointer column names, skipping the per-file "description" key
+            const pointerColumns = Object.keys(columnDefs as object).filter(k => k !== 'description');
+
+            for (const row of tableIndex.values()) {
+                for (const colName of pointerColumns) {
+                    const value = row.values[colName];
+
+                    // Skip null/empty/sentinel values
+                    if (!value || !value.trim() || nullSet.has(value.toLowerCase())) {
+                        continue;
+                    }
+
+                    // Determine whether this column is a file pointer:
+                    // - columns with a 'file_pattern' definition are always file references
+                    // - for other columns, only check values that look like file names (contain a period),
+                    //   which avoids false positives for name-reference columns (e.g. wgn station name)
+                    const colDef = (columnDefs as Record<string, unknown>)[colName];
+                    const hasFilePattern = typeof colDef === 'object' && colDef !== null &&
+                        'file_pattern' in (colDef as object);
+                    if (!hasFilePattern && !value.includes('.')) {
+                        continue;
+                    }
+
+                    // Check whether the referenced file exists in the TxtInOut directory
+                    const targetFilePath = path.join(this.txtInOutPath!, value);
+                    if (!fs.existsSync(targetFilePath)) {
+                        const description = typeof colDef === 'object' && colDef !== null
+                            ? (colDef as { description?: string }).description
+                            : (typeof colDef === 'string' ? colDef : undefined);
+
+                        issues.push({
+                            sourceFile: row.file,
+                            sourceLine: row.lineNumber,
+                            sourceTable: tableName,
+                            sourceColumn: colName,
+                            referencedFile: value,
+                            columnDescription: description
+                        });
+                    }
+                }
+            }
+        }
+
+        return issues;
     }
 }
