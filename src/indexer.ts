@@ -146,6 +146,32 @@ export interface FilePointerIssue {
     columnDescription?: string; // human-readable description of the pointer column
 }
 
+/**
+ * Categories of file format issues that can be detected by the format checker.
+ */
+export type FileFormatIssueKind =
+    | 'empty_file'           // The file exists but contains no content
+    | 'missing_metadata_line'// Schema expects a title/metadata line but it is absent or blank
+    | 'missing_header_line'  // Schema expects a column-header line but it is absent or blank
+    | 'header_column_mismatch' // Actual header columns differ substantially from schema columns
+    | 'wrong_column_count'   // A data row has fewer columns than the schema defines
+    | 'invalid_integer'      // An IntegerField column contains a non-integer value
+    | 'invalid_decimal'      // A DoubleField column contains a non-numeric value
+    | 'invalid_boolean';     // A BooleanField column contains a value other than 0 or 1
+
+/**
+ * A single format issue detected in a SWAT+ input file.
+ */
+export interface FileFormatIssue {
+    file: string;            // absolute path to the source file
+    line: number;            // 1-based line number (0 = file-level issue, not tied to a specific line)
+    column?: string;         // schema column name involved (if applicable)
+    kind: FileFormatIssueKind;
+    message: string;
+    expected?: string;       // what was expected (e.g. column name, data type)
+    actual?: string;         // what was actually found
+}
+
 export class SwatIndexer {
     private schema: Schema | null = null;
     private metadata: TxtInOutMetadata | null = null;
@@ -1947,6 +1973,245 @@ export class SwatIndexer {
                             referencedFile: value,
                             columnDescription: description
                         });
+                    }
+                }
+            }
+        }
+
+        return issues;
+    }
+
+    /**
+     * Check all schema-defined files in the dataset for format issues:
+     *   - Empty files
+     *   - Missing title (metadata) line
+     *   - Missing or mismatched column-header line
+     *   - Data rows with too few columns
+     *   - Data rows with invalid values for typed columns (integer, decimal, boolean)
+     *
+     * Hierarchical files (soils.sol, plant.ini, …) and decision-table files (*.dtl)
+     * are skipped for deep row-level checks because their non-tabular format
+     * requires special parsing beyond what this generic validator can handle.
+     * Basic empty-file and header checks are still performed for all files.
+     *
+     * At most MAX_ISSUES_PER_FILE row-level issues are collected per file to
+     * keep the results readable.
+     */
+    public getFileFormatIssues(): FileFormatIssue[] {
+        if (!this.schema || !this.txtInOutPath) {
+            return [];
+        }
+
+        const MAX_ISSUES_PER_FILE = 20;
+        const nullSet = new Set(this.fkNullValues.map(v => v.toLowerCase()));
+        const hierarchicalFileNames = new Set(
+            Object.keys(this.metadata?.hierarchical_files ?? {}).filter(k => k !== 'description')
+        );
+
+        const issues: FileFormatIssue[] = [];
+
+        for (const table of Object.values(this.schema.tables)) {
+            const fileName = table.file_name;
+            const filePath = path.join(this.txtInOutPath, fileName);
+
+            if (!fs.existsSync(filePath)) {
+                continue; // missing-file issues are handled by the file-pointer checker
+            }
+
+            let content: string;
+            try {
+                content = fs.readFileSync(filePath, 'utf-8');
+            } catch {
+                continue;
+            }
+
+            // Normalise line endings
+            const rawLines = content.split(/\r?\n/);
+
+            // ── 1. Empty file ──────────────────────────────────────────────────
+            const nonEmpty = rawLines.filter(l => l.trim().length > 0);
+            if (nonEmpty.length === 0) {
+                issues.push({
+                    file: filePath,
+                    line: 0,
+                    kind: 'empty_file',
+                    message: `File is empty: ${fileName}`
+                });
+                continue; // nothing else to check
+            }
+
+            // Physical columns (AutoField columns are DB-only; not in the file)
+            const physicalColumns = table.columns.filter(c => c.type !== 'AutoField');
+            const isHierarchical = hierarchicalFileNames.has(fileName);
+            const isDtl = fileName.toLowerCase().endsWith('.dtl');
+
+            // ── 2. Metadata (title) line ────────────────────────────────────────
+            if (table.has_metadata_line) {
+                const metaLine = rawLines[0]?.trim() ?? '';
+                if (!metaLine) {
+                    issues.push({
+                        file: filePath,
+                        line: 1,
+                        kind: 'missing_metadata_line',
+                        message: `Missing or blank title/metadata line in ${fileName}`,
+                        expected: 'Non-empty title line on line 1'
+                    });
+                }
+            }
+
+            // ── 3. Header line ──────────────────────────────────────────────────
+            const headerLineIdx = table.data_starts_after - 1; // 0-based index of header row
+            if (table.has_header_line && headerLineIdx >= 0) {
+                if (headerLineIdx >= rawLines.length || !rawLines[headerLineIdx]?.trim()) {
+                    issues.push({
+                        file: filePath,
+                        line: headerLineIdx + 1,
+                        kind: 'missing_header_line',
+                        message: `Missing or blank column-header line in ${fileName}`,
+                        expected: `Column header on line ${headerLineIdx + 1}`
+                    });
+                } else {
+                    // Soft match: check whether the actual header columns are consistent
+                    // with the schema columns.  We flag an issue only when the count
+                    // difference is large or when no expected column appears in the header.
+                    const actualHeaders = rawLines[headerLineIdx].trim().split(/\s+/);
+                    const expectedHeaders = physicalColumns.map(c => c.name.toLowerCase());
+                    const actualLower = new Set(actualHeaders.map(h => h.toLowerCase()));
+
+                    const missing = expectedHeaders.filter(e => !actualLower.has(e));
+                    // Report only if more than half the expected columns are absent
+                    if (expectedHeaders.length > 0 && missing.length > expectedHeaders.length / 2) {
+                        issues.push({
+                            file: filePath,
+                            line: headerLineIdx + 1,
+                            kind: 'header_column_mismatch',
+                            message: `Column-header mismatch in ${fileName}: ` +
+                                `${missing.length} of ${expectedHeaders.length} expected columns not found in header`,
+                            expected: expectedHeaders.join(' '),
+                            actual: actualHeaders.join(' ')
+                        });
+                    }
+                }
+            }
+
+            // ── 4. Row-level checks (standard tabular files only) ───────────────
+            // Skip hierarchical and decision-table files for deep row inspection
+            if (isHierarchical || isDtl) {
+                continue;
+            }
+
+            const dataStartLine = table.data_starts_after; // 0-based index of first data row
+            const expectedColCount = physicalColumns.length;
+
+            // Build per-column indices for typed checks (position in physicalColumns array)
+            const integerColIndices: Array<{ idx: number; name: string }> = [];
+            const decimalColIndices: Array<{ idx: number; name: string }> = [];
+            const booleanColIndices: Array<{ idx: number; name: string }> = [];
+
+            physicalColumns.forEach((col, idx) => {
+                if (col.type === 'IntegerField' || col.type === 'PrimaryKeyField') {
+                    integerColIndices.push({ idx, name: col.name });
+                } else if (col.type === 'DoubleField') {
+                    decimalColIndices.push({ idx, name: col.name });
+                } else if (col.type === 'BooleanField') {
+                    booleanColIndices.push({ idx, name: col.name });
+                }
+            });
+
+            let rowIssueCount = 0;
+
+            for (let i = dataStartLine; i < rawLines.length; i++) {
+                if (rowIssueCount >= MAX_ISSUES_PER_FILE) {
+                    break;
+                }
+
+                const line = rawLines[i].trim();
+                if (!line || line.startsWith('#')) {
+                    continue;
+                }
+
+                const values = line.split(/\s+/);
+
+                // ── 4a. Column count ───────────────────────────────────────────
+                // Allow one trailing optional column to be absent (SWAT+ sometimes
+                // adds optional parameters in newer versions), but flag when
+                // significantly short.
+                if (expectedColCount > 0 && values.length < expectedColCount - 1) {
+                    issues.push({
+                        file: filePath,
+                        line: i + 1,
+                        kind: 'wrong_column_count',
+                        message: `Too few columns in ${fileName} at line ${i + 1}: ` +
+                            `expected ${expectedColCount} columns, found ${values.length}`,
+                        expected: `${expectedColCount}`,
+                        actual: `${values.length}`
+                    });
+                    rowIssueCount++;
+                    continue; // skip type checks for this malformed row
+                }
+
+                // ── 4b. Integer columns ────────────────────────────────────────
+                for (const { idx, name } of integerColIndices) {
+                    if (rowIssueCount >= MAX_ISSUES_PER_FILE) { break; }
+                    const raw = values[idx];
+                    if (!raw) { continue; }
+                    if (nullSet.has(raw.toLowerCase())) { continue; }
+                    // Number.isInteger correctly handles scientific notation (e.g. 1e2 parses to 100)
+                    const num = Number(raw);
+                    if (!Number.isFinite(num) || !Number.isInteger(num)) {
+                        issues.push({
+                            file: filePath,
+                            line: i + 1,
+                            column: name,
+                            kind: 'invalid_integer',
+                            message: `Invalid integer value in ${fileName} at line ${i + 1}, ` +
+                                `column "${name}": "${raw}"`,
+                            expected: 'integer',
+                            actual: raw
+                        });
+                        rowIssueCount++;
+                    }
+                }
+
+                // ── 4c. Decimal columns ────────────────────────────────────────
+                for (const { idx, name } of decimalColIndices) {
+                    if (rowIssueCount >= MAX_ISSUES_PER_FILE) { break; }
+                    const raw = values[idx];
+                    if (!raw) { continue; }
+                    if (nullSet.has(raw.toLowerCase())) { continue; }
+                    if (!Number.isFinite(Number(raw))) {
+                        issues.push({
+                            file: filePath,
+                            line: i + 1,
+                            column: name,
+                            kind: 'invalid_decimal',
+                            message: `Invalid numeric value in ${fileName} at line ${i + 1}, ` +
+                                `column "${name}": "${raw}"`,
+                            expected: 'number',
+                            actual: raw
+                        });
+                        rowIssueCount++;
+                    }
+                }
+
+                // ── 4d. Boolean columns ────────────────────────────────────────
+                for (const { idx, name } of booleanColIndices) {
+                    if (rowIssueCount >= MAX_ISSUES_PER_FILE) { break; }
+                    const raw = values[idx];
+                    if (!raw) { continue; }
+                    if (nullSet.has(raw.toLowerCase())) { continue; }
+                    if (raw !== '0' && raw !== '1') {
+                        issues.push({
+                            file: filePath,
+                            line: i + 1,
+                            column: name,
+                            kind: 'invalid_boolean',
+                            message: `Invalid boolean value in ${fileName} at line ${i + 1}, ` +
+                                `column "${name}": "${raw}" (expected 0 or 1)`,
+                            expected: '0 or 1',
+                            actual: raw
+                        });
+                        rowIssueCount++;
                     }
                 }
             }

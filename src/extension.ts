@@ -8,6 +8,7 @@ import { SwatIndexer } from './indexer';
 import { SwatFKDefinitionProvider } from './fkDefinitionProvider';
 import { SwatFKDiagnosticsProvider } from './fkDiagnostics';
 import { SwatFilePointerDiagnosticsProvider } from './filePointerDiagnostics';
+import { SwatFileFormatDiagnosticsProvider } from './fileFormatDiagnostics';
 import { SwatFKDecorationProvider } from './fkDecorations';
 import { SwatFKHoverProvider } from './fkHoverProvider';
 import { SwatFKReferencesPanel } from './fkReferencesPanel';
@@ -39,6 +40,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const fkHoverProvider = new SwatFKHoverProvider(indexer);
 	const fkDiagnostics = new SwatFKDiagnosticsProvider(indexer, context);
 	const filePointerDiagnostics = new SwatFilePointerDiagnosticsProvider(indexer, context);
+	const fileFormatDiagnostics = new SwatFileFormatDiagnosticsProvider(indexer, context);
 	const fkDecorations = new SwatFKDecorationProvider(indexer, context);
 
 	const tryAutoLoadIndex = async (datasetPath: string): Promise<void> => {
@@ -50,6 +52,7 @@ export function activate(context: vscode.ExtensionContext) {
 		if (success) {
 			fkDiagnostics.updateDiagnostics();
 			filePointerDiagnostics.updateDiagnostics();
+			fileFormatDiagnostics.updateDiagnostics();
 			fkDecorations.refresh();
 		}
 	};
@@ -228,6 +231,7 @@ export function activate(context: vscode.ExtensionContext) {
 			// Update diagnostics and decorations
 			fkDiagnostics.updateDiagnostics();
 			filePointerDiagnostics.updateDiagnostics();
+			fileFormatDiagnostics.updateDiagnostics();
 			fkDecorations.refresh();
 			// Open the full table viewer first so file_cio is the last (active) tab
 			SwatTableViewerPanel.createOrShow(indexer);
@@ -292,6 +296,9 @@ export function activate(context: vscode.ExtensionContext) {
 		// Collect file pointer issues
 		const filePointerIssues = indexer.getFilePointerIssues();
 
+		// Collect file format issues
+		const fileFormatIssueList = indexer.getFileFormatIssues();
+
 		const sortMapDesc = (input: Map<string, number>): Array<[string, number]> => {
 			return Array.from(input.entries()).sort((a, b) => b[1] - a[1]);
 		};
@@ -300,6 +307,7 @@ export function activate(context: vscode.ExtensionContext) {
 		const topUnresolvedSources = sortMapDesc(unresolvedBySourceColumn).slice(0, 25);
 		const orphanSample = orphanRows.slice(0, 200);
 		const filePointerSample = filePointerIssues.slice(0, 200);
+		const fileFormatSample = fileFormatIssueList.slice(0, 200);
 
 		const selectedPath = indexer.getDatasetPath();
 		const outputDir = selectedPath || context.extensionPath;
@@ -318,7 +326,27 @@ export function activate(context: vscode.ExtensionContext) {
 		lines.push(`- Resolved references: ${stats.resolvedFkCount}`);
 		lines.push(`- Unresolved references: ${stats.unresolvedFkCount}`);
 		lines.push(`- Missing file pointers: ${filePointerIssues.length}`);
+		lines.push(`- File format issues: ${fileFormatIssueList.length}`);
 		lines.push(`- Potential orphan rows (no inbound and no outbound refs): ${orphanRows.length}`);
+		lines.push('');
+
+		lines.push('## File format issues (sample, max 200)');
+		lines.push('_Structural and data-type issues detected in SWAT+ input files._');
+		if (fileFormatSample.length === 0) {
+			lines.push('- None');
+		} else {
+			lines.push('| file | line | kind | message |');
+			lines.push('|---|---:|---|---|');
+			for (const issue of fileFormatSample) {
+				const fileBase = path.basename(issue.file);
+				const lineStr = issue.line > 0 ? `${issue.line}` : '—';
+				lines.push(`| ${fileBase} | ${lineStr} | ${issue.kind} | ${issue.message} |`);
+			}
+			if (fileFormatIssueList.length > fileFormatSample.length) {
+				lines.push('');
+				lines.push(`_Only first ${fileFormatSample.length} issues shown._`);
+			}
+		}
 		lines.push('');
 
 		lines.push('## Missing file pointers (sample, max 200)');
@@ -381,38 +409,51 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.showInformationMessage(`Data quality preflight report created: ${outPath}`);
 	});
 
-	// Command: Check Input Files - dedicated file pointer checker
+	// Command: Check Input Files - checks file pointers and file format issues
 	const checkInputFiles = vscode.commands.registerCommand('swat-dataset-selector.checkInputFiles', async () => {
 		if (!indexer.isIndexBuilt()) {
 			vscode.window.showWarningMessage('No index available. Build or load an index first.');
 			return;
 		}
 
-		const issues = indexer.getFilePointerIssues();
-
-		// Refresh diagnostics so the Problems panel reflects the latest state
+		// Collect both categories of issues and refresh diagnostics
+		const pointerIssues = indexer.getFilePointerIssues();
+		const formatIssues = indexer.getFileFormatIssues();
 		filePointerDiagnostics.updateDiagnostics();
+		fileFormatDiagnostics.updateDiagnostics();
 
-		if (issues.length === 0) {
-			vscode.window.showInformationMessage('SWAT+ Input File Check: No missing file pointers found. All referenced files exist.');
+		const totalIssues = pointerIssues.length + formatIssues.length;
+
+		if (totalIssues === 0) {
+			vscode.window.showInformationMessage(
+				'SWAT+ Input File Check: No issues found. ' +
+				'All referenced files exist and all checked files are correctly formatted.'
+			);
 			return;
 		}
 
-		// Group issues by missing file for a concise summary
-		const missingFiles = new Map<string, number>();
-		for (const issue of issues) {
-			missingFiles.set(issue.referencedFile, (missingFiles.get(issue.referencedFile) || 0) + 1);
+		const parts: string[] = [];
+
+		if (pointerIssues.length > 0) {
+			// Group issues by missing file for a concise summary
+			const missingFiles = new Map<string, number>();
+			for (const issue of pointerIssues) {
+				missingFiles.set(issue.referencedFile, (missingFiles.get(issue.referencedFile) || 0) + 1);
+			}
+			const summary = Array.from(missingFiles.entries())
+				.sort((a, b) => b[1] - a[1])
+				.slice(0, 5)
+				.map(([file, count]) => `"${file}" (${count} ref${count !== 1 ? 's' : ''})`)
+				.join(', ');
+			const moreText = missingFiles.size > 5 ? ` +${missingFiles.size - 5} more` : '';
+			parts.push(`${pointerIssues.length} missing file pointer${pointerIssues.length > 1 ? 's' : ''} (${summary}${moreText})`);
 		}
 
-		const summary = Array.from(missingFiles.entries())
-			.sort((a, b) => b[1] - a[1])
-			.slice(0, 10)
-			.map(([file, count]) => `"${file}" (${count} reference${count > 1 ? 's' : ''})`)
-			.join(', ');
+		if (formatIssues.length > 0) {
+			parts.push(`${formatIssues.length} file format issue${formatIssues.length > 1 ? 's' : ''}`);
+		}
 
-		const moreText = missingFiles.size > 10 ? ` and ${missingFiles.size - 10} more` : '';
-		const message = `SWAT+ Input File Check: ${issues.length} missing file pointer${issues.length > 1 ? 's' : ''} found. ` +
-			`Missing: ${summary}${moreText}. See the Problems panel for details.`;
+		const message = `SWAT+ Input File Check: ${parts.join('; ')}. See the Problems panel for details.`;
 
 		const choice = await vscode.window.showWarningMessage(message, 'Open Problems Panel');
 		if (choice === 'Open Problems Panel') {
@@ -438,6 +479,7 @@ export function activate(context: vscode.ExtensionContext) {
 			// Update diagnostics and decorations
 			fkDiagnostics.updateDiagnostics();
 			filePointerDiagnostics.updateDiagnostics();
+			fileFormatDiagnostics.updateDiagnostics();
 			fkDecorations.refresh();
 			SwatTableViewerPanel.createOrShow(indexer);
 			SwatSingleTableViewerPanel.createOrShow(indexer, 'file_cio');
@@ -456,6 +498,7 @@ export function activate(context: vscode.ExtensionContext) {
 			// Update diagnostics and decorations
 			fkDiagnostics.updateDiagnostics();
 			filePointerDiagnostics.updateDiagnostics();
+			fileFormatDiagnostics.updateDiagnostics();
 			fkDecorations.refresh();
 			// Open the full table viewer first so file_cio is the last (active) tab
 			SwatTableViewerPanel.createOrShow(indexer);
