@@ -15,7 +15,7 @@ import { SwatSingleTableViewerPanel } from './singleTableViewerPanel';
 import { SchemaEditorPanel } from './schemaEditorPanel';
 import { SwatDependencyGraphPanel } from './dependencyGraphPanel';
 import { normalizePathForComparison, pathStartsWith } from './pathUtils';
-import { detectEnvironment, hasWorkspace, isCmakeToolsInstalled, resolvePathForEnvironment } from './environmentUtils';
+import { detectEnvironment, isCmakeToolsInstalled } from './environmentUtils';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -476,81 +476,17 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
-	// Command: Copy a dataset from another location into workdata/
-	const uploadDataset = vscode.commands.registerCommand('swat-dataset-selector.uploadDataset', async () => {
-		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-		if (!workspaceRoot) {
-			const action = await vscode.window.showWarningMessage(
-				'No workspace folder is open. Open a folder first to use the workdata/ directory.',
-				'Open Folder'
-			);
-			if (action === 'Open Folder') {
-				await vscode.commands.executeCommand('vscode.openFolder');
-			}
-			return;
-		}
-
-		const workdataDir = path.join(workspaceRoot, 'workdata');
-		if (!fs.existsSync(workdataDir)) {
-			fs.mkdirSync(workdataDir, { recursive: true });
-		}
-
-		const source = await vscode.window.showOpenDialog({
-			canSelectFiles: false,
-			canSelectFolders: true,
-			canSelectMany: false,
-			openLabel: 'Copy Dataset Here',
-			title: 'Select SWAT+ Dataset Folder to Copy into workdata/'
-		});
-		if (!source || source.length === 0) {
-			return;
-		}
-
-		const sourcePath = source[0].fsPath;
-		const folderName = path.basename(sourcePath);
-		const targetPath = path.join(workdataDir, folderName);
-
-		if (fs.existsSync(targetPath)) {
-			const confirm = await vscode.window.showWarningMessage(
-				`Folder "${folderName}" already exists in workdata/. Overwrite?`,
-				{ modal: true },
-				'Overwrite'
-			);
-			if (confirm !== 'Overwrite') {
-				return;
-			}
-		}
-
-		try {
-			await vscode.window.withProgress(
-				{
-					location: vscode.ProgressLocation.Notification,
-					title: `Copying "${folderName}" to workdata/...`,
-					cancellable: false
-				},
-				async () => {
-					fs.cpSync(sourcePath, targetPath, { recursive: true });
-				}
-			);
-			swatProvider.setSelectedDataset(targetPath);
-			vscode.window.showInformationMessage(`Dataset "${folderName}" copied to workdata/ and selected.`);
-			await tryAutoLoadIndex(targetPath);
-		} catch (err) {
-			vscode.window.showErrorMessage('Failed to copy dataset: ' + (err instanceof Error ? err.message : String(err)));
-		}
-	});
-
 	// Command: Open schema editor for a given schema file path
 	const editSchema = vscode.commands.registerCommand('swat-dataset-selector.editSchema', (schemaPath?: string) => {
 		SchemaEditorPanel.createOrShow(context, schemaPath);
 	});
 
-	// Command: Reveal workdata/ folder in the VS Code Explorer
+	// Command: Reveal the configured dataset folder in the VS Code Explorer
 	const revealWorkdataFolder = vscode.commands.registerCommand('swat-dataset-selector.revealWorkdataFolder', async () => {
 		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		if (!workspaceRoot) {
 			const action = await vscode.window.showWarningMessage(
-				'No workspace folder is open. Open a folder to use workdata/.',
+				'No workspace folder is open. Open a folder to use the dataset folder.',
 				'Open Folder'
 			);
 			if (action === 'Open Folder') {
@@ -558,11 +494,11 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 			return;
 		}
-		const workdataDir = path.join(workspaceRoot, 'workdata');
-		if (!fs.existsSync(workdataDir)) {
-			fs.mkdirSync(workdataDir, { recursive: true });
+		const datasetDir = swatProvider.getDatasetDirectory() ?? path.join(workspaceRoot, 'workdata');
+		if (!fs.existsSync(datasetDir)) {
+			fs.mkdirSync(datasetDir, { recursive: true });
 		}
-		await vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(workdataDir));
+		await vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(datasetDir));
 	});
 
 	// Command: Use a folder from the Explorer context menu as the active SWAT+ dataset
@@ -593,27 +529,46 @@ export function activate(context: vscode.ExtensionContext) {
 	swatProvider.setOnChangeCallback(updateStatusBar);
 	statusBarItem.show();
 
-	// Command: Switch dataset — quick-pick combining workdata/, recent datasets, and browse
+	// Command: Switch dataset — quick-pick combining recent datasets, dataset folder entries, and browse
 	const switchDataset = vscode.commands.registerCommand('swat-dataset-selector.switchDataset', async () => {
 		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-		const workdataDir = workspaceRoot ? path.join(workspaceRoot, 'workdata') : undefined;
+		const datasetDir = workspaceRoot ? (swatProvider.getDatasetDirectory() ?? path.join(workspaceRoot, 'workdata')) : undefined;
+		const datasetDirLabel = datasetDir
+			? (workspaceRoot && datasetDir.startsWith(workspaceRoot)
+				? path.relative(workspaceRoot, datasetDir)
+				: datasetDir)
+			: 'dataset folder';
 		const env = detectEnvironment();
 
 		interface SwitchOption extends vscode.QuickPickItem {
-			action?: 'select' | 'browse' | 'upload';
+			action?: 'select' | 'browse';
 			datasetPath?: string;
 		}
 
 		const items: SwitchOption[] = [];
 
-		// Workdata datasets — only shown when a workspace is open
-		if (workdataDir && fs.existsSync(workdataDir)) {
-			const workdataDirs = fs.readdirSync(workdataDir, { withFileTypes: true })
+		// Recent datasets
+		const recentDatasets: string[] = context.globalState.get('recentDatasets', []);
+		if (recentDatasets.length > 0) {
+			items.push({ label: 'Recent datasets', kind: vscode.QuickPickItemKind.Separator });
+			for (const d of recentDatasets.slice(0, 5)) {
+				items.push({
+					label: `$(history) ${path.basename(d)}`,
+					description: d,
+					action: 'select',
+					datasetPath: d
+				});
+			}
+		}
+
+		// Dataset folder entries — only shown when a workspace is open
+		if (datasetDir && fs.existsSync(datasetDir)) {
+			const datasetDirs = fs.readdirSync(datasetDir, { withFileTypes: true })
 				.filter(e => e.isDirectory())
-				.map(e => path.join(workdataDir!, e.name));
-			if (workdataDirs.length > 0) {
-				items.push({ label: 'workdata/ datasets', kind: vscode.QuickPickItemKind.Separator });
-				for (const d of workdataDirs) {
+				.map(e => path.join(datasetDir, e.name));
+			if (datasetDirs.length > 0) {
+				items.push({ label: `Dataset folder: ${datasetDirLabel}`, kind: vscode.QuickPickItemKind.Separator });
+				for (const d of datasetDirs) {
 					items.push({
 						label: `$(folder) ${path.basename(d)}`,
 						description: d,
@@ -621,22 +576,6 @@ export function activate(context: vscode.ExtensionContext) {
 						datasetPath: d
 					});
 				}
-			}
-		}
-
-		// Recent datasets (deduplicated against workdata entries already listed)
-		const recentDatasets: string[] = context.globalState.get('recentDatasets', []);
-		const workdataEntries = new Set(items.filter(i => i.datasetPath).map(i => i.datasetPath!));
-		const recentFiltered = recentDatasets.filter(d => !workdataEntries.has(d));
-		if (recentFiltered.length > 0) {
-			items.push({ label: 'Recent datasets', kind: vscode.QuickPickItemKind.Separator });
-			for (const d of recentFiltered.slice(0, 5)) {
-				items.push({
-					label: `$(history) ${path.basename(d)}`,
-					description: d,
-					action: 'select',
-					datasetPath: d
-				});
 			}
 		}
 
@@ -652,17 +591,9 @@ export function activate(context: vscode.ExtensionContext) {
 			});
 		}
 
-		items.push({
-			label: '$(cloud-upload) Upload / import dataset...',
-			description: workspaceRoot
-				? 'Copy a dataset into workdata/ or select by path'
-				: 'Select or enter a dataset path (open a workspace to enable workdata/ options)',
-			action: 'upload'
-		});
-
 		const placeHolder = workspaceRoot
 			? 'Select a SWAT+ dataset to activate'
-			: 'No workspace open — workdata/ options unavailable';
+			: 'No workspace open — dataset folder options unavailable';
 
 		const chosen = await vscode.window.showQuickPick<SwitchOption>(items, {
 			title: 'SWAT+: Switch Dataset',
@@ -675,8 +606,6 @@ export function activate(context: vscode.ExtensionContext) {
 
 		if (chosen.action === 'browse') {
 			await vscode.commands.executeCommand('swat-dataset-selector.selectDataset');
-		} else if (chosen.action === 'upload') {
-			await vscode.commands.executeCommand('swat-dataset-selector.uploadDataset');
 		} else if (chosen.action === 'select' && chosen.datasetPath) {
 			swatProvider.setSelectedDataset(chosen.datasetPath);
 			await tryAutoLoadIndex(chosen.datasetPath);
@@ -705,7 +634,6 @@ export function activate(context: vscode.ExtensionContext) {
 		showTableViewer,
 		exportIndexCmd,
 		seedTestData,
-		uploadDataset,
 		revealWorkdataFolder,
 		useAsDataset,
 		switchDataset,

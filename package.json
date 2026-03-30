@@ -19,7 +19,6 @@
     "onStartupFinished",
     "onView:swatDatasetView",
     "onCommand:swat-dataset-selector.selectDataset",
-    "onCommand:swat-dataset-selector.uploadDataset",
     "onCommand:swat-dataset-selector.buildIndex",
     "onCommand:swat-dataset-selector.loadIndex",
     "onCommand:swat-dataset-selector.rebuildIndex"
@@ -92,13 +91,8 @@
         "icon": "$(cloud-download)"
       },
       {
-        "command": "swat-dataset-selector.uploadDataset",
-        "title": "SWAT+: Upload Dataset to Workspace",
-        "icon": "$(cloud-upload)"
-      },
-      {
         "command": "swat-dataset-selector.revealWorkdataFolder",
-        "title": "SWAT+: Reveal workdata/ Folder in Explorer",
+        "title": "SWAT+: Reveal Dataset Folder in Explorer",
         "icon": "$(folder-opened)"
       },
       {
@@ -150,7 +144,7 @@
         "swatplus.datasetDirectory": {
           "type": "string",
           "default": "workdata",
-          "description": "Directory (relative to the workspace root, or absolute) where SWAT+ dataset folders are stored. Used in SWAT+ mode (when CMake Tools is installed) as the primary dataset listing. Defaults to 'workdata'."
+          "description": "Directory (relative to the workspace root, or absolute) that contains SWAT+ dataset folders. It is shown in the Dataset Folder section beneath Recent Datasets. Defaults to 'workdata'."
         }
       }
     }

@@ -218,9 +218,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                 typeof data.path === 'string' && data.path ? data.path : undefined
                             );
                             break;
-                        case 'uploadDataset':
-                            vscode.commands.executeCommand('swat-dataset-selector.uploadDataset');
-                            break;
                         case 'dropDataset':
                             if (data.path && typeof data.path === 'string') {
                                 this._handleDroppedDataset(data.path.trim()).catch(err => {
@@ -393,6 +390,10 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
     /** Register a callback invoked whenever the active dataset changes. */
     public setOnChangeCallback(cb: (dataset: string | undefined) => void): void {
         this._onChangeCallback = cb;
+    }
+
+    public getDatasetDirectory(): string | undefined {
+        return this._resolveDatasetDirectory();
     }
 
     private removeRecentDataset(datasetPath: string): void {
@@ -1001,7 +1002,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 </div>
                </div>`;
 
-        // --- Workdata / dataset-directory section ---
+        // --- Dataset-directory section ---
         const workspaceRootForHtml = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         const hasWorkspaceOpen = hasWorkspace();
 
@@ -1015,9 +1016,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         // Resolve the effective dataset directory via shared helper
         const effectiveDatasetDir = this._resolveDatasetDirectory();
 
-        // Keep the legacy workdataDirForHtml for backward-compatible drop handling
-        const workdataDirForHtml = effectiveDatasetDir;
-
         let workdataDatasets: string[] = [];
         if (effectiveDatasetDir && fs.existsSync(effectiveDatasetDir)) {
             try {
@@ -1026,8 +1024,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     .map(e => path.join(effectiveDatasetDir, e.name));
             } catch (e) { /* ignore */ }
         }
-
-        const uploadTip = 'Click <b>Upload Dataset</b> above to copy a dataset from another location into this folder.';
 
         const datasetDirLabel = effectiveDatasetDir
             ? (workspaceRootForHtml && effectiveDatasetDir.startsWith(workspaceRootForHtml)
@@ -1038,7 +1034,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         const noWorkspaceBanner = !hasWorkspaceOpen
             ? `<div class="no-workspace-banner">
                 <span class="codicon codicon-warning"></span>
-                <span>No workspace folder is open. <a href="#" id="openFolderLink">Open a folder</a> to use the dataset directory and dataset uploads.</span>
+                <span>No workspace folder is open. <a href="#" id="openFolderLink">Open a folder</a> to use the dataset directory.</span>
               </div>`
             : '';
 
@@ -1048,19 +1044,20 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             <div class="section-header collapsible" data-section="workdata">
                 <span class="collapse-icon">${svgs.chevronDown}</span>
                 ${svgs.folder}
-                <span class="section-title" title="${escapeHtml(effectiveDatasetDir || datasetDirLabel)}">${swatPlusMode ? 'Dataset Folder' : 'Workdata Datasets'}</span>
+                <span class="section-title" title="${escapeHtml(effectiveDatasetDir || datasetDirLabel)}">Workspace Folder</span>
                 <span class="badge">${workdataDatasets.length}</span>
-                ${swatPlusMode ? `<button class="icon-button" id="changeDatasetDirBtn" title="Change dataset folder" style="margin-left:auto">
+                <button class="icon-button" id="changeDatasetDirBtn" title="Change workspace folder" style="margin-left:auto">
                     ${svgs.folderOpened}
-                </button>` : `<button class="icon-button" id="revealWorkdataBtn" title="Reveal dataset folder in Explorer" style="margin-left:auto">
-                    ${svgs.folderOpened}
-                </button>`}
+                </button>
+                <button class="icon-button" id="revealWorkdataBtn" title="Reveal workspace folder in Explorer">
+                    ${svgs.folder}
+                </button>
                 <button class="icon-button" id="refreshWorkdataBtn" title="Refresh dataset list">
                     ${svgs.refresh}
                 </button>
             </div>
             <div class="section-content" id="workdata-content">
-                ${swatPlusMode ? `<div class="dataset-dir-path" title="${escapeHtml(effectiveDatasetDir || datasetDirLabel)}">${escapeHtml(datasetDirLabel)}</div>` : ''}
+                <div class="dataset-dir-path" title="${escapeHtml(effectiveDatasetDir || datasetDirLabel)}">${escapeHtml(datasetDirLabel)}</div>
                 ${workdataDatasets.length === 0 ? '' : workdataDatasets.map(p => `
                     <div class="workdata-item" data-path="${escapeHtml(p)}" title="${escapeHtml(p)}" style="cursor:pointer">
                         ${svgs.folder}
@@ -1070,7 +1067,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         </div>
                     </div>
                 `).join('')}
-                <div class="workdata-tip">${uploadTip}</div>
+                ${workdataDatasets.length === 0 ? `<div class="workdata-tip">No dataset folders found in this location.</div>` : ''}
             </div>
         </div>` : '';
 
@@ -1549,6 +1546,23 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             background-color: var(--vscode-toolbar-hoverBackground);
         }
 
+        #workdata-section .section-header .icon-button {
+            opacity: 0.95 !important;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--vscode-button-foreground, var(--vscode-foreground));
+            background-color: var(--vscode-button-secondaryBackground, var(--vscode-toolbar-hoverBackground));
+            border: 1px solid var(--vscode-widget-border, transparent);
+        }
+
+        #workdata-section .section-header .icon-button:hover {
+            opacity: 1 !important;
+            color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+            background-color: var(--vscode-button-background, var(--vscode-toolbar-hoverBackground));
+            border-color: var(--vscode-focusBorder, var(--vscode-widget-border, transparent));
+        }
+
         .remove-btn:hover {
             color: var(--vscode-errorForeground);
         }
@@ -1957,16 +1971,13 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     Debug
                 </button>` : ''}
             </div>
-            ${hasWorkspaceOpen ? `<button class="action-button secondary" id="uploadDatasetBtn" title="Upload or import a dataset into the workdata/ folder (Codespaces &amp; WSL)">
-                ${svgs.cloudUpload}
-                Upload Dataset
-            </button>` : ''}
         </div>
 
         <div class="divider"></div>
 
         <div class="middle">
-            ${swatPlusMode ? workdataHtml : recentDatasetsHtml}
+            ${workdataHtml}
+            ${recentDatasetsHtml}
 
             <!-- Divider separating Dataset list from Selected dataset window -->
             <div class="divider" id="recent-divider" title="Recent / Selected separator"><div class="handle"></div></div>
@@ -2010,8 +2021,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         <div class="help-text">
             ${swatPlusMode
-                ? `Select a dataset from the <strong>${escapeHtml(datasetDirLabel)}/</strong> folder. Use <strong>Debug</strong> to launch a SWAT+ debug session via CMake Tools.`
-                : `Select a SWAT+ dataset folder to browse its inputs and outputs.
+                ? `Select a dataset from the <strong>${escapeHtml(datasetDirLabel)}/</strong> workspace folder or <strong>Recent Datasets</strong>. Use <strong>Debug</strong> to launch a SWAT+ debug session via CMake Tools.`
+                : `Select a SWAT+ dataset from the configured <strong>Workspace Folder</strong> or <strong>Recent Datasets</strong> to browse its inputs and outputs.
                     ${cmakeAvailable
                         ? 'Use <strong>Debug</strong> to launch a SWAT+ debug session via CMake Tools.'
                         : 'Install <strong>CMake Tools</strong> to enable debug session support.'}`
@@ -2131,11 +2142,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 swatHost.postMessage({ type: 'launchDebug' });
             });
 
-            const uploadBtn = $('uploadDatasetBtn');
-            if (uploadBtn) uploadBtn.addEventListener('click', () => {
-                swatHost.postMessage({ type: 'uploadDataset' });
-            });
-
             const openFolderLink = document.getElementById('openFolderLink');
             // openFolderLink only exists in the DOM when no workspace is open (rendered by noWorkspaceBanner)
             if (openFolderLink) openFolderLink.addEventListener('click', (e) => {
@@ -2235,7 +2241,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 });
             }
 
-            // Workdata reveal button (inspector mode)
+            // Dataset folder reveal button
             const revealWorkdataBtn = $('revealWorkdataBtn');
             if (revealWorkdataBtn) {
                 revealWorkdataBtn.addEventListener('click', (e) => {
@@ -2244,7 +2250,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 });
             }
 
-            // Change Dataset Directory button (SWAT+ mode)
+            // Change Dataset Directory button
             const changeDatasetDirBtn = $('changeDatasetDirBtn');
             if (changeDatasetDirBtn) {
                 changeDatasetDirBtn.addEventListener('click', (e) => {
@@ -2432,11 +2438,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     if (closest && closest('#launchDebugBtn')) {
                         try { console.log('SWAT webview: delegated launchDebug click'); } catch (e) {}
                         swatHost.postMessage({ type: 'launchDebug' });
-                        return;
-                    }
-                    if (closest && closest('#uploadDatasetBtn')) {
-                        try { console.log('SWAT webview: delegated uploadDataset click'); } catch (e) {}
-                        swatHost.postMessage({ type: 'uploadDataset' });
                         return;
                     }
                     if (closest && closest('#buildIndexBtn')) {

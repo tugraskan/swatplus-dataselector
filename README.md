@@ -1,27 +1,28 @@
 # SWAT+ Dataset Selector
 
-A VS Code extension for SWAT+ development that allows you to browse and select dataset folders for debugging sessions.
+A VS Code extension for SWAT+ development that lets you select dataset folders, browse inputs and outputs, and launch debug sessions against the active dataset.
 
 ## Features
 
-- **Select Dataset Folder**: Browse and select a SWAT+ dataset folder
-- **Upload Dataset**: Import datasets into the `workdata/` folder — works in GitHub Codespaces (upload via Explorer, then select) and WSL Ubuntu (copy from `/mnt/c/...` or any path)
-- **Quick Debug Launch**: Select a dataset folder and immediately start debugging
-- **Seamless Integration**: Works with CMake Tools and gdb debugger configurations
-- **Comprehensive Schema**: Auto-generated schema for all 213 SWAT+ input tables from swatplus-editor
-- **Enhanced Indexing**: Pandas-backed indexing system with FK navigation, hover info, and validation
-  - Handles hierarchical files (soils.sol, plant.ini, management.sch)
-  - Decision table parsing (*.dtl files)
-  - Go-to-Definition for foreign keys (Ctrl+Click to navigate)
-  - Hover tooltips showing file purposes and FK targets
-  - Warnings for unresolved references
-  - Reverse index for finding what references each row
+- **Select Dataset Folder**: Browse to any SWAT+ dataset folder and make it active.
+- **Recent Datasets**: Reopen recently used datasets from the sidebar.
+- **Dataset Folder Listing**: Show datasets from a configured parent folder such as `workdata/`.
+- **Quick Debug Launch**: Start debugging with the selected dataset as the working directory.
+- **Seamless Integration**: Works with CMake Tools and gdb debugger configurations.
+- **Comprehensive Schema**: Auto-generated schema for all 213 SWAT+ input tables from swatplus-editor.
+- **Enhanced Indexing**: Pandas-backed indexing system with FK navigation, hover info, and validation.
+  - Handles hierarchical files (`soils.sol`, `plant.ini`, `management.sch`)
+  - Parses decision tables (`*.dtl`)
+  - Supports Go to Definition for foreign keys
+  - Shows hover tooltips with file purpose and FK targets
+  - Warns on unresolved references
+  - Builds a reverse index for incoming references
 
 ## Documentation
 
 - **[Enhanced Indexing Guide](docs/ENHANCED_INDEXING.md)** - Complete guide to the indexing system
 - **[Schema Enhancement](docs/SCHEMA_ENHANCEMENT.md)** - How markdown documentation enhances FK and pointer detection
-- **[Extension File Schema](docs/EXTENSION_FILE_SCHEMA.md)** - Detailed schema for all SWAT+ files
+- **[Extension File Schema](docs/EXTENSION_FILE_SCHEMA.md)** - Detailed schema for SWAT+ files
 - **[Dependency Analysis](docs/DEPENDENCY_ANALYSIS.md)** - Comprehensive FK and file relationships
 - **[Input Schema Relationships Guide](docs/INPUT_SCHEMA_RELATIONSHIPS.md)** - Where to find FK and file pointer relationships
 - **[Quick Reference](docs/QUICK_REFERENCE.md)** - Quick lookup for common patterns
@@ -29,148 +30,120 @@ A VS Code extension for SWAT+ development that allows you to browse and select d
 
 ## Quick Start
 
-1. **Install the extension** from the VS Code marketplace or build from source
-2. **Reload VS Code** - Press `Ctrl+Shift+P` and run `Developer: Reload Window`
-3. **Open a SWAT+ project** - Open a folder containing SWAT+ datasets
-4. **Build the index** - Press `Ctrl+Shift+P` and run `SWAT+: Build Inputs Index`
-5. **Navigate!** - Ctrl+Click on foreign keys or filenames to navigate
+1. Install the extension from the marketplace or build it from source.
+2. Reload VS Code with `Developer: Reload Window`.
+3. Open a SWAT+ project.
+4. Select a dataset from the SWAT+ Dataset sidebar or run `SWAT+: Select Dataset Folder`.
+5. Run `SWAT+: Build Inputs Index`.
+6. Ctrl+Click foreign keys or filenames to navigate.
 
-**Note**: After pulling updates, always reload VS Code to ensure the latest version is active.
+After pulling updates, reload VS Code so the latest extension bundle is active.
 
 ## Commands
 
-This extension provides the following commands:
-
-- `SWAT+: Select Dataset Folder` - Browse and select a dataset folder (saves selection for later use)
-- `SWAT+: Select Dataset and Debug` - Browse for a dataset folder and immediately launch debug session
-- `SWAT+: Debug with Selected Dataset` - Launch debug with previously selected dataset folder
-- `SWAT+: Upload Dataset to Workspace` - Import a dataset into the `workdata/` folder (Codespaces & WSL)
-- `SWAT+: Build Inputs Index` - Build an index of all SWAT+ input files in the selected dataset
-- `SWAT+: Load Cached Index` - Load a cached index from the dataset folder (index.json)
-- `SWAT+: Rebuild Inputs Index` - Rebuild the index for the currently selected dataset
-- `SWAT+: Show Dependency Graph` - Open an edge-list graph of table-to-table dependencies from FK references
-- `SWAT+: Run Data Quality Preflight` - Generate a markdown report with unresolved references and potential orphan rows
+- `SWAT+: Select Dataset Folder` - Browse and select a dataset folder.
+- `SWAT+: Select Dataset and Debug` - Browse for a dataset folder and launch debug immediately.
+- `SWAT+: Debug with Selected Dataset` - Launch debug with the current dataset.
+- `SWAT+: Switch Dataset` - Open a quick pick with recent datasets and dataset-folder entries.
+- `SWAT+: Reveal Dataset Folder in Explorer` - Open the configured dataset folder in Explorer.
+- `SWAT+: Build Inputs Index` - Build an index of all SWAT+ input files in the selected dataset.
+- `SWAT+: Load Cached Index` - Load a cached index from the dataset folder.
+- `SWAT+: Rebuild Inputs Index` - Rebuild the current dataset index.
+- `SWAT+: Show Dependency Graph` - Open a graph of table-to-table dependencies.
+- `SWAT+: Run Data Quality Preflight` - Generate a markdown report with unresolved references and potential orphan rows.
 
 ## Usage
 
-### Method 1: Select and Debug in One Step
+### Method 1: Select and Debug
 
-1. Open Command Palette (`Ctrl+Shift+P` or `Cmd+Shift+P`)
-2. Run `SWAT+: Select Dataset and Debug`
-3. Browse to your SWAT+ dataset folder
-4. Debug session will start automatically with the selected folder as working directory
+1. Open the Command Palette.
+2. Run `SWAT+: Select Dataset and Debug`.
+3. Choose your dataset folder.
+4. The debug session starts with that folder as the working directory.
 
 ### Method 2: Select First, Debug Later
 
-1. Open Command Palette
-2. Run `SWAT+: Select Dataset Folder`
-3. Browse to your SWAT+ dataset folder
-4. Later, run `SWAT+: Debug with Selected Dataset` to launch debug with the selected folder
+1. Open the Command Palette.
+2. Run `SWAT+: Select Dataset Folder`.
+3. Choose your dataset folder.
+4. Later, run `SWAT+: Debug with Selected Dataset`.
 
-### Method 3: Using the Dataset Selector View
+### Method 3: Use the Dataset Selector View
 
-1. Open the SWAT+ Dataset view in the activity bar (left sidebar)
-2. Click "Select Folder" to choose your dataset folder
-3. Use the "Debug" button to launch a debug session
-4. Use the "Build Index" button to index all SWAT+ input files in the dataset
+1. Open the SWAT+ Dataset view in the activity bar.
+2. Select a dataset from **Recent Datasets** or **Dataset Folder**.
+3. Use **Debug** to launch a debug session.
+4. Use **Build Index** to index the selected dataset.
 
-### Method 4: Upload Dataset (GitHub Codespaces & WSL Ubuntu)
+### Method 4: Configure the Dataset Folder
 
-The `SWAT+: Upload Dataset to Workspace` command (or the **Upload Dataset** button in the sidebar) makes it easy to bring your own dataset into a remote environment where you cannot simply browse a local path.
-
-#### GitHub Codespaces
-
-1. In the VS Code Explorer sidebar, right-click the `workdata/` folder and choose **Upload…** (or drag-and-drop your dataset folder onto it).
-2. Open the Command Palette (`Ctrl+Shift+P`) and run `SWAT+: Upload Dataset to Workspace`.
-3. Choose **Select from workdata/ folder** and pick the folder you just uploaded.
-4. The dataset is now active — build the index and start debugging.
-
-#### WSL Ubuntu
-
-1. Open the Command Palette (`Ctrl+Shift+P`) and run `SWAT+: Upload Dataset to Workspace`.
-2. Choose **Copy dataset from another location** to copy a dataset from your Windows filesystem (e.g. `/mnt/c/Users/you/myDataset`) into the `workdata/` folder inside the WSL workspace.
-3. The copied dataset is automatically selected — build the index and start debugging.
-
-> **Note:** The `workdata/` directory is listed in `.gitignore` so uploaded datasets are never accidentally committed.
+1. Open the SWAT+ Dataset view.
+2. In the **Dataset Folder** section, click the folder button.
+3. Choose the parent directory that contains your dataset folders.
+4. Select a dataset from that list.
 
 ## How It Works
 
-The extension dynamically launches a debug session with:
-- **Type**: `cppdbg` (C++ debugging with gdb)
-- **Working Directory**: Your selected dataset folder
-- **Program**: Resolved by CMake Tools (`${command:cmake.launchTargetPath}`)
-- **Environment**: Includes CMake launch target directory in PATH
+The extension launches a debug session with:
 
-This replaces the need to manually edit `launch.json` and change the `cwd` parameter each time you want to debug with a different dataset.
+- **Type**: `cppdbg`
+- **Working Directory**: The selected dataset folder
+- **Program**: Resolved by CMake Tools via `${command:cmake.launchTargetPath}`
+- **Environment**: Includes the CMake launch target directory in `PATH`
+
+This avoids manually editing `launch.json` whenever you want to debug against a different dataset.
 
 ## SWAT+ Schema Extraction
 
-This extension includes a powerful schema extraction system that automatically discovers all model classes from the swatplus-editor repository.
+This extension includes a schema extraction workflow that discovers model classes from the swatplus-editor repository.
 
 ### Quick Start
 
 ```bash
-# 1. Clone swatplus-editor
 git clone https://github.com/swat-model/swatplus-editor.git /tmp/swatplus-editor
-
-# 2. Run extraction
 python3 scripts/extract_all_models.py
-
-# 3. Result: resources/schema/swatplus-editor-schema-full.json
-#    - 256 models discovered
-#    - 213 unique tables mapped
-#    - 566KB comprehensive schema
 ```
+
+The generated schema is written to `resources/schema/swatplus-editor-schema-full.json`.
 
 ### What Gets Extracted
 
-The script automatically scans all Peewee ORM models in swatplus-editor and extracts:
-- **Table definitions**: All 213 input file tables
-- **Column metadata**: Names, types, nullability
-- **Foreign key relationships**: All FK references
-- **Primary keys**: Auto-detected or explicit
+- Table definitions
+- Column metadata
+- Foreign key relationships
+- Primary keys
 
 ### Update When SWAT Editor Changes
 
-No code changes needed! Just re-run the extraction:
-
 ```bash
-cd /tmp/swatplus-editor && git pull
+cd /tmp/swatplus-editor
+git pull
 python3 scripts/extract_all_models.py
 ```
 
-The schema automatically picks up new tables, columns, and relationships.
-
-### Comparison: Old vs New
-
-| Approach | Tables | Maintainability |
-|----------|--------|-----------------|
-| **Old** (PR #13) | 13 hardcoded MVP tables | ❌ Manual updates required |
-| **New** (This PR) | 213 auto-discovered tables | ✅ Fully automatic |
-
-See [scripts/README.md](scripts/README.md) for complete documentation.
-
 ## Requirements
 
-- CMake Tools extension (for `cmake.launchTargetPath` command)
-- C/C++ extension (for gdb debugging)
+- CMake Tools extension for `${command:cmake.launchTargetPath}`
+- C/C++ extension for gdb debugging
 - Properly configured CMake project
-- Python 3.6+ (for schema extraction)
+- Python 3.6+ for schema extraction
 
 ## Extension Settings
 
-This extension does not add any VS Code settings.
+- `swatplus.datasetDirectory`: Parent directory that contains SWAT+ dataset folders. Defaults to `workdata`.
+- `swatplus.schemaDirectories`: Additional directories to scan for SWAT+ schema JSON files.
 
 ## Known Issues
 
-- Ensure CMake Tools is properly configured before using this extension
-- The debug configuration assumes gdb is available on your system
+- Ensure CMake Tools is configured before using debug commands.
+- The debug configuration assumes gdb is available on your system.
 
 ## Release Notes
 
 ### 0.0.1
 
 Initial release of SWAT+ Dataset Selector
+
 - Browse and select dataset folders
 - Launch debug sessions with selected datasets
 - Integration with CMake Tools and gdb

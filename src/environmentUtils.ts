@@ -1,6 +1,6 @@
 /**
  * Utilities for detecting the VS Code environment and performing
- * environment-aware path handling (e.g. Windows → WSL path conversion).
+ * environment-aware path handling (e.g. Windows -> WSL path conversion).
  *
  * VS Code can run in many different environments:
  *  - Local: Windows, macOS, Linux
@@ -66,7 +66,7 @@ export function hasWorkspace(): boolean {
  * installed in this VS Code instance.
  *
  * When false, the Debug button and CMake-related UI should be hidden or
- * disabled — the user is operating in a "data examination only" mode.
+ * disabled - the user is operating in a "data examination only" mode.
  */
 export function isCmakeToolsInstalled(): boolean {
     return vscode.extensions.getExtension('ms-vscode.cmake-tools') !== undefined;
@@ -77,7 +77,7 @@ export function isCmakeToolsInstalled(): boolean {
  *
  * The check uses two signals from the `swat-model/swatplus` repository layout:
  *   1. A `CMakeLists.txt` file exists at the workspace root (every SWAT+ dev
- *      workspace has this — it is the CMake build entry-point for the model).
+ *      workspace has this - it is the CMake build entry-point for the model).
  *   2. The CMake Tools extension (`ms-vscode.cmake-tools`) is installed, which
  *      is required to build and debug the SWAT+ model from VS Code.
  *
@@ -112,7 +112,7 @@ export function detectEnvironment(): EnvironmentInfo {
             type: 'remote-wsl',
             label: `WSL: ${distro}`,
             icon: 'vm',
-            description: `Remote WSL (${distro}) — Windows drives are accessible at /mnt/<drive>/. ` +
+            description: `Remote WSL (${distro}) - Windows drives are accessible at /mnt/<drive>/. ` +
                          `You can paste Windows paths (C:\\...) and they will be converted automatically.`,
             mayHaveWindowsPaths: true,
             isRemoteLinux: true,
@@ -126,8 +126,8 @@ export function detectEnvironment(): EnvironmentInfo {
                 type: 'codespaces-browser',
                 label: 'Codespaces (browser)',
                 icon: 'cloud',
-                description: 'GitHub Codespaces via browser — upload datasets using the Explorer ' +
-                             'upload option (right-click → Upload) and select them here.',
+                description: 'GitHub Codespaces via browser - use Recent Datasets or the configured ' +
+                             'Dataset Folder to select a SWAT+ dataset.',
                 mayHaveWindowsPaths: false,
                 isRemoteLinux: true,
                 isBrowserUI: true
@@ -137,8 +137,8 @@ export function detectEnvironment(): EnvironmentInfo {
             type: 'codespaces-desktop',
             label: 'Codespaces (desktop)',
             icon: 'cloud',
-            description: 'GitHub Codespaces via VS Code desktop — upload datasets using the ' +
-                         'Explorer upload option or drag-and-drop from your local machine.',
+            description: 'GitHub Codespaces via VS Code desktop - use Recent Datasets or the ' +
+                         'configured Dataset Folder to select a SWAT+ dataset.',
             mayHaveWindowsPaths: false,
             isRemoteLinux: true,
             isBrowserUI: false
@@ -150,7 +150,7 @@ export function detectEnvironment(): EnvironmentInfo {
             type: 'remote-ssh',
             label: 'Remote SSH',
             icon: 'remote',
-            description: 'VS Code Remote SSH — paths are relative to the remote machine filesystem.',
+            description: 'VS Code Remote SSH - paths are relative to the remote machine filesystem.',
             mayHaveWindowsPaths: false,
             isRemoteLinux: platform === 'linux',
             isBrowserUI: false
@@ -162,7 +162,7 @@ export function detectEnvironment(): EnvironmentInfo {
             type: 'remote-container',
             label: 'Dev Container',
             icon: 'package',
-            description: 'Dev Container (Docker) — paths are inside the container filesystem.',
+            description: 'Dev Container (Docker) - paths are inside the container filesystem.',
             mayHaveWindowsPaths: false,
             isRemoteLinux: true,
             isBrowserUI: false
@@ -174,7 +174,7 @@ export function detectEnvironment(): EnvironmentInfo {
             type: 'tunnel',
             label: 'VS Code Tunnel',
             icon: 'remote-explorer',
-            description: 'VS Code Tunnel — paths are relative to the tunnel host filesystem.',
+            description: 'VS Code Tunnel - paths are relative to the tunnel host filesystem.',
             mayHaveWindowsPaths: false,
             isRemoteLinux: platform === 'linux',
             isBrowserUI: false
@@ -187,7 +187,7 @@ export function detectEnvironment(): EnvironmentInfo {
             type: 'local-windows',
             label: 'Windows (local)',
             icon: 'vm',
-            description: 'Local Windows — use standard Windows paths (C:\\...).',
+            description: 'Local Windows - use standard Windows paths (C:\\...).',
             mayHaveWindowsPaths: false,   // native Windows, no conversion needed
             isRemoteLinux: false,
             isBrowserUI: false
@@ -198,7 +198,7 @@ export function detectEnvironment(): EnvironmentInfo {
             type: 'local-macos',
             label: 'macOS (local)',
             icon: 'vm',
-            description: 'Local macOS — use standard POSIX paths (/Users/...).',
+            description: 'Local macOS - use standard POSIX paths (/Users/...).',
             mayHaveWindowsPaths: false,
             isRemoteLinux: false,
             isBrowserUI: false
@@ -209,7 +209,7 @@ export function detectEnvironment(): EnvironmentInfo {
             type: 'local-linux',
             label: 'Linux (local)',
             icon: 'vm',
-            description: 'Local Linux — use standard POSIX paths (/home/...).',
+            description: 'Local Linux - use standard POSIX paths (/home/...).',
             mayHaveWindowsPaths: false,
             isRemoteLinux: false,
             isBrowserUI: false
