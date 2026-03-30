@@ -620,6 +620,14 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         const resolvedFileCioPath = this.selectedDataset ? resolveFileCioPath(this.selectedDataset) : null;
         const hasFileCio = Boolean(resolvedFileCioPath);
         const buildIndexLabel = hasCachedIndex ? 'Rebuild Index' : 'Build Index';
+        const indexingPrereqs = this.indexer.getIndexingPrerequisiteStatus();
+        const canBuildIndex = hasFileCio && indexingPrereqs.ready;
+        const buildIndexUnavailableReason = !hasFileCio
+            ? 'No file.cio found in selected dataset.'
+            : indexingPrereqs.message;
+        const buildIndexButtonTitle = canBuildIndex
+            ? `Run ${buildIndexLabel} using Python indexer`
+            : buildIndexUnavailableReason;
         let combinedHtml = '';
         if (!this.selectedDataset) {
             combinedHtml = `<div class="section">
@@ -1970,10 +1978,16 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         <!-- Build Index button placed outside selected dataset section -->
         <div class="build-index-section" id="build-index-section" style="display: ${this.selectedDataset ? 'block' : 'none'};">
-            <button class="action-button primary${hasFileCio ? '' : ' disabled'}" id="buildIndexBtn" style="width: 100%; margin-top: 12px;" ${hasFileCio ? '' : 'disabled'}>
+            <button class="action-button primary${canBuildIndex ? '' : ' disabled'}" id="buildIndexBtn" title="${escapeHtml(buildIndexButtonTitle)}" style="width: 100%; margin-top: 12px;" ${canBuildIndex ? '' : 'disabled'}>
                 ${svgs.database}
                 ${buildIndexLabel}
             </button>
+            ${canBuildIndex ? '' : `
+                <div class="schema-version schema-version-inline">
+                    <span class="schema-version-label">Index unavailable:</span>
+                    <span>${escapeHtml(buildIndexUnavailableReason)}</span>
+                </div>
+            `}
             ${hasCachedIndex ? `
                 <div class="schema-version schema-version-inline">
                     <span class="schema-version-label">file.cio:</span>

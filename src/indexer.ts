@@ -114,6 +114,13 @@ export interface FileCioHeaderInfo {
     raw?: string;
 }
 
+export interface IndexingPrerequisiteStatus {
+    ready: boolean;
+    message: string;
+    missingModules: string[];
+    pythonExecutable?: string;
+}
+
 export interface IndexedRow {
     file: string;
     tableName: string;
@@ -159,6 +166,9 @@ export class SwatIndexer {
     private readonly indexCacheFileName = 'index.json';
     private schemaPathOverride: string | null = null;
     private fileCioHeader: FileCioHeaderInfo | null = null;
+    private readonly requiredPythonModules: string[] = ['pandas'];
+    private readonly pythonPrereqCacheTtlMs = 10000;
+    private pythonPrereqCache?: { checkedAt: number; status: IndexingPrerequisiteStatus };
 
     constructor(private context: vscode.ExtensionContext) {
         const storedSchemaPath = this.context.workspaceState.get<string>('swatplus.schemaPath');
@@ -455,675 +465,111 @@ export class SwatIndexer {
         return info;
     }
 
-    /**
-     * Build the index using TypeScript-based file parsing (no Python required)
-     */
-    private buildIndexWithTypeScript(datasetPath: string): { success: boolean; tableCount: number; fkCount: number; error?: string } {
-        if (!this.schema) {
-            return { success: false, tableCount: 0, fkCount: 0, error: 'Schema not loaded' };
+    private getPythonCandidates(): string[] {
+        const candidates: string[] = [];
+
+        if (process.env.SWATPLUS_PYTHON) {
+            candidates.push(process.env.SWATPLUS_PYTHON);
         }
 
-        const txtInOutPath = this.txtInOutPath ?? datasetPath;
-        if (!fs.existsSync(txtInOutPath)) {
-            return { success: false, tableCount: 0, fkCount: 0, error: `Dataset path not found: ${txtInOutPath}` };
+        if (process.platform === 'win32') {
+            candidates.push('py', 'python', 'python3');
+        } else {
+            candidates.push('python3', 'python');
         }
 
-        try {
-            this.index.clear();
-            this.fkReferences = [];
-            this.reverseIndex.clear();
-            this.decisionTableIndex.clear();
-            this.dynamicFileToTableMap.clear();
+        return Array.from(new Set(candidates));
+    }
 
-            console.log('[Indexer] Starting TypeScript-based indexing...');
-            console.log(`[Indexer] Dataset path: ${txtInOutPath}`);
-            console.log(`[Indexer] Schema tables: ${Object.keys(this.schema.tables).length}`);
-
-            let totalFKCount = 0;
-
-            // Process each table in the schema
-            for (const table of Object.values(this.schema.tables)) {
-                const fileName = table.file_name;
-                const tableName = table.table_name;
-                const filePath = path.join(txtInOutPath, fileName);
-
-                if (!fs.existsSync(filePath)) {
-                    console.log(`[Indexer] File not found, skipping: ${fileName}`);
-                    continue;
-                }
-
-                try {
-                    const fileContent = fs.readFileSync(filePath, 'utf-8');
-                    const lines = fileContent.split('\n');
-
-                    // Parse the file based on schema
-                    const { rows, fkRefs, fileTableMap } = this.parseSchemaFile(filePath, table, lines);
-
-                    // Store rows in index
-                    if (rows.length > 0) {
-                        const tableIndex = new Map<string, IndexedRow>();
-                        for (const row of rows) {
-                            const pkValueLower = row.pkValueLower ?? row.pkValue.toLowerCase();
-                            tableIndex.set(pkValueLower, row);
-                            if (tableName.includes('dtl')) {
-                                this.decisionTableIndex.set(pkValueLower, row);
-                            }
-                        }
-                        this.index.set(tableName, tableIndex);
-                        console.log(`[Indexer] ✓ ${fileName}: ${rows.length} rows, ${fkRefs.length} FK refs`);
-                    } else {
-                        console.log(`[Indexer] ✗ ${fileName}: No rows parsed (0 data lines or all filtered)`);
-                    }
-
-                    // Collect FK references
-                    for (const fkRef of fkRefs) {
-                        this.fkReferences.push(fkRef);
-                        totalFKCount++;
-                    }
-
-                    // Update file to table mapping
-                    if (fileTableMap) {
-                        this.dynamicFileToTableMap.set(fileName.toLowerCase(), tableName);
-                    }
-                } catch (error) {
-                    console.error(`[Indexer] ERROR parsing ${fileName}: ${error}`);
-                }
+    private extractMissingModules(text: string): string[] {
+        const matches = text.matchAll(/No module named ['"]([^'"]+)['"]/g);
+        const modules = new Set<string>();
+        for (const match of matches) {
+            if (match[1]) {
+                modules.add(match[1]);
             }
+        }
+        return Array.from(modules);
+    }
 
-            // Index any extra *.dtl files present in TxtInOut that aren't covered by the schema
+    public getIndexingPrerequisiteStatus(forceRefresh = false): IndexingPrerequisiteStatus {
+        const now = Date.now();
+        if (!forceRefresh && this.pythonPrereqCache && (now - this.pythonPrereqCache.checkedAt) < this.pythonPrereqCacheTtlMs) {
+            return this.pythonPrereqCache.status;
+        }
+
+        const scriptPath = path.join(this.context.extensionPath, 'scripts', 'pandas_indexer.py');
+        if (!fs.existsSync(scriptPath)) {
+            const status: IndexingPrerequisiteStatus = {
+                ready: false,
+                message: 'Indexer script not found (scripts/pandas_indexer.py).',
+                missingModules: [],
+            };
+            this.pythonPrereqCache = { checkedAt: now, status };
+            return status;
+        }
+
+        const candidates = this.getPythonCandidates();
+        const missingModules = new Set<string>();
+        let pythonFound = false;
+        let lastError = '';
+
+        const importStmt = this.requiredPythonModules.map(moduleName => `import ${moduleName}`).join('; ');
+        const checkArgs = ['-c', importStmt];
+
+        for (const pythonExecutable of candidates) {
+            let result: import('child_process').SpawnSyncReturns<string>;
             try {
-                const allFiles = fs.readdirSync(txtInOutPath);
-                const extraDtlFiles = allFiles.filter(f => f.toLowerCase().endsWith('.dtl'));
-                for (const dtlFileName of extraDtlFiles) {
-                    const derivedTableName = dtlFileName.replace(/\./g, '_').toLowerCase();
-                    if (this.index.has(derivedTableName)) {
-                        continue; // already indexed via schema
-                    }
-                    const dtlPath = path.join(txtInOutPath, dtlFileName);
-                    try {
-                        const content = fs.readFileSync(dtlPath, 'utf-8');
-                        const lines = content.split('\n');
-                        const fakeTable: SchemaTable = {
-                            file_name: dtlFileName,
-                            table_name: derivedTableName,
-                            model_class: '',
-                            has_metadata_line: false,
-                            has_header_line: false,
-                            data_starts_after: 0,
-                            columns: [],
-                            primary_keys: ['name'],
-                            foreign_keys: [],
-                            notes: ''
-                        };
-                        const { rows } = this.parseDecisionTableFile(dtlPath, fakeTable, lines);
-                        if (rows.length > 0) {
-                            const tableIndex = new Map<string, IndexedRow>();
-                            for (const row of rows) {
-                                const pkValueLower = row.pkValueLower ?? row.pkValue.toLowerCase();
-                                tableIndex.set(pkValueLower, row);
-                                this.decisionTableIndex.set(pkValueLower, row);
-                            }
-                            this.index.set(derivedTableName, tableIndex);
-                            this.dynamicFileToTableMap.set(dtlFileName.toLowerCase(), derivedTableName);
-                            console.log(`[Indexer] ✓ ${dtlFileName} (extra DTL): ${rows.length} rows`);
-                        }
-                    } catch (dtlErr) {
-                        console.warn(`[Indexer] Could not index extra DTL file ${dtlFileName}: ${dtlErr}`);
-                    }
-                }
-            } catch (scanErr) {
-                console.warn(`[Indexer] Could not scan for extra DTL files: ${scanErr}`);
-            }
-
-            // Parse file.cio separately (handled later in buildIndex via parseFileCio)
-            console.log(`[Indexer] TypeScript indexing complete: ${this.index.size} tables, ${totalFKCount} FK references`);
-
-            return {
-                success: true,
-                tableCount: this.index.size,
-                fkCount: totalFKCount,
-            };
-        } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : String(error);
-            console.error(`[Indexer] TypeScript indexer fatal error: ${errorMsg}`, error);
-            return { success: false, tableCount: 0, fkCount: 0, error: errorMsg };
-        }
-    }
-
-    /**
-     * Parse a single file based on schema definition
-     */
-    private parseSchemaFile(filePath: string, table: SchemaTable, lines: string[]): {
-        rows: IndexedRow[];
-        fkRefs: FKReference[];
-        fileTableMap: boolean;
-    } {
-        try {
-            const fileName = path.basename(filePath);
-            const fkNullValues = this.fkNullValues ?? [];
-            const nullSet = new Set(fkNullValues.map(v => v.toLowerCase()));
-            
-            // Check if this is a hierarchical file
-            const isHierarchical = this.metadata?.hierarchical_files && fileName in this.metadata.hierarchical_files;
-            const config = isHierarchical ? this.metadata!.hierarchical_files![fileName] : null;
-
-            // Handle hierarchical files
-            if (isHierarchical && config && config !== 'description') {
-                let columnNames = table.columns.filter(c => c.type !== 'AutoField').map(c => c.name);
-                let startLine = Math.max(table.data_starts_after, 0);
-                
-                // Extract actual column names from header line if present
-                if (table.has_header_line && startLine > 0 && startLine - 1 < lines.length) {
-                    // Header is at line startLine - 1
-                    const headerLine = lines[startLine - 1].trim();
-                    if (headerLine && !headerLine.match(/^\d+/) && !headerLine.match(/^-?\d+\.?\d*/)) {
-                        // Parse header line to get column names
-                        const headerColumns = headerLine.split(/\s+/).filter(col => col.length > 0);
-                        if (headerColumns.length > 0) {
-                            columnNames = headerColumns;
-                            if (fileName === 'plant.ini') {
-                                console.log(`[Indexer] ${fileName}: Extracted header columns: ${columnNames.slice(0, 10).join(', ')}${columnNames.length > 10 ? '...' : ''}`);
-                            }
-                        }
-                    }
-                }
-                
-                const result = this.parseHierarchicalFile(filePath, table, lines, columnNames, startLine, nullSet);
-                if (result.rows.length > 0) {
-                    return result;
-                }
-                // Fall back to standard parsing if hierarchical fails
-            }
-
-            // Parse as standard tabular file
-            if (fileName.endsWith('.dtl')) {
-                // Handle decision table files
-                return this.parseDecisionTableFile(filePath, table, lines);
-            } else {
-                // Standard tabular parsing
-                return this.parseStandardFile(filePath, table, lines, nullSet);
-            }
-        } catch (error) {
-            console.error(`[Indexer] parseSchemaFile error for ${table.table_name}: ${error}`);
-            return { rows: [], fkRefs: [], fileTableMap: false };
-        }
-    }
-
-    /**
-     * Parse standard tabular files
-     */
-    private parseStandardFile(filePath: string, table: SchemaTable, lines: string[], nullSet: Set<string>): {
-        rows: IndexedRow[];
-        fkRefs: FKReference[];
-        fileTableMap: boolean;
-    } {
-        const fileName = path.basename(filePath);
-        const rows: IndexedRow[] = [];
-        const fkRefs: FKReference[] = [];
-        
-        // Use schema column names, excluding AutoField columns (database-only fields like 'id' that don't exist in physical files)
-        const columnNames = table.columns.filter(c => c.type !== 'AutoField').map(c => c.name);
-        let startLine = Math.max(table.data_starts_after, 0);
-
-        // Don't strictly skip header lines - many SWAT+ files have metadata/headers
-        // Just start from data_starts_after line number
-        let lineNum = startLine;
-        let recordCount = 0;
-        
-        while (lineNum < lines.length) {
-            const line = lines[lineNum].trim();
-            lineNum++;
-
-            // Skip only completely empty lines and comments
-            if (!line || line.startsWith('#')) {
+                result = spawnSync(pythonExecutable, checkArgs, { encoding: 'utf-8', timeout: 4000 });
+            } catch (error: any) {
+                lastError = error?.message || String(error);
                 continue;
             }
 
-            const values = line.split(/\s+/);
-            
-            // Skip lines with no fields
-            if (values.length === 0) {
+            if (result.error) {
+                if ((result.error as any).code !== 'ENOENT') {
+                    lastError = result.error.message;
+                }
                 continue;
             }
 
-            // Don't be too strict - allow lines with fewer columns than expected
-            // SWAT+ files often have variable-width fields
-            const valueMap: { [key: string]: string } = {};
+            pythonFound = true;
 
-            // Map values to column names using schema
-            for (let i = 0; i < columnNames.length && i < values.length; i++) {
-                valueMap[columnNames[i]] = values[i];
-            }
-            
-            // For extra columns beyond schema definition, store them
-            for (let i = columnNames.length; i < values.length; i++) {
-                valueMap[`col${i}`] = values[i];
-            }
-
-            // Determine primary key
-            let pkValue = this.getPrimaryKey(valueMap, values, table);
-
-            const row: IndexedRow = {
-                file: filePath,
-                tableName: table.table_name,
-                lineNumber: lineNum,
-                pkValue,
-                pkValueLower: pkValue.toLowerCase(),
-                values: valueMap
-            };
-
-            rows.push(row);
-            recordCount++;
-
-            // Extract FK references
-            for (const fk of table.foreign_keys) {
-                const fkValue = valueMap[fk.column];
-                if (fkValue && fkValue.trim() && !nullSet.has(fkValue.toLowerCase())) {
-                    fkRefs.push({
-                        sourceFile: filePath,
-                        sourceTable: table.table_name,
-                        sourceLine: lineNum,
-                        sourceColumn: fk.column,
-                        fkValue,
-                        fkValueLower: fkValue.toLowerCase(),
-                        targetTable: fk.references.table,
-                        targetColumn: 'name',
-                        resolved: false
-                    });
-                }
-            }
-        }
-        
-        if (recordCount === 0) {
-            console.log(`[Indexer] ${fileName}: 0 data rows found (may be empty or metadata-only file)`);
-        }
-        
-        return { rows, fkRefs, fileTableMap: true };
-    }
-
-    /**
-     * Extract primary key from a row
-     */
-    private getPrimaryKey(valueMap: { [key: string]: string }, values: string[], table: SchemaTable): string {
-        const pkColumns = table.primary_keys || [];
-        
-        // Try schema-defined primary keys first
-        for (const pkCol of pkColumns) {
-            if (valueMap[pkCol] && valueMap[pkCol].trim()) {
-                return valueMap[pkCol];
-            }
-        }
-        
-        // Fallbacks for primary key
-        const fallbacks = ['name', 'filename', 'id', 'object_id'];
-        for (const fallback of fallbacks) {
-            if (valueMap[fallback] && valueMap[fallback].trim()) {
-                return valueMap[fallback];
-            }
-        }
-        
-        // Use first non-empty value as last resort
-        for (const val of values) {
-            if (val && val.trim()) {
-                return val;
-            }
-        }
-        
-        return `row_${values[0] || 'unknown'}`;
-    }
-
-    /**
-     * Parse hierarchical files (soils.sol, plant.ini, management.sch, weather-wgn.cli)
-     */
-    private parseHierarchicalFile(filePath: string, table: SchemaTable, lines: string[], columnNames: string[], startLine: number, nullSet: Set<string>): {
-        rows: IndexedRow[];
-        fkRefs: FKReference[];
-        fileTableMap: boolean;
-    } {
-        try {
-            const fileName = path.basename(filePath);
-            const rows: IndexedRow[] = [];
-            const fkRefs: FKReference[] = [];
-            const config = this.metadata?.hierarchical_files?.[fileName];
-
-            if (!config || config === 'description') {
-                // Not a recognized hierarchical file - try parsing as standard
-                return { rows: [], fkRefs: [], fileTableMap: false };
-            }
-
-            if (fileName === 'plant.ini') {
-                console.log(`[Indexer] ${fileName}: Starting hierarchical parse. columnNames.length=${columnNames.length}, startLine=${startLine}, totalLines=${lines.length}`);
-                if (columnNames.length > 0) {
-                    console.log(`[Indexer]   First 5 columns: ${columnNames.slice(0, 5).join(', ')}`);
-                }
-            }
-
-            let lineNum = startLine;
-            let recordCount = 0;
-            
-            while (lineNum < lines.length) {
-                const line = lines[lineNum].trim();
-                lineNum++;
-
-                if (!line || line.startsWith('#')) {
-                    continue;
-                }
-
-                const values = line.split(/\s+/);
-                if (values.length === 0) {
-                    continue;
-                }
-
-                if (fileName === 'plant.ini' && recordCount < 5) {
-                    console.log(`[Indexer] ${fileName} record ${recordCount}: raw="${line.substring(0, 60)}" values.len=${values.length}`);
-                }
-
-                // Determine primary key from this line
-                const valueMap: { [key: string]: string } = {};
-                for (let i = 0; i < columnNames.length && i < values.length; i++) {
-                    valueMap[columnNames[i]] = values[i];
-                }
-
-                if (fileName === 'plant.ini' && recordCount < 5) {
-                    console.log(`[Indexer]   valueMap: ${Object.entries(valueMap).slice(0, 5).map(([k, v]) => `${k}=${v}`).join(', ')}`);
-                }
-
-                let pkValue = '';
-                for (const pkCol of table.primary_keys) {
-                    if (valueMap[pkCol]) {
-                        pkValue = valueMap[pkCol];
-                        break;
-                    }
-                }
-                if (!pkValue && valueMap['name']) {
-                    pkValue = valueMap['name'];
-                }
-                if (!pkValue) {
-                    pkValue = values[0] || `record_${recordCount}`;
-                }
-
-                let childLineCount = 0;
-
-                // Determine number of child lines based on configuration
-                if (config && typeof config === 'object') {
-                    const structure = (config as any).structure || {};
-                    let countField = structure.child_line_count_field;
-                    const fixedCount = structure.child_line_count_fixed;
-
-                    if (fixedCount && fixedCount > 0) {
-                        childLineCount = Math.min(fixedCount, 1000);
-                    } else if (countField) {
-                        // Special case for plant.ini: field might be named plt_cnt instead of plnt_cnt
-                        if (fileName === 'plant.ini' && countField === 'plnt_cnt' && !Object.keys(valueMap).find(k => k.toLowerCase() === 'plnt_cnt') && valueMap['plt_cnt']) {
-                            countField = 'plt_cnt';
-                            if (recordCount === 0) {
-                                console.log(`[Indexer] ${fileName}: Adjusted countField from plnt_cnt to plt_cnt`);
-                            }
-                        }
-
-                        if (countField.includes('+')) {
-                            // Multiple fields (e.g., "numb_auto+numb_ops")
-                            const fields = countField.split('+').map((f: string) => f.trim());
-                            for (const field of fields) {
-                                try {
-                                    // Try exact match first, then case-insensitive
-                                    let fieldVal = valueMap[field];
-                                    if (!fieldVal) {
-                                        const lowerField = field.toLowerCase();
-                                        const matchingKey = Object.keys(valueMap).find(k => k.toLowerCase() === lowerField);
-                                        if (matchingKey) {
-                                            fieldVal = valueMap[matchingKey];
-                                        }
-                                    }
-                                    childLineCount += Math.max(0, parseInt(fieldVal) || 0);
-                                } catch (e) {
-                                    // Ignore parse errors
-                                }
-                            }
-                        } else {
-                            // Single field
-                            try {
-                                // Try exact match first, then case-insensitive
-                                let fieldVal = valueMap[countField];
-                                if (!fieldVal) {
-                                    const lowerField = countField.toLowerCase();
-                                    const matchingKey = Object.keys(valueMap).find(k => k.toLowerCase() === lowerField);
-                                    if (matchingKey) {
-                                        fieldVal = valueMap[matchingKey];
-                                    }
-                                }
-                                childLineCount = Math.max(0, parseInt(fieldVal) || 0);
-                            } catch (e) {
-                                // Ignore parse errors
-                            }
-                        }
-                        childLineCount = Math.min(Math.max(childLineCount, 0), 1000);
-                    }
-                }
-                
-                // Debug logging for child line detection
-                if (childLineCount > 0 && recordCount === 0) {
-                    const structure = (config as any).structure || {};
-                    console.log(`[Indexer] ${fileName}: First record "${pkValue}" detected as hierarchical with ${childLineCount} child lines`);
-                    console.log(`[Indexer]   countField="${structure.child_line_count_field}", fixedCount=${structure.child_line_count_fixed}`);
-                    console.log(`[Indexer]   valueMap keys: ${Object.keys(valueMap).join(', ')}`);
-                }
-
-                if (fileName === 'plant.ini' && recordCount < 3) {
-                    console.log(`[Indexer] ${fileName} record ${recordCount}: childLineCount=${childLineCount}`);
-                }
-
-                // Read child lines
-                const primaryRowLineNum = lineNum - 1; // lineNum was already incremented
-                
-                if (childLineCount > 0 && recordCount < 2) {
-                    console.log(`[Indexer] ${fileName}: Starting child row skip. lineNum=${lineNum}, childLineCount=${childLineCount}, linesLength=${lines.length}`);
-                }
-
-                // Skip child lines without storing them - hierarchical files only index main records
-                for (let i = 0; i < childLineCount && lineNum < lines.length; i++) {
-                    const childLine = lines[lineNum].trim();
-                    
-                    if (recordCount < 2) {
-                        console.log(`[Indexer]   lineNum=${lineNum}: skipping child line (${childLine.substring(0, 40)}...)`);
-                    }
-
-                    // Only count non-empty, non-comment lines toward child line count
-                    if (!childLine || childLine.startsWith('#')) {
-                        i--; // Don't count this against the child line count
-                    }
-                    lineNum++;
-                }
-
-                if (childLineCount > 0 && recordCount < 2) {
-                    console.log(`[Indexer] ${fileName}: Finished skipping child rows. Next lineNum=${lineNum}`);
-                }
-
-                const row: IndexedRow = {
-                    file: filePath,
-                    tableName: table.table_name,
-                    lineNumber: primaryRowLineNum + 1,
-                    pkValue,
-                    pkValueLower: pkValue.toLowerCase(),
-                    values: valueMap,
-                    childRows: undefined
+            if (result.status === 0) {
+                const status: IndexingPrerequisiteStatus = {
+                    ready: true,
+                    message: 'Python and required indexing modules are available.',
+                    missingModules: [],
+                    pythonExecutable
                 };
-
-                rows.push(row);
-                recordCount++;
-
-                // Extract FK references from main record
-                for (const fk of table.foreign_keys) {
-                    const fkValue = valueMap[fk.column];
-                    if (fkValue && fkValue.trim() && !nullSet.has(fkValue.toLowerCase())) {
-                        fkRefs.push({
-                            sourceFile: filePath,
-                            sourceTable: table.table_name,
-                            sourceLine: primaryRowLineNum + 1,
-                            sourceColumn: fk.column,
-                            fkValue,
-                            fkValueLower: fkValue.toLowerCase(),
-                            targetTable: fk.references.table,
-                            targetColumn: 'name',
-                            resolved: false
-                        });
-                    }
-                }
+                this.pythonPrereqCache = { checkedAt: now, status };
+                return status;
             }
 
-            if (recordCount > 0) {
-                console.log(`[Indexer] ${fileName} (hierarchical): parsed ${recordCount} records`);
-            }
-            
-            return { rows, fkRefs, fileTableMap: true };
-        } catch (error) {
-            console.error(`[Indexer] parseHierarchicalFile error: ${error}`);
-            return { rows: [], fkRefs: [], fileTableMap: false };
+            const output = `${result.stderr || ''}\n${result.stdout || ''}`.trim();
+            this.extractMissingModules(output).forEach(moduleName => missingModules.add(moduleName));
+            lastError = output || `${pythonExecutable} exited with code ${result.status}`;
         }
-    }
 
-    /**
-     * Parse decision table files (*.dtl)
-     * Format per sub-table:
-     *   (global column header line: NAME CONDS ALTS ACTS — appears once after the count, skipped)
-     *   name  num_conds  num_alts  num_acts
-     *   [if num_conds > 0] conditions section header line (VAR OBJ OB_NUM...) — skipped
-     *   [num_conds condition lines]:  cond_var  obj  obj_num  lim_var  lim_op  lim_const  alt1..altN
-     *   [if num_acts > 0] actions section header line (ACT_TYP OBJ OBJ_NUM...) — skipped
-     *   [num_acts  action lines]:     act_typ   obj  obj_num  act_name act_option const const2 fp out1..outN
-     */
-    private parseDecisionTableFile(filePath: string, table: SchemaTable, lines: string[]): {
-        rows: IndexedRow[];
-        fkRefs: FKReference[];
-        fileTableMap: boolean;
-    } {
-        try {
-            const rows: IndexedRow[] = [];
-            const fkRefs: FKReference[] = [];
+        const missingModuleList = Array.from(missingModules);
+        let message: string;
 
-            let lineNum = 1; // Skip title line
-            if (lineNum >= lines.length) {
-                return { rows, fkRefs, fileTableMap: true };
-            }
-
-            const numTables = parseInt(lines[lineNum].trim(), 10);
-            lineNum++;
-            if (!Number.isFinite(numTables) || numTables <= 0) {
-                return { rows, fkRefs, fileTableMap: true };
-            }
-
-            // Skip the global column header line "NAME CONDS ALTS ACTS" that follows the count
-            while (lineNum < lines.length && !lines[lineNum].trim()) { lineNum++; }
-            if (lineNum < lines.length && /^[a-z_\s]+$/i.test(lines[lineNum].trim()) && isNaN(parseInt(lines[lineNum].trim().split(/\s+/)[1], 10))) {
-                lineNum++; // skip the column header (e.g. "NAME CONDS ALTS ACTS")
-            }
-
-            for (let t = 0; t < numTables && lineNum < lines.length; t++) {
-                // Skip blank lines between sub-tables
-                while (lineNum < lines.length && !lines[lineNum].trim()) {
-                    lineNum++;
-                }
-                if (lineNum >= lines.length) { break; }
-
-                // Skip repeated column header lines (e.g. "DTBL_NAME CONDS ALTS ACTS")
-                // that appear before every sub-table, not just the first one.
-                {
-                    const peekParts = lines[lineNum].trim().split(/\s+/);
-                    if (peekParts.length >= 2 && /^[a-z_]+$/i.test(peekParts[0]) && isNaN(parseInt(peekParts[1], 10))) {
-                        lineNum++; // skip column header line
-                        while (lineNum < lines.length && !lines[lineNum].trim()) { lineNum++; }
-                    }
-                }
-                if (lineNum >= lines.length) { break; }
-
-                const headerLine = lines[lineNum].trim();
-                const headerLineNum = lineNum + 1; // 1-based
-                lineNum++; // advance past header
-
-                const headerParts = headerLine.split(/\s+/);
-                if (headerParts.length < 4) {
-                    continue;
-                }
-
-                const dtlName = headerParts[0];
-                const condsStr = headerParts[1];
-                const altsStr = headerParts[2];
-                const actsStr = headerParts[3];
-
-                const numConds = parseInt(condsStr, 10) || 0;
-                const numAlts = parseInt(altsStr, 10) || 0;
-                const numActs = parseInt(actsStr, 10) || 0;
-
-                const childRows: Array<{ lineNumber: number; values: { [key: string]: string } }> = [];
-
-                // Skip conditions section header (e.g. "VAR OBJ OB_NUM LIM_VAR LIM_OP LIM_CONST ALT1...")
-                if (numConds > 0 && lineNum < lines.length) {
-                    lineNum++;
-                }
-
-                // Parse condition rows
-                for (let c = 0; c < numConds && lineNum < lines.length; c++) {
-                    const condLine = lines[lineNum].trim();
-                    lineNum++;
-                    if (!condLine) { c--; continue; } // blank line: don't count against numConds
-                    const p = condLine.split(/\s+/);
-                    const v: { [key: string]: string } = { section: 'condition' };
-                    v['cond_var']  = p[0] || '';
-                    v['obj']       = p[1] || '';
-                    v['obj_num']   = p[2] || '';
-                    v['lim_var']   = p[3] || '';
-                    v['lim_op']    = p[4] || '';
-                    v['lim_const'] = p[5] || '';
-                    for (let a = 0; a < numAlts; a++) {
-                        v[`alt${a + 1}`] = p[6 + a] || '';
-                    }
-                    childRows.push({ lineNumber: lineNum, values: v });
-                }
-
-                // Skip actions section header (e.g. "ACT_TYP OBJ OBJ_NUM NAME OPTION CONST CONST2 FP OUTCOMES...")
-                if (numActs > 0 && lineNum < lines.length) {
-                    lineNum++;
-                }
-
-                // Parse action rows
-                for (let a = 0; a < numActs && lineNum < lines.length; a++) {
-                    const actLine = lines[lineNum].trim();
-                    lineNum++;
-                    if (!actLine) { a--; continue; } // blank line: don't count against numActs
-                    const p = actLine.split(/\s+/);
-                    const v: { [key: string]: string } = { section: 'action' };
-                    v['act_typ']    = p[0] || '';
-                    v['obj']        = p[1] || '';
-                    v['obj_num']    = p[2] || '';
-                    v['act_name']   = p[3] || '';
-                    v['act_option'] = p[4] || '';
-                    v['const']      = p[5] || '';
-                    v['const2']     = p[6] || '';
-                    v['fp']         = p[7] || '';
-                    for (let o = 0; o < numAlts; o++) {
-                        v[`out${o + 1}`] = p[8 + o] || '';
-                    }
-                    childRows.push({ lineNumber: lineNum, values: v });
-                }
-
-                const row: IndexedRow = {
-                    file: filePath,
-                    tableName: table.table_name,
-                    lineNumber: headerLineNum,
-                    pkValue: dtlName,
-                    pkValueLower: dtlName.toLowerCase(),
-                    values: { name: dtlName, conds: condsStr, alts: altsStr, acts: actsStr },
-                    childRows
-                };
-
-                rows.push(row);
-            }
-
-            return { rows, fkRefs, fileTableMap: true };
-        } catch (error) {
-            console.error(`[Indexer] parseDecisionTableFile error: ${error}`);
-            return { rows: [], fkRefs: [], fileTableMap: false };
+        if (!pythonFound) {
+            message = 'Python was not found. Install Python and required modules to enable indexing.';
+        } else if (missingModuleList.length > 0) {
+            message = `Python is available but missing required module(s): ${missingModuleList.join(', ')}. Install with: pip install -r scripts/requirements.txt`;
+        } else {
+            message = `Python dependency check failed${lastError ? `: ${lastError}` : '.'}`;
         }
+
+        const status: IndexingPrerequisiteStatus = {
+            ready: false,
+            message,
+            missingModules: missingModuleList,
+        };
+
+        this.pythonPrereqCache = { checkedAt: now, status };
+        return status;
     }
 
     /**
@@ -1140,39 +586,8 @@ export class SwatIndexer {
         const metadataPath = path.join(this.context.extensionPath, 'resources', 'schema', 'txtinout-metadata.json');
         const txtInOutPath = this.txtInOutPath ?? datasetPath;
 
-        // Try a list of candidate Python executables so the extension works on Windows/macOS/Linux/WSL
-        // Prefer the workspace virtualenv if present, then any env override, then platform defaults.
-        const candidates: string[] = [];
-
-        // Prefer a workspace-local virtual environment (common pattern: .venv)
-        try {
-            const workspaceFolders = vscode.workspace.workspaceFolders;
-            if (workspaceFolders && workspaceFolders.length > 0) {
-                const ws = workspaceFolders[0].uri.fsPath;
-                const venvUnix = path.join(ws, '.venv', 'bin', 'python');
-                const venvWin = path.join(ws, '.venv', 'Scripts', 'python.exe');
-                if (fs.existsSync(venvUnix)) {
-                    candidates.push(venvUnix);
-                }
-                if (fs.existsSync(venvWin)) {
-                    candidates.push(venvWin);
-                }
-            }
-        } catch (err) {
-            // Silence any workspace-folder resolution errors and fall back to env/platform candidates
-        }
-
-        // Honor explicit environment override from the user
-        if (process.env.SWATPLUS_PYTHON) {
-            candidates.push(process.env.SWATPLUS_PYTHON);
-        }
-
-        if (process.platform === 'win32') {
-            candidates.push('py', 'python', 'python3');
-        } else {
-            // Linux, macOS, WSL - try python3 first then python
-            candidates.push('python3', 'python');
-        }
+        // Try a list of candidate Python executables so the extension works on Windows/macOS/Linux/WSL.
+        const candidates = this.getPythonCandidates();
 
         const outputPath = path.join(os.tmpdir(), `swatplus-index-${Date.now()}.json`);
         const args = [
@@ -1320,20 +735,12 @@ export class SwatIndexer {
             title: 'Building SWAT+ Inputs Index',
             cancellable: true
         }, async (progress, token) => {
-            // Try TypeScript-based indexing first (no Python required)
+            // Use pandas-backed indexing (required)
             progress.report({ message: 'Indexing files...', increment: 10 });
-            const tsDatasetPath = this.txtInOutPath || datasetPath;
-            let indexResult = this.buildIndexWithTypeScript(tsDatasetPath);
-
-            // Fall back to pandas if TypeScript indexer fails
-            if (!indexResult.success) {
-                console.log('[Indexer] TypeScript indexer failed, attempting pandas fallback...');
-                const pandasDatasetPath = this.txtInOutPath || datasetPath;
-                indexResult = this.buildIndexWithPandas(pandasDatasetPath);
-            }
-
-            if (!indexResult.success) {
-                const errorDetail = indexResult.error || 'Unknown error';
+            const pandasDatasetPath = this.txtInOutPath || datasetPath;
+            const pandasResult = this.buildIndexWithPandas(pandasDatasetPath);
+            if (!pandasResult.success) {
+                const errorDetail = pandasResult.error || 'Unknown error';
                 vscode.window.showErrorMessage(
                     `Failed to build index: ${errorDetail}. ` +
                     'Check the Output panel for details.'
@@ -1352,13 +759,13 @@ export class SwatIndexer {
             this.saveIndexCache(datasetPath);
 
             vscode.window.showInformationMessage(
-                `Index built successfully: ${indexResult.tableCount} tables, ${this.fkReferences.length} FK references`
+                `Index built successfully: ${pandasResult.tableCount} tables, ${this.fkReferences.length} FK references`
             );
 
             await this.context.workspaceState.update(`index:${datasetPath}`, {
                 built: true,
                 timestamp: new Date().toISOString(),
-                tableCount: indexResult.tableCount,
+                tableCount: pandasResult.tableCount,
                 fkCount: this.fkReferences.length
             });
 

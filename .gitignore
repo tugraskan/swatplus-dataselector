@@ -5,6 +5,8 @@ node_modules
 *.vsix
 __pycache__/
 *.pyc
+.venv/
+.tmp/
 
 # Dataset uploads - ignore all contents of workdata/ except the placeholder
 workdata/*

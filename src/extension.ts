@@ -220,6 +220,12 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 
+		const indexingPrereqs = indexer.getIndexingPrerequisiteStatus(true);
+		if (!indexingPrereqs.ready) {
+			vscode.window.showWarningMessage(indexingPrereqs.message);
+			return;
+		}
+
 		const success = await indexer.buildIndex(selectedPath);
 		if (success) {
 			// Update diagnostics and decorations
@@ -381,6 +387,12 @@ export function activate(context: vscode.ExtensionContext) {
 	const rebuildIndex = vscode.commands.registerCommand('swat-dataset-selector.rebuildIndex', async () => {
 		if (!indexer.isIndexBuilt()) {
 			vscode.window.showWarningMessage('No index exists yet. Use "Build Index" first.');
+			return;
+		}
+
+		const indexingPrereqs = indexer.getIndexingPrerequisiteStatus(true);
+		if (!indexingPrereqs.ready) {
+			vscode.window.showWarningMessage(indexingPrereqs.message);
 			return;
 		}
 
