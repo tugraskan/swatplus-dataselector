@@ -21,7 +21,8 @@
     "onCommand:swat-dataset-selector.selectDataset",
     "onCommand:swat-dataset-selector.buildIndex",
     "onCommand:swat-dataset-selector.loadIndex",
-    "onCommand:swat-dataset-selector.rebuildIndex"
+    "onCommand:swat-dataset-selector.rebuildIndex",
+    "onCommand:swat-dataset-selector.checkInputFiles"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -119,6 +120,11 @@
         "command": "swat-dataset-selector.runDataQualityPreflight",
         "title": "SWAT+: Run Data Quality Preflight",
         "icon": "$(checklist)"
+      },
+      {
+        "command": "swat-dataset-selector.checkInputFiles",
+        "title": "SWAT+: Check Input Files",
+        "icon": "$(search)"
       }
     ],
     "menus": {
