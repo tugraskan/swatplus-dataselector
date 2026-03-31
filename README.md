@@ -50,6 +50,7 @@ This extension provides the following commands:
 - `SWAT+: Rebuild Inputs Index` - Rebuild the index for the currently selected dataset
 - `SWAT+: Show Dependency Graph` - Open an edge-list graph of table-to-table dependencies from FK references
 - `SWAT+: Run Data Quality Preflight` - Generate a markdown report with unresolved references and potential orphan rows
+- `SWAT+: Export AI Context Document` - Generate a single Markdown file that gives an AI assistant everything it needs to understand your dataset (see [Using with AI Assistants](#using-with-ai-assistants-github-copilot-chatgpt-etc))
 
 ## Usage
 
@@ -102,6 +103,59 @@ The extension dynamically launches a debug session with:
 - **Environment**: Includes CMake launch target directory in PATH
 
 This replaces the need to manually edit `launch.json` and change the `cwd` parameter each time you want to debug with a different dataset.
+
+## Using with AI Assistants (GitHub Copilot, ChatGPT, etc.)
+
+### The problem with "just grepping" the input files
+
+A typical SWAT+ dataset is a folder of **200+ plain text files** — `hru-data.hru`, `topography.hyd`, `management.sch`, and so on. Each file is whitespace-delimited with no column descriptions, no types, and no relationships stated anywhere inside the file itself. For example, a line in `hru-data.hru` looks like:
+
+```
+1  hru01  1  topo01  soil01  lu01  ...
+```
+
+If you ask Copilot *"why does HRU 1 have the wrong topography?"*, Copilot would need to:
+
+1. Open `hru-data.hru` and find the row
+2. Guess that column 4 (`topo01`) is a foreign key pointing somewhere
+3. Open `topography.hyd` and search for `topo01`
+4. Repeat for every other column it doesn't recognise
+5. Do all this across files it has never seen before
+
+Without the schema, Copilot doesn't know `topo` is a foreign key, doesn't know it points to `topography.hyd`, and doesn't know which column in that file is the primary key. It would have to guess — or ask you — at every step.
+
+### What `Export AI Context Document` does instead
+
+Run **`SWAT+: Build Inputs Index`** once, then **`SWAT+: Export AI Context Document`**. The extension reads every file in your dataset using the full SWAT+ schema it already knows, and produces a single `ai-context.md` file that contains:
+
+| What's included | Why it matters |
+|---|---|
+| **Dataset summary** — table count, row count, FK resolution rate | One-glance health check |
+| **Per-file sections grouped by category** | Copilot sees Climate, Hydrology, Land Use files together |
+| **Column schema for every file** — name, type, which column is the primary key, which columns are foreign keys and where they point | Copilot knows `topo` → `topography.hyd.name` without guessing |
+| **Sample rows** (first 3) from every file | Copilot sees real values, not just column names |
+| **Cross-file FK relationship map** — every `source_table.column → target_table` edge | Copilot can trace data lineage across files in one shot |
+| **Data quality issues** — top unresolved FK targets and orphan rows | Flags broken links before you even ask |
+| **file.cio classification summary** — which files are active | Copilot knows which groups of files are in play |
+
+### How to use it
+
+```
+1. Ctrl+Shift+P → "SWAT+: Build Inputs Index"   (or "Rebuild" if you already have one)
+2. Ctrl+Shift+P → "SWAT+: Export AI Context Document"
+   → ai-context.md opens automatically
+3. Paste ai-context.md (or drag it) into your Copilot / ChatGPT conversation
+4. Ask questions about your dataset
+```
+
+### Side-by-side comparison
+
+| Approach | What Copilot sees | Round trips to understand one FK |
+|---|---|---|
+| "Just grep the files" | Raw whitespace-delimited text, no types, no schema | 3–5+ (open file → guess column → open target → repeat) |
+| `Export AI Context Document` | Full schema + sample data + relationship map in one file | 0 — it's all already there |
+
+> **Tip:** The `ai-context.md` file is written into your dataset folder and is listed in `.gitignore` conventions so it won't accidentally be committed. You can re-generate it any time after rebuilding the index.
 
 ## SWAT+ Schema Extraction
 

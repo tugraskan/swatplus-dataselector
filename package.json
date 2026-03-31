@@ -128,7 +128,7 @@
       },
       {
         "command": "swat-dataset-selector.exportAiContext",
-        "title": "SWAT+: Export AI Context Document",
+        "title": "SWAT+: Export AI Context Document (for Copilot / ChatGPT)",
         "icon": "$(robot)"
       }
     ],
