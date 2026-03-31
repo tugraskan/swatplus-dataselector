@@ -16,8 +16,10 @@ import { SwatTableViewerPanel } from './tableViewerPanel';
 import { SwatSingleTableViewerPanel } from './singleTableViewerPanel';
 import { SchemaEditorPanel } from './schemaEditorPanel';
 import { SwatDependencyGraphPanel } from './dependencyGraphPanel';
+import { SwatOutputDataFramePanel } from './outputDataFramePanel';
 import { normalizePathForComparison, pathStartsWith } from './pathUtils';
 import { detectEnvironment, isCmakeToolsInstalled } from './environmentUtils';
+import { generateOutputNotebooks } from './outputNotebookGenerator';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -505,6 +507,65 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
+	const generateOutputNotebooksCmd = vscode.commands.registerCommand('swat-dataset-selector.generateOutputNotebooks', async () => {
+		const selectedPath = swatProvider.getSelectedDataset();
+		if (!selectedPath) {
+			vscode.window.showWarningMessage('No dataset folder selected. Please select a folder first.');
+			return;
+		}
+
+		const result = generateOutputNotebooks(selectedPath, indexer.getSchema());
+		if (result.notebookPaths.length === 0) {
+			vscode.window.showWarningMessage('No output files were found to convert into notebooks.');
+			return;
+		}
+
+		const notebookCount = result.notebookPaths.length;
+		const message =
+			`Generated ${notebookCount} output notebook${notebookCount === 1 ? '' : 's'} ` +
+			`${result.indexNotebookPath ? 'and an index notebook ' : ''}in ${result.outputDir}.`;
+		const openLabel = result.indexNotebookPath ? 'Open Index Notebook' : 'Open First Notebook';
+		const choice = await vscode.window.showInformationMessage(
+			message,
+			openLabel,
+			'Reveal Folder'
+		);
+
+		if (choice === openLabel) {
+			const notebookUri = vscode.Uri.file(result.indexNotebookPath ?? result.notebookPaths[0]);
+			try {
+				const notebookDocument = await vscode.workspace.openNotebookDocument(notebookUri);
+				await vscode.window.showNotebookDocument(notebookDocument, { preview: false });
+			} catch {
+				const textDocument = await vscode.workspace.openTextDocument(notebookUri);
+				await vscode.window.showTextDocument(textDocument, { preview: false });
+			}
+		} else if (choice === 'Reveal Folder') {
+			await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(result.outputDir));
+		}
+	});
+
+	const openOutputAsDataFrameCmd = vscode.commands.registerCommand(
+		'swat-dataset-selector.openOutputAsDataFrame',
+		async (target?: vscode.Uri | string) => {
+			const filePath = typeof target === 'string'
+				? target
+				: target?.fsPath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
+
+			if (!filePath) {
+				vscode.window.showWarningMessage('No file was provided for DataFrame preview.');
+				return;
+			}
+
+			if (!fs.existsSync(filePath)) {
+				vscode.window.showWarningMessage(`File not found: ${filePath}`);
+				return;
+			}
+
+			SwatOutputDataFramePanel.createOrShow(filePath);
+		}
+	);
+
 	// Command: Load cached index
 	const loadIndex = vscode.commands.registerCommand('swat-dataset-selector.loadIndex', async () => {
 		const selectedPath = swatProvider.getSelectedDataset();
@@ -778,6 +839,8 @@ export function activate(context: vscode.ExtensionContext) {
 		showDependencyGraph,
 		runDataQualityPreflight,
 		checkInputFiles,
+		generateOutputNotebooksCmd,
+		openOutputAsDataFrameCmd,
 		loadIndex,
 		rebuildIndex,
 		showFKReferences,

@@ -15,6 +15,9 @@
   "categories": [
     "Other"
   ],
+  "extensionDependencies": [
+    "ms-toolsai.jupyter"
+  ],
   "activationEvents": [
     "onStartupFinished",
     "onView:swatDatasetView",
@@ -22,7 +25,9 @@
     "onCommand:swat-dataset-selector.buildIndex",
     "onCommand:swat-dataset-selector.loadIndex",
     "onCommand:swat-dataset-selector.rebuildIndex",
-    "onCommand:swat-dataset-selector.checkInputFiles"
+    "onCommand:swat-dataset-selector.checkInputFiles",
+    "onCommand:swat-dataset-selector.generateOutputNotebooks",
+    "onCommand:swat-dataset-selector.openOutputAsDataFrame"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -125,10 +130,25 @@
         "command": "swat-dataset-selector.checkInputFiles",
         "title": "SWAT+: Check Input Files",
         "icon": "$(search)"
+      },
+      {
+        "command": "swat-dataset-selector.generateOutputNotebooks",
+        "title": "SWAT+: Generate Output Notebooks",
+        "icon": "$(notebook)"
+      },
+      {
+        "command": "swat-dataset-selector.openOutputAsDataFrame",
+        "title": "SWAT+: Explore Output File",
+        "icon": "$(table)"
       }
     ],
     "menus": {
       "explorer/context": [
+        {
+          "command": "swat-dataset-selector.openOutputAsDataFrame",
+          "when": "explorerResourceIsFile && (resourceExtname == .csv || resourceExtname == .out || resourceExtname == .txt)",
+          "group": "navigation@99"
+        },
         {
           "command": "swat-dataset-selector.useAsDataset",
           "when": "explorerResourceIsFolder",
