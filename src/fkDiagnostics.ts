@@ -7,6 +7,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { SwatIndexer } from './indexer';
+import { shouldSuppressUnresolvedFkDiagnostic } from './fkDiagnosticsUtils';
 
 export class SwatFKDiagnosticsProvider {
     private diagnosticCollection: vscode.DiagnosticCollection;
@@ -36,8 +37,13 @@ export class SwatFKDiagnosticsProvider {
 
         // Group by file
         const diagnosticsByFile = new Map<string, vscode.Diagnostic[]>();
+        const metadata = this.indexer.getMetadata();
 
         for (const ref of unresolvedRefs) {
+            if (shouldSuppressUnresolvedFkDiagnostic(ref, metadata)) {
+                continue;
+            }
+
             if (!diagnosticsByFile.has(ref.sourceFile)) {
                 diagnosticsByFile.set(ref.sourceFile, []);
             }

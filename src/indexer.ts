@@ -12,6 +12,8 @@ import * as path from 'path';
 import { spawnSync } from 'child_process';
 import * as os from 'os';
 import { normalizePathForComparison, resolveFileCioPath } from './pathUtils';
+import { getPhysicalColumnsForValidation, isAcceptedBooleanLiteral, resolveValidationLayout } from './fileFormatUtils';
+import { CURRENT_INDEX_CACHE_VERSION, isIndexCacheCompatible } from './indexCacheUtils';
 
 // TxtInOut metadata interface
 interface TxtInOutMetadata {
@@ -153,6 +155,17 @@ export interface FilePointerIssue {
     columnDescription?: string; // human-readable description of the pointer column
 }
 
+export interface MissingForeignKeyFileIssue {
+    sourceFile: string;      // absolute path to the source file containing the reference
+    sourceLine: number;      // 1-based line number in the source file
+    sourceTable: string;     // table name containing the FK value
+    sourceColumn: string;    // FK column in the source file
+    fkValue: string;         // unresolved FK value
+    targetTable: string;     // target table name from schema
+    targetColumn: string;    // target column name from schema
+    targetFile: string;      // target file expected in the dataset
+}
+
 /**
  * Categories of file format issues that can be detected by the format checker.
  */
@@ -164,7 +177,7 @@ export type FileFormatIssueKind =
     | 'wrong_column_count'   // A data row has fewer columns than the schema defines
     | 'invalid_integer'      // An IntegerField column contains a non-integer value
     | 'invalid_decimal'      // A DoubleField column contains a non-numeric value
-    | 'invalid_boolean';     // A BooleanField column contains a value other than 0 or 1
+    | 'invalid_boolean';     // A BooleanField column contains an invalid boolean literal
 
 /**
  * A single format issue detected in a SWAT+ input file.
@@ -924,7 +937,10 @@ export class SwatIndexer {
     /**
      * Load an index from a cached JSON file on disk.
      */
-    public async loadIndexFromCache(datasetPath: string): Promise<boolean> {
+    public async loadIndexFromCache(
+        datasetPath: string,
+        options?: { notifyIfIncompatible?: boolean }
+    ): Promise<boolean> {
         if (!this.schema) {
             vscode.window.showErrorMessage('Schema not loaded');
             return false;
@@ -943,6 +959,16 @@ export class SwatIndexer {
         try {
             const payloadContent = fs.readFileSync(cachePath, 'utf-8');
             const payload = JSON.parse(payloadContent);
+            const notifyIfIncompatible = options?.notifyIfIncompatible ?? true;
+
+            if (!isIndexCacheCompatible(payload.version)) {
+                if (notifyIfIncompatible) {
+                    vscode.window.showWarningMessage(
+                        'Cached index is out of date for this extension version. Rebuild the index to refresh diagnostics.'
+                    );
+                }
+                return false;
+            }
 
             this.index.clear();
             this.fkReferences = [];
@@ -1020,7 +1046,7 @@ export class SwatIndexer {
 
         try {
             const cachePayload: any = {
-                version: 1,
+                version: CURRENT_INDEX_CACHE_VERSION,
                 createdAt: new Date().toISOString(),
                 tables: {},
                 fkReferences: this.fkReferences,
@@ -1308,6 +1334,33 @@ export class SwatIndexer {
     }
 
     /**
+     * Return unresolved FK references whose target table file is missing from the
+     * current dataset index.
+     */
+    public getMissingForeignKeyFileIssues(): MissingForeignKeyFileIssue[] {
+        const issues: MissingForeignKeyFileIssue[] = [];
+
+        for (const ref of this.fkReferences) {
+            if (ref.resolved || this.isTableIndexed(ref.targetTable)) {
+                continue;
+            }
+
+            issues.push({
+                sourceFile: ref.sourceFile,
+                sourceLine: ref.sourceLine,
+                sourceTable: ref.sourceTable,
+                sourceColumn: ref.sourceColumn,
+                fkValue: ref.fkValue,
+                targetTable: ref.targetTable,
+                targetColumn: ref.targetColumn,
+                targetFile: this.getFileNameForTable(ref.targetTable) || ref.targetTable
+            });
+        }
+
+        return issues;
+    }
+
+    /**
      * Check all file pointer columns across indexed tables and return issues where
      * the referenced file does not exist on disk.
      *
@@ -1447,10 +1500,15 @@ export class SwatIndexer {
                 continue; // nothing else to check
             }
 
-            // Physical columns (AutoField columns are DB-only; not in the file)
-            const physicalColumns = table.columns.filter(c => c.type !== 'AutoField');
+            const physicalColumns = getPhysicalColumnsForValidation(table, this.metadata);
             const isHierarchical = hierarchicalFileNames.has(fileName);
             const isDtl = fileName.toLowerCase().endsWith('.dtl');
+            const validationLayout = resolveValidationLayout(
+                rawLines,
+                table,
+                physicalColumns,
+                this.fkNullValues
+            );
 
             // ── 2. Metadata (title) line ────────────────────────────────────────
             if (table.has_metadata_line) {
@@ -1467,9 +1525,9 @@ export class SwatIndexer {
             }
 
             // ── 3. Header line ──────────────────────────────────────────────────
-            const headerLineIdx = table.data_starts_after - 1; // 0-based index of header row
+            const headerLineIdx = validationLayout.headerLineIdx; // 0-based index of header row
             if (table.has_header_line && headerLineIdx >= 0) {
-                if (headerLineIdx >= rawLines.length || !rawLines[headerLineIdx]?.trim()) {
+                if (headerLineIdx >= rawLines.length) {
                     issues.push({
                         file: filePath,
                         line: headerLineIdx + 1,
@@ -1478,24 +1536,32 @@ export class SwatIndexer {
                         expected: `Column header on line ${headerLineIdx + 1}`
                     });
                 } else {
-                    // Soft match: check whether the actual header columns are consistent
-                    // with the schema columns.  We flag an issue only when the count
-                    // difference is large or when no expected column appears in the header.
-                    const actualHeaders = rawLines[headerLineIdx].trim().split(/\s+/);
-                    const expectedHeaders = physicalColumns.map(c => c.name.toLowerCase());
-                    const actualLower = new Set(actualHeaders.map(h => h.toLowerCase()));
+                    const headerAnalysis = validationLayout.headerAnalysis;
 
-                    const missing = expectedHeaders.filter(e => !actualLower.has(e));
-                    // Report only if more than half the expected columns are absent
-                    if (expectedHeaders.length > 0 && missing.length > expectedHeaders.length / 2) {
+                    if (headerAnalysis?.kind === 'missing_header_line') {
+                        const message = rawLines[headerLineIdx]?.trim()
+                            ? `Expected a column header in ${fileName}, but found a data row instead`
+                            : `Missing or blank column-header line in ${fileName}`;
+
+                        issues.push({
+                            file: filePath,
+                            line: headerLineIdx + 1,
+                            kind: 'missing_header_line',
+                            message,
+                            expected: `Column header on line ${headerLineIdx + 1}`,
+                            actual: headerAnalysis.actualHeaders.join(' ')
+                        });
+                    } else if (headerAnalysis?.kind === 'header_column_mismatch') {
+                        const missingCount = headerAnalysis.expectedHeaders.length - headerAnalysis.matchedExpectedCount;
+
                         issues.push({
                             file: filePath,
                             line: headerLineIdx + 1,
                             kind: 'header_column_mismatch',
                             message: `Column-header mismatch in ${fileName}: ` +
-                                `${missing.length} of ${expectedHeaders.length} expected columns not found in header`,
-                            expected: expectedHeaders.join(' '),
-                            actual: actualHeaders.join(' ')
+                                `${missingCount} of ${headerAnalysis.expectedHeaders.length} expected columns not found in header`,
+                            expected: headerAnalysis.expectedHeaders.join(' '),
+                            actual: headerAnalysis.actualHeaders.join(' ')
                         });
                     }
                 }
@@ -1507,7 +1573,7 @@ export class SwatIndexer {
                 continue;
             }
 
-            const dataStartLine = table.data_starts_after; // 0-based index of first data row
+            const dataStartLine = validationLayout.dataStartLineIdx; // 0-based index of first data row
             const expectedColCount = physicalColumns.length;
 
             // Build per-column indices for typed checks (position in physicalColumns array)
@@ -1516,12 +1582,14 @@ export class SwatIndexer {
             const booleanColIndices: Array<{ idx: number; name: string }> = [];
 
             physicalColumns.forEach((col, idx) => {
+                const resolvedIdx = validationLayout.columnPositions.get(col.name) ?? idx;
+
                 if (col.type === 'IntegerField' || col.type === 'PrimaryKeyField') {
-                    integerColIndices.push({ idx, name: col.name });
+                    integerColIndices.push({ idx: resolvedIdx, name: col.name });
                 } else if (col.type === 'DoubleField') {
-                    decimalColIndices.push({ idx, name: col.name });
+                    decimalColIndices.push({ idx: resolvedIdx, name: col.name });
                 } else if (col.type === 'BooleanField') {
-                    booleanColIndices.push({ idx, name: col.name });
+                    booleanColIndices.push({ idx: resolvedIdx, name: col.name });
                 }
             });
 
@@ -1607,15 +1675,15 @@ export class SwatIndexer {
                     const raw = values[idx];
                     if (!raw) { continue; }
                     if (nullSet.has(raw.toLowerCase())) { continue; }
-                    if (raw !== '0' && raw !== '1') {
+                    if (!isAcceptedBooleanLiteral(raw, nullSet)) {
                         issues.push({
                             file: filePath,
                             line: i + 1,
                             column: name,
                             kind: 'invalid_boolean',
                             message: `Invalid boolean value in ${fileName} at line ${i + 1}, ` +
-                                `column "${name}": "${raw}" (expected 0 or 1)`,
-                            expected: '0 or 1',
+                                `column "${name}": "${raw}" (expected 0/1, y/n, true/false, or yes/no)`,
+                            expected: '0/1, y/n, true/false, or yes/no',
                             actual: raw
                         });
                         rowIssueCount++;

@@ -419,6 +419,28 @@
       },
       "wgn": "Name of the weather generator station"
     },
+    "recall.rec": {
+      "description": "File pointer columns for recall.rec",
+      "file": {
+        "description": "Recall time series data file name",
+        "file_pattern": "*.rec"
+      },
+      "filename": {
+        "description": "Recall time series data file name",
+        "file_pattern": "*.rec"
+      }
+    },
+    "salt-recall.rec": {
+      "description": "File pointer columns for salt-recall.rec",
+      "file": {
+        "description": "Salt recall time series data file name",
+        "file_pattern": "*.dat"
+      },
+      "filename": {
+        "description": "Salt recall time series data file name",
+        "file_pattern": "*.dat"
+      }
+    },
     "aquifer.aqu": {
       "description": "File pointer columns for aquifer.aqu",
       "aqu_init": "Pointer to the aquifer initialization file"

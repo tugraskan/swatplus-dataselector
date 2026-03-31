@@ -29,19 +29,64 @@ NUMERIC_VALUE_PATTERN = re.compile(r'^\d+(\.\d+)?$')
 MAX_CHILD_LINES = 1000  # Sanity check limit to prevent excessive line skipping
 MANAGEMENT_SCH_OP_DATA1_INDEX = 6  # Position of op_data1 field in management schedule operation lines
 DTL_ACTION_FP_INDEX = 7  # Position of fp field in decision table action lines
-WEATHER_FILE_POINTER_FK_TABLES = {"pcp_cli", "tmp_cli", "slr_cli", "hmd_cli", "wnd_cli"}
 WEATHER_DATA_SCHEMA_FILES = {
     ".pcp": "weather-pcp.pcp",
+    ".tem": "weather-tmp.tmp",
     ".tmp": "weather-tmp.tmp",
     ".slr": "weather-slr.slr",
     ".hmd": "weather-hmd.hmd",
     ".wnd": "weather-wnd.wnd",
+}
+COUNT_LINE_PATTERN = re.compile(r"^\d+$")
+HEADER_ALIASES_BY_FILE = {
+    "calibration.cal": {
+        "name": "cal_parm",
+        "chg_type": "chg_typ",
+        "val": "chg_val",
+        "lyr1": "soil_lyr1",
+        "lyr2": "soil_lyr2",
+        "year1": "yr1",
+        "year2": "yr2",
+    },
+    "codes.sft": {
+        "landscape_yn": "landscape",
+        "hyd_yn": "hyd",
+        "plnt_yn": "plnt",
+        "sed_yn": "sed",
+        "nut_yn": "nut",
+        "ch_sed_yn": "ch_sed",
+        "ch_nut_yn": "ch_nut",
+        "res_yn": "res",
+    },
+    "plant.ini": {
+        "pcom_name": "name",
+        "plt_cnt": "plnt_cnt",
+        "plt_name": "plnt_name",
+    },
 }
 
 
 def load_json(path: Path) -> dict:
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def normalize_header_token(file_name: str, token: str) -> str:
+    lowered = token.lower()
+    return HEADER_ALIASES_BY_FILE.get(file_name.lower(), {}).get(lowered, lowered)
+
+
+def normalize_header_columns(file_name: str, header_columns: List[str]) -> List[str]:
+    return [normalize_header_token(file_name, column.strip()) for column in header_columns if column.strip()]
+
+
+def count_schema_header_matches(header_columns: List[str], schema_columns: List[str]) -> int:
+    schema_set = set(schema_columns)
+    return sum(1 for column in header_columns if column in schema_set)
+
+
+def is_standalone_count_line(raw_line: str) -> bool:
+    return bool(COUNT_LINE_PATTERN.fullmatch(raw_line.strip()))
 
 
 def load_file_cio_filenames(dataset_path: Path) -> Set[str]:
@@ -245,26 +290,25 @@ def parse_lines_to_dataframe(
     columns = schema_columns
     if table.get("has_header_line") and lines:
         header_index = max(start_line - 1, 0)
+        header_columns: List[str] = []
+
         if header_index < len(lines):
             header_line = lines[header_index].strip()
             if header_line:
-                header_columns = [col.strip() for col in header_line.split()]
-                if header_columns:
-                    if file_name == "plant.ini":
-                        plant_header_map = {
-                            "pcom_name": "name",
-                            "plt_cnt": "plnt_cnt",
-                            "plt_name": "plnt_name"
-                        }
-                        columns = [plant_header_map.get(col.lower(), col.lower()) for col in header_columns]
-                    else:
-                        header_lower = [col.lower() for col in header_columns]
-                        if all(col in schema_columns_all for col in header_columns):
-                            columns = header_columns
-                        elif all(col in schema_columns_all for col in header_lower):
-                            columns = header_lower
-                        elif any(col in schema_columns_all for col in header_lower):
-                            columns = header_lower
+                header_columns = normalize_header_columns(file_name, header_line.split())
+
+                if is_standalone_count_line(header_line):
+                    shifted_header_index = header_index + 1
+                    if shifted_header_index < len(lines):
+                        shifted_header_line = lines[shifted_header_index].strip()
+                        shifted_header_columns = normalize_header_columns(file_name, shifted_header_line.split())
+                        if count_schema_header_matches(shifted_header_columns, schema_columns_all) > count_schema_header_matches(header_columns, schema_columns_all):
+                            header_index = shifted_header_index
+                            start_line = shifted_header_index + 1
+                            header_columns = shifted_header_columns
+
+        if header_columns and any(col in schema_columns_all for col in header_columns):
+            columns = header_columns
     
     i = start_line
     while i < len(lines):
@@ -456,9 +500,9 @@ def build_fk_references(
             continue
         processed_columns.add(column)
         
-        # Skip file pointer columns (they point to files, not table rows)
-        # Allow weather list files (pcp/tmp/slr/hmd/wnd) to behave as FK targets.
-        if column in file_pointer_columns and fk.get("references", {}).get("table") not in WEATHER_FILE_POINTER_FK_TABLES:
+        # Skip file pointer columns. These point to physical files on disk
+        # rather than rows in an indexed target table.
+        if column in file_pointer_columns:
             continue
 
         if column not in column_values_cache:

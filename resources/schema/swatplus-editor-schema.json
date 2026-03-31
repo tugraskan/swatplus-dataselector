@@ -1374,22 +1374,6 @@
           "is_foreign_key": false
         },
         {
-          "name": "hyd_hru",
-          "db_column": "hyd_hru",
-          "type": "BooleanField",
-          "nullable": false,
-          "is_primary_key": false,
-          "is_foreign_key": false
-        },
-        {
-          "name": "hyd_hrulte",
-          "db_column": "hyd_hrulte",
-          "type": "BooleanField",
-          "nullable": false,
-          "is_primary_key": false,
-          "is_foreign_key": false
-        },
-        {
           "name": "landscape",
           "db_column": "landscape",
           "type": "BooleanField",

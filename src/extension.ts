@@ -48,7 +48,7 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 
-		const success = await indexer.loadIndexFromCache(datasetPath);
+		const success = await indexer.loadIndexFromCache(datasetPath, { notifyIfIncompatible: false });
 		if (success) {
 			fkDiagnostics.updateDiagnostics();
 			filePointerDiagnostics.updateDiagnostics();
@@ -302,6 +302,9 @@ export function activate(context: vscode.ExtensionContext) {
 		// Collect file pointer issues
 		const filePointerIssues = indexer.getFilePointerIssues();
 
+		// Collect missing FK target files
+		const missingFkFileIssues = indexer.getMissingForeignKeyFileIssues();
+
 		// Collect file format issues
 		const fileFormatIssueList = indexer.getFileFormatIssues();
 
@@ -313,6 +316,7 @@ export function activate(context: vscode.ExtensionContext) {
 		const topUnresolvedSources = sortMapDesc(unresolvedBySourceColumn).slice(0, 25);
 		const orphanSample = orphanRows.slice(0, 200);
 		const filePointerSample = filePointerIssues.slice(0, 200);
+		const missingFkFileSample = missingFkFileIssues.slice(0, 200);
 		const fileFormatSample = fileFormatIssueList.slice(0, 200);
 
 		const selectedPath = indexer.getDatasetPath();
@@ -332,6 +336,7 @@ export function activate(context: vscode.ExtensionContext) {
 		lines.push(`- Resolved references: ${stats.resolvedFkCount}`);
 		lines.push(`- Unresolved references: ${stats.unresolvedFkCount}`);
 		lines.push(`- Missing file pointers: ${filePointerIssues.length}`);
+		lines.push(`- Missing foreign key target files: ${missingFkFileIssues.length}`);
 		lines.push(`- File format issues: ${fileFormatIssueList.length}`);
 		lines.push(`- Potential orphan rows (no inbound and no outbound refs): ${orphanRows.length}`);
 		lines.push('');
@@ -369,6 +374,24 @@ export function activate(context: vscode.ExtensionContext) {
 			if (filePointerIssues.length > filePointerSample.length) {
 				lines.push('');
 				lines.push(`_Only first ${filePointerSample.length} issues shown._`);
+			}
+		}
+		lines.push('');
+
+		lines.push('## Missing foreign key target files (sample, max 200)');
+		lines.push('_Unresolved foreign keys whose target file is not present in the dataset._');
+		if (missingFkFileSample.length === 0) {
+			lines.push('- None');
+		} else {
+			lines.push('| source file | line | source column | fk value | missing target file |');
+			lines.push('|---|---:|---|---|---|');
+			for (const issue of missingFkFileSample) {
+				const sourceBase = path.basename(issue.sourceFile);
+				lines.push(`| ${sourceBase} | ${issue.sourceLine} | ${issue.sourceColumn} | ${issue.fkValue} | ${issue.targetFile} |`);
+			}
+			if (missingFkFileIssues.length > missingFkFileSample.length) {
+				lines.push('');
+				lines.push(`_Only first ${missingFkFileSample.length} issues shown._`);
 			}
 		}
 		lines.push('');
@@ -415,7 +438,7 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.showInformationMessage(`Data quality preflight report created: ${outPath}`);
 	});
 
-	// Command: Check Input Files - checks file pointers and file format issues
+	// Command: Check Input Files - checks file pointers, missing FK target files, and file format issues
 	const checkInputFiles = vscode.commands.registerCommand('swat-dataset-selector.checkInputFiles', async () => {
 		if (!indexer.isIndexBuilt()) {
 			vscode.window.showWarningMessage('No index available. Build or load an index first.');
@@ -424,16 +447,17 @@ export function activate(context: vscode.ExtensionContext) {
 
 		// Collect both categories of issues and refresh diagnostics
 		const pointerIssues = indexer.getFilePointerIssues();
+		const missingFkFileIssues = indexer.getMissingForeignKeyFileIssues();
 		const formatIssues = indexer.getFileFormatIssues();
 		filePointerDiagnostics.updateDiagnostics();
 		fileFormatDiagnostics.updateDiagnostics();
 
-		const totalIssues = pointerIssues.length + formatIssues.length;
+		const totalIssues = pointerIssues.length + missingFkFileIssues.length + formatIssues.length;
 
 		if (totalIssues === 0) {
 			vscode.window.showInformationMessage(
 				'SWAT+ Input File Check: No issues found. ' +
-				'All referenced files exist and all checked files are correctly formatted.'
+				'All checked file pointers and foreign key target files exist, and all checked files are correctly formatted.'
 			);
 			return;
 		}
@@ -453,6 +477,20 @@ export function activate(context: vscode.ExtensionContext) {
 				.join(', ');
 			const moreText = missingFiles.size > 5 ? ` +${missingFiles.size - 5} more` : '';
 			parts.push(`${pointerIssues.length} missing file pointer${pointerIssues.length > 1 ? 's' : ''} (${summary}${moreText})`);
+		}
+
+		if (missingFkFileIssues.length > 0) {
+			const missingTargetFiles = new Map<string, number>();
+			for (const issue of missingFkFileIssues) {
+				missingTargetFiles.set(issue.targetFile, (missingTargetFiles.get(issue.targetFile) || 0) + 1);
+			}
+			const summary = Array.from(missingTargetFiles.entries())
+				.sort((a, b) => b[1] - a[1])
+				.slice(0, 5)
+				.map(([file, count]) => `"${file}" (${count} ref${count !== 1 ? 's' : ''})`)
+				.join(', ');
+			const moreText = missingTargetFiles.size > 5 ? ` +${missingTargetFiles.size - 5} more` : '';
+			parts.push(`${missingFkFileIssues.length} missing foreign key target file${missingFkFileIssues.length > 1 ? 's' : ''} (${summary}${moreText})`);
 		}
 
 		if (formatIssues.length > 0) {

@@ -696,86 +696,167 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     
                     // Read entries for outputs section
                     const entriesOutputs = fs.existsSync(viewingDirectoryOutputs) ? fs.readdirSync(viewingDirectoryOutputs, { withFileTypes: true }) : [];
-                    
-                    // Helper function to categorize file
-                    const categorizeFile = (fileName: string): string => {
+
+                    const schema = this.indexer.getSchema();
+                    const schemaInputFiles = new Set<string>();
+                    const schemaOutputFiles = new Set<string>();
+                    const fileCioReferencedInputs = new Set<string>();
+
+                    const getFileNameVariants = (fileName: string): string[] => {
+                        const lower = fileName.toLowerCase();
+                        const variants = new Set<string>([lower]);
+                        variants.add(lower.replace(/-/g, '_'));
+                        variants.add(lower.replace(/_/g, '-'));
+                        variants.add(lower.replace(/-/g, '_').replace(/_/g, '-'));
+                        return Array.from(variants);
+                    };
+
+                    const registerFileNameVariants = (target: Set<string>, fileName: string): void => {
+                        getFileNameVariants(fileName).forEach(variant => target.add(variant));
+                    };
+
+                    if (schema) {
+                        for (const table of Object.values(schema.tables)) {
+                            const targetSet = table.model_class?.startsWith('output.')
+                                ? schemaOutputFiles
+                                : schemaInputFiles;
+                            registerFileNameVariants(targetSet, table.file_name);
+                        }
+                    }
+
+                    try {
+                        const fileCioLines = fs.readFileSync(fileCioPath, 'utf-8').split(/\r?\n/);
+                        for (const line of fileCioLines.slice(1)) {
+                            const trimmed = line.trim();
+                            if (!trimmed || trimmed.startsWith('#')) {
+                                continue;
+                            }
+
+                            const parts = trimmed.split(/\s+/);
+                            for (const rawFileName of parts.slice(1)) {
+                                const lower = rawFileName.toLowerCase();
+                                if (!lower || lower === 'null' || lower === '0') {
+                                    continue;
+                                }
+                                registerFileNameVariants(fileCioReferencedInputs, rawFileName);
+                            }
+                        }
+                    } catch {
+                        // Ignore file.cio parsing errors here and fall back to schema/extension heuristics.
+                    }
+
+                    const isKnownSchemaOutput = (fileName: string): boolean =>
+                        getFileNameVariants(fileName).some(variant => schemaOutputFiles.has(variant));
+
+                    const isKnownInput = (fileName: string): boolean =>
+                        getFileNameVariants(fileName).some(variant =>
+                            fileCioReferencedInputs.has(variant) || schemaInputFiles.has(variant)
+                        );
+
+                    const categorizeInputFile = (fileName: string): string => {
                         const ext = path.extname(fileName).toLowerCase();
                         const baseName = path.basename(fileName).toLowerCase();
-                        
+
                         // Special case: wgn files are climate even if they have .txt extension
                         if (baseName.includes('wgn')) {
                             return 'climate';
                         }
-                        
-                        // Output files (anything .txt or .out)
-                        if (ext === '.txt' || ext === '.out') {
-                            return 'output';
-                        }
-                        
+
                         // Simulation Control
                         if (['.cio', '.cnt', '.sim', '.prt', '.bsn', '.cal'].includes(ext)) {
                             return 'simulation';
                         }
-                        
+
                         // Climate
                         if (['.cli', '.pcp', '.tmp', '.slr', '.hmd', '.wnd'].includes(ext)) {
                             return 'climate';
                         }
-                        
+
                         // Spatial Objects
                         if (['.hru', '.rtu', '.def', '.ele'].includes(ext)) {
                             return 'spatial';
                         }
-                        
+
                         // Land Properties
                         if (['.sol', '.fld', '.sno'].includes(ext) || (ext === '.hyd' && baseName.includes('topo'))) {
                             return 'land';
                         }
-                        
+
                         // Land Use & Management
                         if (['.lum', '.sch', '.dtl'].includes(ext) || baseName === 'plant.ini') {
                             return 'landuse';
                         }
-                        
+
                         // Operations & Practices
                         if (['.ops'].includes(ext) || (ext === '.str' && baseName.includes('structural'))) {
                             return 'operations';
                         }
-                        
+
                         // Water Bodies
                         if (['.res', '.wet'].includes(ext) || baseName.startsWith('initial.res') || baseName.startsWith('initial.wet')) {
                             return 'waterbodies';
                         }
-                        
+
                         // Channels
                         if (['.cha'].includes(ext) || baseName.startsWith('initial.cha')) {
                             return 'channels';
                         }
-                        
+
                         // Groundwater
                         if (['.aqu'].includes(ext) || baseName.startsWith('initial.aqu') || baseName.includes('gwflow')) {
                             return 'groundwater';
                         }
-                        
+
                         // Connectivity
                         if (['.con', '.lin'].includes(ext)) {
                             return 'connectivity';
                         }
-                        
+
                         // Initialization Files
-                        if (baseName.startsWith('initial.') || baseName.includes('om_water.ini') || 
-                            baseName.includes('pest_water.ini') || baseName.includes('salt_water.ini') || 
+                        if (baseName.startsWith('initial.') || baseName.includes('om_water.ini') ||
+                            baseName.includes('pest_water.ini') || baseName.includes('salt_water.ini') ||
                             baseName.includes('-ini') || ext === '.ini') {
                             return 'initialization';
                         }
-                        
+
                         // Databases
                         if (['.plt', '.frt', '.pst', '.pes', '.til', '.urb', '.sep'].includes(ext)) {
                             return 'databases';
                         }
-                        
-                        // Default to 'output' for files not matching any input category
-                        return 'output';
+
+                        // Input families that do not fit the existing buckets cleanly.
+                        if (['.rec', '.del', '.dat', '.exc', '.sft', '.txt'].includes(ext)) {
+                            return 'other';
+                        }
+
+                        return 'other';
+                    };
+                    
+                    // Helper function to categorize file
+                    const categorizeFile = (fileName: string): string => {
+                        const ext = path.extname(fileName).toLowerCase();
+
+                        if (isKnownSchemaOutput(fileName)) {
+                            return 'output';
+                        }
+
+                        if (isKnownInput(fileName)) {
+                            return categorizeInputFile(fileName);
+                        }
+
+                        if (ext === '.csv' || ext === '.out') {
+                            return 'output';
+                        }
+
+                        if (['.rec', '.del', '.dat', '.exc', '.sft'].includes(ext)) {
+                            return 'other';
+                        }
+
+                        if (ext === '.txt') {
+                            return 'output';
+                        }
+
+                        return categorizeInputFile(fileName);
                     };
                     
                     // Helper function to get categories contained in a directory
@@ -942,6 +1023,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                         <label><input type="checkbox" id="filter-connectivity" class="filter-checkbox" data-cat="connectivity" checked> 🔗 Connectivity</label>
                                         <label><input type="checkbox" id="filter-initialization" class="filter-checkbox" data-cat="initialization" checked> 🔢 Initialization Files</label>
                                         <label><input type="checkbox" id="filter-databases" class="filter-checkbox" data-cat="databases" checked> 📚 Databases</label>
+                                        <label><input type="checkbox" id="filter-other" class="filter-checkbox" data-cat="other" checked> Other Inputs</label>
                                     </div>
                                 </div>
                             </div>
