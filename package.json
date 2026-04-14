@@ -25,6 +25,8 @@
     "onCommand:swat-dataset-selector.buildIndex",
     "onCommand:swat-dataset-selector.loadIndex",
     "onCommand:swat-dataset-selector.rebuildIndex",
+    "onCommand:swat-dataset-selector.processHruSubset",
+    "onCommand:swat-dataset-selector.processHruSubsetAndRun",
     "onCommand:swat-dataset-selector.checkInputFiles",
     "onCommand:swat-dataset-selector.generateOutputNotebooks",
     "onCommand:swat-dataset-selector.openOutputAsDataFrame"
@@ -125,6 +127,16 @@
         "command": "swat-dataset-selector.runDataQualityPreflight",
         "title": "SWAT+: Run Data Quality Preflight",
         "icon": "$(checklist)"
+      },
+      {
+        "command": "swat-dataset-selector.processHruSubset",
+        "title": "SWAT+: Create HRU Subset",
+        "icon": "$(split-horizontal)"
+      },
+      {
+        "command": "swat-dataset-selector.processHruSubsetAndRun",
+        "title": "SWAT+: Create HRU Subset and Run",
+        "icon": "$(run)"
       },
       {
         "command": "swat-dataset-selector.checkInputFiles",

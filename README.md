@@ -8,6 +8,7 @@ A VS Code extension for SWAT+ development that lets you select dataset folders, 
 - **Recent Datasets**: Reopen recently used datasets from the sidebar.
 - **Dataset Folder Listing**: Show datasets from a configured parent folder such as `workdata/`.
 - **Quick Debug Launch**: Start debugging with the selected dataset as the working directory.
+- **HRU Subsets**: Create a reduced TxtInOut folder for selected HRU IDs, with optional downstream routing preservation.
 - **Seamless Integration**: Works with CMake Tools and gdb debugger configurations.
 - **Comprehensive Schema**: Auto-generated schema for all 213 SWAT+ input tables from swatplus-editor.
 - **Enhanced Indexing**: Pandas-backed indexing system with FK navigation, hover info, and validation.
@@ -49,6 +50,8 @@ After pulling updates, reload VS Code so the latest extension bundle is active.
 - `SWAT+: Build Inputs Index` - Build an index of all SWAT+ input files in the selected dataset.
 - `SWAT+: Load Cached Index` - Load a cached index from the dataset folder.
 - `SWAT+: Rebuild Inputs Index` - Rebuild the current dataset index.
+- `SWAT+: Create HRU Subset` - Create a reduced TxtInOut folder for selected HRU IDs.
+- `SWAT+: Create HRU Subset and Run` - Create a reduced HRU subset and run SWAT+ with the selected executable.
 - `SWAT+: Show Dependency Graph` - Open a graph of table-to-table dependencies.
 - `SWAT+: Run Data Quality Preflight` - Generate a markdown report with unresolved references and potential orphan rows.
 

@@ -258,3 +258,17 @@ Notes:
 - `header` / `units` can be arrays or whitespace-delimited strings.
 - `data` can be list rows or object rows.
 - If `units` are present, exports add a `__row_type` column and prepend a units row.
+
+## HRU subset processor
+
+`scripts/hru_processor.py` creates a reduced TxtInOut folder for selected HRU IDs.
+It is dependency-free and is used by the VS Code commands `SWAT+: Create HRU Subset`
+and `SWAT+: Create HRU Subset and Run`.
+
+Manual example:
+
+```bash
+python3 scripts/hru_processor.py --dataset /path/to/TxtInOut --hru-ids 1,4-6 --keep-routing
+```
+
+Add `--run-swat --exe /path/to/swatplus.exe` to run the generated subset.

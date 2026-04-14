@@ -178,6 +178,13 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         case 'buildIndex':
                             vscode.commands.executeCommand('swat-dataset-selector.buildIndex');
                             break;
+                        case 'processHruSubset':
+                            vscode.commands.executeCommand('swat-dataset-selector.processHruSubset', {
+                                hruIds: typeof data.hruIds === 'string' ? data.hruIds : undefined,
+                                keepRouting: typeof data.keepRouting === 'boolean' ? data.keepRouting : undefined,
+                                runSwat: data.runSwat === true
+                            });
+                            break;
                         case 'rebuildIndex':
                             vscode.commands.executeCommand('swat-dataset-selector.rebuildIndex');
                             break;
@@ -622,12 +629,46 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         const buildIndexLabel = hasCachedIndex ? 'Rebuild Index' : 'Build Index';
         const indexingPrereqs = this.indexer.getIndexingPrerequisiteStatus();
         const canBuildIndex = hasFileCio && indexingPrereqs.ready;
+        const canProcessHruSubset = hasFileCio;
         const buildIndexUnavailableReason = !hasFileCio
             ? 'No file.cio found in selected dataset.'
             : indexingPrereqs.message;
         const buildIndexButtonTitle = canBuildIndex
             ? `Run ${buildIndexLabel} using Python indexer`
             : buildIndexUnavailableReason;
+        const hruRangeSummary = (() => {
+            if (!resolvedFileCioPath) {
+                return 'Select a dataset with file.cio to inspect HRUs.';
+            }
+
+            const hruConPath = path.join(path.dirname(resolvedFileCioPath), 'hru.con');
+            if (!fs.existsSync(hruConPath)) {
+                return 'hru.con not found in this TxtInOut folder.';
+            }
+
+            try {
+                const lines = fs.readFileSync(hruConPath, 'utf-8').split(/\r?\n/);
+                const headers = (lines[1] || '').trim().split(/\s+/);
+                const idIndex = headers.findIndex(header => header.toLowerCase() === 'id');
+                if (idIndex < 0) {
+                    return 'Could not find an ID column in hru.con.';
+                }
+
+                const ids = lines.slice(2)
+                    .map(line => line.trim())
+                    .filter(Boolean)
+                    .map(line => Number(line.split(/\s+/)[idIndex]))
+                    .filter(value => Number.isInteger(value)) as number[];
+
+                if (ids.length === 0) {
+                    return 'No HRU rows found in hru.con.';
+                }
+
+                return `HRUs ${Math.min(...ids)}-${Math.max(...ids)} (${ids.length} total)`;
+            } catch {
+                return 'Could not read hru.con.';
+            }
+        })();
         let combinedHtml = '';
         if (!this.selectedDataset) {
             combinedHtml = `<div class="section">
@@ -1804,6 +1845,110 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             cursor: not-allowed;
         }
 
+        .hru-panel {
+            margin-top: 10px;
+            padding: 10px;
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 4px;
+            background-color: var(--vscode-editor-background);
+        }
+
+        .hru-panel .section-header {
+            margin-bottom: 0;
+        }
+
+        .hru-panel .section-content {
+            margin-top: 8px;
+        }
+
+        .hru-panel-toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .hru-panel-toggle-title {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 600;
+            font-size: 12px;
+            color: var(--vscode-foreground);
+        }
+
+        .hru-panel-toggle {
+            flex-shrink: 0;
+        }
+
+        .hru-panel-toggle input:disabled + .slider {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .hru-panel-title {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 600;
+            font-size: 12px;
+            color: var(--vscode-foreground);
+            margin-bottom: 4px;
+        }
+
+        .hru-panel-description {
+            font-size: 11px;
+            color: var(--vscode-foreground);
+            line-height: 1.45;
+            margin-bottom: 8px;
+        }
+
+        .hru-panel-meta {
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            margin-bottom: 8px;
+            line-height: 1.4;
+        }
+
+        .hru-field-label {
+            display: block;
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .hru-input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 6px 8px;
+            border-radius: 4px;
+            border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            font-family: var(--vscode-font-family);
+            font-size: 12px;
+        }
+
+        .hru-input:disabled {
+            opacity: 0.6;
+        }
+
+        .hru-validation {
+            min-height: 16px;
+            margin-top: 4px;
+            font-size: 11px;
+            color: var(--vscode-errorForeground);
+        }
+
+        .hru-checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 6px;
+            font-size: 12px;
+            color: var(--vscode-foreground);
+        }
+
         .filter-toggle {
             display: flex;
             align-items: center;
@@ -2074,6 +2219,34 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 ${svgs.database}
                 ${buildIndexLabel}
             </button>
+            <div class="hru-panel">
+                <div class="hru-panel-toggle-row" title="Turn on HRU subset options">
+                    <div class="hru-panel-toggle-title">
+                        ${svgs.file}
+                        <span>HRU Subset</span>
+                    </div>
+                    <label class="toggle hru-panel-toggle" title="Show HRU subset options">
+                        <input type="checkbox" id="hruPanelToggle" ${canProcessHruSubset ? '' : 'disabled'}>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="section-content hidden" id="hru-processor-content">
+                    <div class="hru-panel-description" title="The source TxtInOut folder is copied first, then the copy is filtered. The original selected dataset is not edited.">
+                        Create a copied TxtInOut folder that keeps only selected HRUs. The new subset becomes the active dataset when processing finishes.
+                    </div>
+                    <div class="hru-panel-meta" title="Detected from hru.con in the active TxtInOut folder.">${escapeHtml(hruRangeSummary)}</div>
+                    <label class="hru-field-label" for="hruIdsInput" title="Enter one HRU ID, a comma-separated list, or inclusive ranges.">HRU IDs</label>
+                    <input class="hru-input" id="hruIdsInput" type="text" placeholder="1,4-6,10" title="Examples: 7 or 1,4-6,10" ${canProcessHruSubset ? '' : 'disabled'}>
+                    <div class="hru-validation" id="hruValidation"></div>
+                    <label class="hru-checkbox-row" title="When enabled, downstream routing objects connected to the selected HRUs are retained and renumbered.">
+                        <input type="checkbox" id="hruKeepRoutingCheckbox" ${canProcessHruSubset ? '' : 'disabled'}>
+                        <span>Keep downstream routing</span>
+                    </label>
+                    <button class="action-button secondary${canProcessHruSubset ? '' : ' disabled'}" id="processHruSubsetBtn" title="${canProcessHruSubset ? 'Create a reduced TxtInOut folder for selected HRUs' : 'No file.cio found in selected dataset.'}" style="width: 100%; margin-top: 8px;" ${canProcessHruSubset ? '' : 'disabled'}>
+                        Create Subset
+                    </button>
+                </div>
+            </div>
             ${canBuildIndex ? '' : `
                 <div class="schema-version schema-version-inline">
                     <span class="schema-version-label">Index unavailable:</span>
@@ -2234,6 +2407,96 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             if (buildIndexBtn) buildIndexBtn.addEventListener('click', () => {
                 swatHost.postMessage({ type: 'buildIndex' });
             });
+
+            const processHruSubsetBtn = $('processHruSubsetBtn');
+            if (processHruSubsetBtn) processHruSubsetBtn.addEventListener('click', () => {
+                submitHruSubset();
+            });
+
+            function validateHruIds(value) {
+                const text = String(value || '').trim();
+                if (!text) {
+                    return 'Enter at least one HRU ID.';
+                }
+                const parts = text.split(',');
+                for (const rawPart of parts) {
+                    const part = rawPart.trim();
+                    if (!part) {
+                        return 'Remove empty comma-separated entries.';
+                    }
+                    if (part.includes('-')) {
+                        const pieces = part.split('-').map(piece => piece.trim());
+                        if (pieces.length !== 2 || !pieces[0] || !pieces[1]) {
+                            return 'Invalid range: ' + part;
+                        }
+                        const start = Number(pieces[0]);
+                        const end = Number(pieces[1]);
+                        if (!Number.isInteger(start) || !Number.isInteger(end) || start <= 0 || end <= 0) {
+                            return 'Ranges must contain positive integers: ' + part;
+                        }
+                        if (start > end) {
+                            return 'Range start must be <= end: ' + part;
+                        }
+                    } else {
+                        const id = Number(part);
+                        if (!Number.isInteger(id) || id <= 0) {
+                            return 'Invalid HRU ID: ' + part;
+                        }
+                    }
+                }
+                return '';
+            }
+
+            function setHruValidation(message) {
+                const validation = $('hruValidation');
+                if (validation) {
+                    validation.textContent = message || '';
+                }
+            }
+
+            function submitHruSubset() {
+                const input = $('hruIdsInput');
+                const keepRouting = $('hruKeepRoutingCheckbox');
+                const hruIds = input ? String(input.value || '').trim() : '';
+                const validationMessage = validateHruIds(hruIds);
+                setHruValidation(validationMessage);
+                if (validationMessage) {
+                    swatHost.postMessage({ type: 'showError', message: validationMessage });
+                    return;
+                }
+                swatHost.postMessage({
+                    type: 'processHruSubset',
+                    hruIds,
+                    keepRouting: keepRouting ? Boolean(keepRouting.checked) : false,
+                    runSwat: false
+                });
+            }
+
+            const hruIdsInput = $('hruIdsInput');
+            if (hruIdsInput) {
+                hruIdsInput.addEventListener('input', () => {
+                    setHruValidation(validateHruIds(hruIdsInput.value));
+                });
+                hruIdsInput.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter') {
+                        submitHruSubset();
+                    }
+                });
+            }
+
+            const hruPanelToggle = $('hruPanelToggle');
+            const hruProcessorContent = $('hru-processor-content');
+            if (hruPanelToggle && hruProcessorContent) {
+                const syncHruPanel = () => {
+                    if (hruPanelToggle.checked) {
+                        hruProcessorContent.classList.remove('hidden');
+                    } else {
+                        hruProcessorContent.classList.add('hidden');
+                    }
+                };
+                hruPanelToggle.addEventListener('change', syncHruPanel);
+                syncHruPanel();
+            }
 
             const loadIndexBtn = $('loadIndexBtn');
             if (loadIndexBtn) loadIndexBtn.addEventListener('click', () => {
@@ -2524,6 +2787,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     if (closest && closest('#buildIndexBtn')) {
                         try { console.log('SWAT webview: delegated buildIndex click'); } catch (e) {}
                         swatHost.postMessage({ type: 'buildIndex' });
+                        return;
+                    }
+                    if (closest && closest('#processHruSubsetBtn')) {
+                        try { console.log('SWAT webview: delegated processHruSubset click'); } catch (e) {}
+                        submitHruSubset();
                         return;
                     }
                     if (closest && closest('#loadIndexBtn')) {
