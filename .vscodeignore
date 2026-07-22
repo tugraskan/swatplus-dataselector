@@ -14,3 +14,26 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
+
+# Packaged artifacts should never ship inside the package
+*.vsix
+
+# Internal development notes and plans (not user-facing)
+PLAN.md
+BUTTON_CLICK_FIX.md
+*_SUMMARY.md
+*_IMPLEMENTATION.md
+HIERARCHICAL_FILES_IMPLEMENTATION.md
+SCHEMA_IMPLEMENTATION.md
+
+# Generated merge/coverage reports (dev artifacts, not needed at runtime)
+resources/schema/*-report.md
+
+# Test-only python and CI config
+scripts/test_*.py
+.github/**
+
+# Python cache and backup/scratch artifacts
+**/__pycache__/**
+**/*.pyc
+**/*.backup
