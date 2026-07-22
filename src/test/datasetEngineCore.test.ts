@@ -9,6 +9,8 @@ import {
     describeEntity,
     findReferences,
     lookupDocs,
+    scanIncomingReferences,
+    mergeIncomingReferences,
 } from '../datasetEngineCore';
 import { EnrichedSchemaIndex, OutputSchemaIndex } from '../enrichedSchemaCore';
 
@@ -76,6 +78,9 @@ class MockModel implements DatasetModel {
     }
     getTableForFile(file: string): string | undefined {
         return this.tables.get(file.toLowerCase());
+    }
+    getTableNames(): string[] {
+        return [...this.rows.keys()];
     }
     resolveEntityTable(kind: string): string | undefined {
         return this.entities.get(kind.toLowerCase());
@@ -172,6 +177,42 @@ suite('Dataset engine core', () => {
         assert.ok(lookupDocs({}, 'x.y').includes('No documentation'));
     });
 
+    test('scanIncomingReferences finds name-pointer refs with source pk', () => {
+        // Two HRUs share a soil referenced by name; the scan finds both and
+        // carries each source row's pk.
+        const model = buildModel();
+        model.addRow({
+            table: 'hru_data_hru', file: 'hru-data.hru', line: 83, pk: '82',
+            values: { id: '82', name: 'hru82', soil: 'clay_loam' },
+        });
+        const refs = scanIncomingReferences(model, 'soils_sol', 'clay_loam');
+        assert.strictEqual(refs.length, 2);
+        assert.deepStrictEqual(refs.map(r => r.fromPk).sort(), ['81', '82']);
+        assert.ok(refs.every(r => r.fromColumn === 'soil'));
+    });
+
+    test('scanIncomingReferences is case-insensitive and ignores empty values', () => {
+        const model = buildModel();
+        const refs = scanIncomingReferences(model, 'soils_sol', 'CLAY_LOAM');
+        assert.strictEqual(refs.length, 1);
+        // topo has no FK to soils_sol, and lu_mgt=null must not match
+        assert.strictEqual(scanIncomingReferences(model, 'soils_sol', 'null').length, 0);
+    });
+
+    test('mergeIncomingReferences dedupes and prefers entries with a pk', () => {
+        const fromIndex: IncomingReference[] = [{
+            fromTable: 'hru_data_hru', fromColumn: 'soil', fromPk: '',
+            fromFile: 'hru-data.hru', fromLine: 82,
+        }];
+        const fromScan: IncomingReference[] = [{
+            fromTable: 'hru_data_hru', fromColumn: 'soil', fromPk: '81',
+            fromFile: 'hru-data.hru', fromLine: 82,
+        }];
+        const merged = mergeIncomingReferences(fromIndex, fromScan);
+        assert.strictEqual(merged.length, 1);
+        assert.strictEqual(merged[0].fromPk, '81');
+    });
+
     test('findReferences omits row id when the source pk is unknown', () => {
         // Mirrors the SwatIndexer adapter, which cannot supply the source row pk.
         const model: DatasetModel = {
@@ -180,6 +221,7 @@ suite('Dataset engine core', () => {
             getForeignKeys: () => [],
             getFileName: (t) => ({ soils_sol: 'soils.sol', hru_data_hru: 'hru-data.hru' }[t] ?? t),
             getTableForFile: () => undefined,
+            getTableNames: () => [],
             resolveEntityTable: () => undefined,
             getIncomingReferences: () => [{
                 fromTable: 'hru_data_hru', fromColumn: 'soil', fromPk: '',

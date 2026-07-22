@@ -19,6 +19,8 @@ import {
     describeEntity,
     findReferences,
     lookupDocs,
+    scanIncomingReferences,
+    mergeIncomingReferences,
 } from './datasetEngineCore';
 
 /** Common user-facing entity kinds → the file that holds their per-object rows. */
@@ -82,13 +84,23 @@ export class SwatIndexerDatasetModel implements DatasetModel {
     }
 
     getIncomingReferences(table: string, pk: string): IncomingReference[] {
-        return this.indexer.getIncomingFKReferences(table, pk).map(ref => ({
+        // The index's reverse list covers id-resolved and hierarchical
+        // references (e.g. management-schedule operations). Merge in a
+        // value-based scan to also catch name-pointer FKs the index misses
+        // (e.g. which HRUs use a given soil); the scan also supplies the source
+        // row pk, which the index's FKReference does not carry.
+        const indexed = this.indexer.getIncomingFKReferences(table, pk).map(ref => ({
             fromTable: ref.sourceTable,
             fromColumn: ref.sourceColumn,
-            fromPk: '',            // FKReference does not carry the source row pk
+            fromPk: '',
             fromFile: ref.sourceFile,
             fromLine: ref.sourceLine,
         }));
+        return mergeIncomingReferences(indexed, scanIncomingReferences(this, table, pk));
+    }
+
+    getTableNames(): string[] {
+        return [...this.indexer.getIndexData().keys()];
     }
 
     getFileName(table: string): string | undefined {

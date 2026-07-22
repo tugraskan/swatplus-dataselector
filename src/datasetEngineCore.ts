@@ -49,8 +49,64 @@ export interface DatasetModel {
     getIncomingReferences(table: string, pk: string): IncomingReference[];
     getFileName(table: string): string | undefined;
     getTableForFile(file: string): string | undefined;
+    /** All indexed table names, used to scan for value-based references. */
+    getTableNames(): string[];
     /** Resolve a user-facing entity kind (e.g. "hru") to a table name. */
     resolveEntityTable(kind: string): string | undefined;
+}
+
+/**
+ * Scan every table's foreign-key columns for rows whose value matches a target
+ * entity, returning the references with the source row's pk populated.
+ *
+ * SWAT+ text files reference many objects by *name* even though the schema's FK
+ * points at an `id` column, so an index that resolves strictly by id misses them.
+ * This value-based scan recovers those name-pointer references (e.g. which HRUs
+ * use a given soil). It complements — and is meant to be merged with — any
+ * reference list the underlying index already provides.
+ */
+export function scanIncomingReferences(
+    model: DatasetModel,
+    table: string,
+    pk: string,
+): IncomingReference[] {
+    const key = pk.toLowerCase();
+    const refs: IncomingReference[] = [];
+    for (const srcTable of model.getTableNames()) {
+        const edges = model.getForeignKeys(srcTable).filter(e => e.targetTable === table);
+        if (edges.length === 0) {
+            continue;
+        }
+        for (const row of model.getRows(srcTable)) {
+            for (const edge of edges) {
+                const value = (row.values[edge.column] ?? '').trim().toLowerCase();
+                if (value && value === key) {
+                    refs.push({
+                        fromTable: srcTable, fromColumn: edge.column, fromPk: row.pk,
+                        fromFile: row.file, fromLine: row.line,
+                    });
+                }
+            }
+        }
+    }
+    return refs;
+}
+
+/** Merge two reference lists, de-duplicating by source file:line:column and
+ * preferring the entry that carries a source row pk. */
+export function mergeIncomingReferences(
+    a: IncomingReference[],
+    b: IncomingReference[],
+): IncomingReference[] {
+    const byKey = new Map<string, IncomingReference>();
+    for (const ref of [...a, ...b]) {
+        const key = `${ref.fromFile}:${ref.fromLine}:${ref.fromColumn}`;
+        const existing = byKey.get(key);
+        if (!existing || (!existing.fromPk && ref.fromPk)) {
+            byKey.set(key, ref);
+        }
+    }
+    return [...byKey.values()];
 }
 
 /** Documentation sources the engine draws on when rendering. */
