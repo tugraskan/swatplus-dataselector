@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { SwatIndexer } from './indexer';
 import { shouldSuppressUnresolvedFkDiagnostic } from './fkDiagnosticsUtils';
+import { getSharedEnrichedSchema } from './enrichedSchema';
 
 export class SwatFKDiagnosticsProvider {
     private diagnosticCollection: vscode.DiagnosticCollection;
@@ -71,7 +72,14 @@ export class SwatFKDiagnosticsProvider {
                 message = `Unresolved foreign key: ${ref.sourceColumn} = "${ref.fkValue}" ` +
                     `(value not found in ${targetFileName}${purposeText})`;
             }
-            
+
+            // Add the source column's documented meaning for context, when known.
+            const sourceFileName = path.basename(ref.sourceFile);
+            const columnDoc = getSharedEnrichedSchema()?.getColumnDoc(sourceFileName, ref.sourceColumn);
+            if (columnDoc?.description) {
+                message += `\n${ref.sourceColumn}: ${columnDoc.description}`;
+            }
+
             const diagnostic = new vscode.Diagnostic(
                 new vscode.Range(line, 0, line, 1000),
                 message,
