@@ -32,6 +32,9 @@
     "onCommand:swat-dataset-selector.openOutputAsDataFrame"
   ],
   "main": "./dist/extension.js",
+  "bin": {
+    "swatplus-mcp": "./dist/mcp-server.js"
+  },
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -219,6 +222,7 @@
     "typescript-eslint": "^8.46.3"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "sharp": "^0.34.5"
   }
 }

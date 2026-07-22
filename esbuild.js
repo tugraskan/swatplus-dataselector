@@ -23,30 +23,37 @@ const esbuildProblemMatcherPlugin = {
 	},
 };
 
+const shared = {
+	bundle: true,
+	format: 'cjs',
+	minify: production,
+	sourcemap: !production,
+	sourcesContent: false,
+	platform: 'node',
+	logLevel: 'silent',
+	plugins: [esbuildProblemMatcherPlugin],
+};
+
 async function main() {
-	const ctx = await esbuild.context({
-		entryPoints: [
-			'src/extension.ts'
-		],
-		bundle: true,
-		format: 'cjs',
-		minify: production,
-		sourcemap: !production,
-		sourcesContent: false,
-		platform: 'node',
+	const extensionCtx = await esbuild.context({
+		...shared,
+		entryPoints: ['src/extension.ts'],
 		outfile: 'dist/extension.js',
 		external: ['vscode'],
-		logLevel: 'silent',
-		plugins: [
-			/* add to the end of plugins array */
-			esbuildProblemMatcherPlugin,
-		],
+	});
+	// Standalone MCP server bundle (no vscode dependency). Run with:
+	//   node dist/mcp-server.js --index <index.json>
+	const mcpCtx = await esbuild.context({
+		...shared,
+		entryPoints: ['src/mcp/server.ts'],
+		outfile: 'dist/mcp-server.js',
+		banner: { js: '#!/usr/bin/env node' },
 	});
 	if (watch) {
-		await ctx.watch();
+		await Promise.all([extensionCtx.watch(), mcpCtx.watch()]);
 	} else {
-		await ctx.rebuild();
-		await ctx.dispose();
+		await Promise.all([extensionCtx.rebuild(), mcpCtx.rebuild()]);
+		await Promise.all([extensionCtx.dispose(), mcpCtx.dispose()]);
 	}
 }
 

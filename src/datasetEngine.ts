@@ -21,18 +21,8 @@ import {
     lookupDocs,
     scanIncomingReferences,
     mergeIncomingReferences,
+    ENTITY_FILE_ALIASES,
 } from './datasetEngineCore';
-
-/** Common user-facing entity kinds → the file that holds their per-object rows. */
-const ENTITY_FILE_ALIASES: { [kind: string]: string } = {
-    hru: 'hru-data.hru',
-    aquifer: 'aquifer.aqu',
-    channel: 'channel.cha',
-    reservoir: 'reservoir.res',
-    wetland: 'wetland.wet',
-    plant: 'plants.plt',
-    soil: 'soils.sol',
-};
 
 export class SwatIndexerDatasetModel implements DatasetModel {
     constructor(private indexer: SwatIndexer) {}

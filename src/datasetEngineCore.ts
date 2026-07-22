@@ -55,6 +55,17 @@ export interface DatasetModel {
     resolveEntityTable(kind: string): string | undefined;
 }
 
+/** Common user-facing entity kinds → the file that holds their per-object rows. */
+export const ENTITY_FILE_ALIASES: { [kind: string]: string } = {
+    hru: 'hru-data.hru',
+    aquifer: 'aquifer.aqu',
+    channel: 'channel.cha',
+    reservoir: 'reservoir.res',
+    wetland: 'wetland.wet',
+    plant: 'plants.plt',
+    soil: 'soils.sol',
+};
+
 /**
  * Scan every table's foreign-key columns for rows whose value matches a target
  * entity, returning the references with the source row's pk populated.
