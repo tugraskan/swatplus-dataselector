@@ -34,9 +34,17 @@ phases — each phase is shippable on its own.
   `resources/schema/swatplus-output-schema.json` (72 families, 286 output files);
   `OutputSchemaIndex` in the core; output explorer shows per-column tooltips and a
   file summary. Python tests in `scripts/test_merge_output_families.py`.
-- **Phase 3 — IN PROGRESS.** Headless dataset engine + agent tools. See the
-  Phase 3 section for the current design; the vscode-free
-  `enrichedSchemaCore` / `OutputSchemaIndex` are the seam it extends.
+- **Phase 3 — DONE.** Headless dataset engine + agent tools.
+  `src/datasetEngineCore.ts` (vscode-free) implements `describeEntity`,
+  `findReferences` (with a value-based scan that recovers name-pointer FKs the
+  index resolves by id), and `lookupDocs`. `src/datasetEngine.ts` binds it to the
+  live `SwatIndexer` behind the **SWAT+: Describe Entity** command;
+  `src/indexFileModel.ts` loads a pandas index for headless use. `src/mcp/server.ts`
+  exposes the engine as an MCP server (`dist/mcp-server.js`, `swatplus-mcp` bin)
+  with tools `describe_entity` / `find_references` / `lookup_docs` /
+  `list_entities` — see `docs/MCP_SERVER.md`. Validated end-to-end over the MCP
+  protocol against the real SWAT+ `Ames_sub1` dataset. Tests in
+  `src/test/datasetEngineCore.test.ts` and `src/test/indexFileModel.test.ts`.
 
 ---
 
