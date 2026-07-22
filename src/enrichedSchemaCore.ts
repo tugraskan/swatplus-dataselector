@@ -131,3 +131,34 @@ export function renderColumnDocLines(doc: ColumnDoc | undefined): string[] {
     }
     return lines;
 }
+
+/**
+ * Build a plain-text (newline-separated) documentation snippet for a column,
+ * suitable for an HTML `title=` tooltip attribute. Returns '' when no doc.
+ */
+export function columnDocTooltip(doc: ColumnDoc | undefined): string {
+    if (!doc) {
+        return '';
+    }
+    const parts: string[] = [];
+    if (doc.description) {
+        parts.push(doc.description);
+    }
+    const facts: string[] = [];
+    if (doc.units) {
+        facts.push(`Units: ${doc.units}`);
+    }
+    if (doc.fortran_type) {
+        facts.push(`Type: ${doc.fortran_type}`);
+    }
+    if (doc.default) {
+        facts.push(`Default: ${doc.default}`);
+    }
+    if (facts.length > 0) {
+        parts.push(facts.join('  '));
+    }
+    if (doc.source_ref) {
+        parts.push(`Source: ${doc.source_ref}`);
+    }
+    return parts.join('\n');
+}

@@ -8,6 +8,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { SwatIndexer } from './indexer';
+import { getSharedEnrichedSchema } from './enrichedSchema';
 import { SwatSingleTableViewerPanel } from './singleTableViewerPanel';
 
 export class SwatTableViewerPanel {
@@ -451,7 +452,21 @@ export class SwatTableViewerPanel {
                     ? pointerConfig
                     : pointerConfig.target_file || pointerConfig.description || '')
                 : '';
-            const notes = col.nullable ? 'nullable' : '';
+            const columnDoc = fileName
+                ? getSharedEnrichedSchema()?.getColumnDoc(fileName, col.name)
+                : undefined;
+            const noteParts: string[] = [];
+            if (col.nullable) {
+                noteParts.push('nullable');
+            }
+            if (columnDoc?.description) {
+                noteParts.push(columnDoc.description);
+            }
+            if (columnDoc?.units) {
+                noteParts.push(`(units: ${columnDoc.units})`);
+            }
+            const notes = noteParts.join(' — ');
+            const notesTitle = columnDoc?.source_ref ? ` title="Source: ${this._escapeHtml(columnDoc.source_ref)}"` : '';
             return `
                 <tr>
                     <td>${this._escapeHtml(col.name)}</td>
@@ -459,7 +474,7 @@ export class SwatTableViewerPanel {
                     <td>${col.is_primary_key ? 'Key' : (fkInfo ? `FK → ${this._escapeHtml(fkInfo.references.table)}.${this._escapeHtml(fkInfo.references.column)}` : '')}</td>
                     <td>${fkInfo ? this._escapeHtml(fkInfo.references.table) : ''}</td>
                     <td>${pointerText ? this._escapeHtml(pointerText) : ''}</td>
-                    <td>${this._escapeHtml(notes)}</td>
+                    <td${notesTitle}>${this._escapeHtml(notes)}</td>
                 </tr>
             `;
         }).join('');

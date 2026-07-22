@@ -11,7 +11,7 @@ import { SwatFilePointerDiagnosticsProvider } from './filePointerDiagnostics';
 import { SwatFileFormatDiagnosticsProvider } from './fileFormatDiagnostics';
 import { SwatFKDecorationProvider } from './fkDecorations';
 import { SwatFKHoverProvider } from './fkHoverProvider';
-import { EnrichedSchemaProvider } from './enrichedSchema';
+import { EnrichedSchemaProvider, setSharedEnrichedSchema } from './enrichedSchema';
 import { SwatFKReferencesPanel } from './fkReferencesPanel';
 import { SwatTableViewerPanel } from './tableViewerPanel';
 import { SwatSingleTableViewerPanel } from './singleTableViewerPanel';
@@ -35,6 +35,7 @@ export function activate(context: vscode.ExtensionContext) {
 	// Initialize indexer and FK features
 	const indexer = new SwatIndexer(context);
 	const enrichedSchema = new EnrichedSchemaProvider(context);
+	setSharedEnrichedSchema(enrichedSchema);
 	const hruProcessorOutput = vscode.window.createOutputChannel('SWAT+ HRU Processor');
 	// Create and register the webview view provider
 	const swatProvider = new SwatDatasetWebviewProvider(context, indexer);

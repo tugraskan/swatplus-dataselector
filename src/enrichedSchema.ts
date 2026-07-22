@@ -21,7 +21,7 @@ import {
     renderColumnDocLines,
 } from './enrichedSchemaCore';
 
-export { ColumnDoc, FileDoc } from './enrichedSchemaCore';
+export { ColumnDoc, FileDoc, columnDocTooltip } from './enrichedSchemaCore';
 
 const ENRICHED_FILENAME = 'swatplus-schema-enriched.json';
 
@@ -89,4 +89,17 @@ export function appendColumnDoc(md: vscode.MarkdownString, doc: ColumnDoc | unde
     for (const line of renderColumnDocLines(doc)) {
         md.appendMarkdown(`${line}\n\n`);
     }
+}
+
+// Shared instance so webview panels (constructed from many call sites) can read
+// enrichment without threading the provider through every signature. Set once at
+// activation. The provider is read-only after load, so sharing is safe.
+let sharedProvider: EnrichedSchemaProvider | undefined;
+
+export function setSharedEnrichedSchema(provider: EnrichedSchemaProvider): void {
+    sharedProvider = provider;
+}
+
+export function getSharedEnrichedSchema(): EnrichedSchemaProvider | undefined {
+    return sharedProvider;
 }

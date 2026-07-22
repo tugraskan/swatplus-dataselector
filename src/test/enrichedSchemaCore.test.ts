@@ -4,6 +4,7 @@ import * as path from 'path';
 import {
     EnrichedSchemaIndex,
     renderColumnDocLines,
+    columnDocTooltip,
 } from '../enrichedSchemaCore';
 
 suite('Enriched schema core', () => {
@@ -75,6 +76,22 @@ suite('Enriched schema core', () => {
     test('renderColumnDocLines is empty for undefined or contentless docs', () => {
         assert.deepStrictEqual(renderColumnDocLines(undefined), []);
         assert.deepStrictEqual(renderColumnDocLines({ match: 'exact' }), []);
+    });
+
+    test('columnDocTooltip builds plain-text with newlines, no markdown', () => {
+        const tip = columnDocTooltip({
+            description: 'flow from aquifer',
+            units: 'mm',
+            fortran_type: 'real',
+            source_ref: 'aquifer_module.f90:8',
+        });
+        const lines = tip.split('\n').filter(l => l.length > 0);
+        assert.strictEqual(lines[0], 'flow from aquifer');
+        assert.ok(tip.includes('Units: mm'));
+        assert.ok(tip.includes('Type: real'));
+        assert.ok(tip.includes('Source: aquifer_module.f90:8'));
+        assert.ok(!tip.includes('**'), 'tooltip must be plain text');
+        assert.strictEqual(columnDocTooltip(undefined), '');
     });
 
     test('the shipped enriched schema loads and enriches known files', () => {

@@ -9,6 +9,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
+import { getSharedEnrichedSchema, columnDocTooltip } from './enrichedSchema';
 
 export class SwatSingleTableViewerPanel {
     private static panels: Map<string, SwatSingleTableViewerPanel> = new Map();
@@ -694,6 +695,14 @@ export class SwatSingleTableViewerPanel {
                                 }
                                 if (fkInfo) {
                                     tooltip += `\nForeign Key → ${fkInfo.references.table}`;
+                                }
+                                // Source-backed column documentation (meaning, units, source line).
+                                if (fileName) {
+                                    const docText = columnDocTooltip(
+                                        getSharedEnrichedSchema()?.getColumnDoc(fileName, col));
+                                    if (docText) {
+                                        tooltip += `\n\n${docText}`;
+                                    }
                                 }
                                 if (isFilePointer && typeof filePointers === 'object') {
                                     const pointerConfig = filePointers[col];
