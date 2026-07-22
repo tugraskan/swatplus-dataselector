@@ -4,7 +4,39 @@ This document is a standalone work order. It assumes no prior conversation conte
 It describes how to merge source-backed documentation from `swatplus-doc-builder`
 into this extension's schema, wire the enriched schema into existing features, and
 prepare the ground for a future LLM/agent layer. Work is split into independent
-phases — each phase is shippable on its own. **Phase 1 is the priority.**
+phases — each phase is shippable on its own.
+
+---
+
+## Implementation status
+
+- **Phase 1 — DONE.** `scripts/merge_overlays.py` →
+  `resources/schema/swatplus-schema-enriched.json` (+ `merge-report.md`).
+  107 tables enriched directly, 19 by parent inheritance, 84 overlay-only.
+  Python tests in `scripts/test_merge_overlays.py`.
+  **Deviation from the original design below:** the plan called for a
+  position-based column fallback (exact name → normalized → position with an
+  id-offset). That proved unsound — the editor schema's column order does **not**
+  match the file's physical read order, so position matching produced silently
+  wrong docs past the point the two orders diverge. It was replaced by
+  **name-identity matching only**: file header, then the Fortran field name in the
+  overlay `target` (e.g. `bsn_cc%gampt` → `gampt`). Every emitted doc is correct by
+  construction; a column that matches neither name is left unenriched rather than
+  mislabeled. The Phase 1 section below still describes the original position
+  approach — treat this note as the correction of record.
+- **Phase 2 — DONE.** Read-only enriched-schema layer
+  (`src/enrichedSchemaCore.ts` vscode-free + `src/enrichedSchema.ts` wrapper,
+  shared singleton) wired into: FK/regular hovers, single-table viewer header
+  tooltips, multi-table viewer Notes, unresolved-FK and missing-file-pointer
+  diagnostics, and a status-bar version indicator. Tests in
+  `src/test/enrichedSchemaCore.test.ts`.
+- **Phase 2b — DONE.** `scripts/merge_output_families.py` →
+  `resources/schema/swatplus-output-schema.json` (72 families, 286 output files);
+  `OutputSchemaIndex` in the core; output explorer shows per-column tooltips and a
+  file summary. Python tests in `scripts/test_merge_output_families.py`.
+- **Phase 3 — IN PROGRESS.** Headless dataset engine + agent tools. See the
+  Phase 3 section for the current design; the vscode-free
+  `enrichedSchemaCore` / `OutputSchemaIndex` are the seam it extends.
 
 ---
 
