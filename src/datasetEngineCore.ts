@@ -175,7 +175,8 @@ export function findReferences(
     const lines = [`# References to ${fileName} — ${displayPk} (${incoming.length})`, ''];
     for (const ref of incoming) {
         const fromFile = model.getFileName(ref.fromTable) ?? ref.fromTable;
-        lines.push(`- \`${fromFile}\`:${ref.fromLine} — ${ref.fromColumn} of row \`${ref.fromPk}\``);
+        const rowPart = ref.fromPk ? ` of row \`${ref.fromPk}\`` : '';
+        lines.push(`- \`${fromFile}\`:${ref.fromLine} — ${ref.fromColumn}${rowPart}`);
     }
     return lines.join('\n');
 }

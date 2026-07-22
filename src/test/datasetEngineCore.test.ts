@@ -171,4 +171,23 @@ suite('Dataset engine core', () => {
         assert.ok(lookupDocs({}, 'x.y', 'z').includes('No documentation'));
         assert.ok(lookupDocs({}, 'x.y').includes('No documentation'));
     });
+
+    test('findReferences omits row id when the source pk is unknown', () => {
+        // Mirrors the SwatIndexer adapter, which cannot supply the source row pk.
+        const model: DatasetModel = {
+            getRow: () => undefined,
+            getRows: () => [],
+            getForeignKeys: () => [],
+            getFileName: (t) => ({ soils_sol: 'soils.sol', hru_data_hru: 'hru-data.hru' }[t] ?? t),
+            getTableForFile: () => undefined,
+            resolveEntityTable: () => undefined,
+            getIncomingReferences: () => [{
+                fromTable: 'hru_data_hru', fromColumn: 'soil', fromPk: '',
+                fromFile: 'hru-data.hru', fromLine: 82,
+            }],
+        };
+        const out = findReferences(model, 'soils_sol', 'clay_loam');
+        assert.ok(out.includes('`hru-data.hru`:82 — soil'));
+        assert.ok(!out.includes('of row'));
+    });
 });

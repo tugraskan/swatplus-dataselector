@@ -152,6 +152,11 @@
         "command": "swat-dataset-selector.openOutputAsDataFrame",
         "title": "SWAT+: Explore Output File",
         "icon": "$(table)"
+      },
+      {
+        "command": "swat-dataset-selector.describeEntity",
+        "title": "SWAT+: Describe Entity",
+        "icon": "$(info)"
       }
     ],
     "menus": {

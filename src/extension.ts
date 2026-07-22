@@ -12,6 +12,7 @@ import { SwatFileFormatDiagnosticsProvider } from './fileFormatDiagnostics';
 import { SwatFKDecorationProvider } from './fkDecorations';
 import { SwatFKHoverProvider } from './fkHoverProvider';
 import { EnrichedSchemaProvider, setSharedEnrichedSchema } from './enrichedSchema';
+import { SwatDatasetEngine } from './datasetEngine';
 import { SwatFKReferencesPanel } from './fkReferencesPanel';
 import { SwatTableViewerPanel } from './tableViewerPanel';
 import { SwatSingleTableViewerPanel } from './singleTableViewerPanel';
@@ -36,6 +37,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const indexer = new SwatIndexer(context);
 	const enrichedSchema = new EnrichedSchemaProvider(context);
 	setSharedEnrichedSchema(enrichedSchema);
+	const datasetEngine = new SwatDatasetEngine(indexer, enrichedSchema);
 	const hruProcessorOutput = vscode.window.createOutputChannel('SWAT+ HRU Processor');
 	// Create and register the webview view provider
 	const swatProvider = new SwatDatasetWebviewProvider(context, indexer);
@@ -905,6 +907,40 @@ export function activate(context: vscode.ExtensionContext) {
 		SchemaEditorPanel.createOrShow(context, schemaPath);
 	});
 
+	// Command: Describe an entity ("hru 81") using the headless dataset engine.
+	const describeEntityCmd = vscode.commands.registerCommand('swat-dataset-selector.describeEntity', async () => {
+		if (!indexer.isIndexBuilt()) {
+			vscode.window.showWarningMessage('Build the inputs index first (SWAT+: Build Inputs Index).');
+			return;
+		}
+		const input = await vscode.window.showInputBox({
+			title: 'SWAT+: Describe Entity',
+			prompt: 'Entity to describe — e.g. "hru 81", "aquifer 3", or "soils.sol clay_loam"',
+			placeHolder: 'hru 81',
+			ignoreFocusOut: true,
+		});
+		if (!input) {
+			return;
+		}
+		// Split into a kind/file token and an id (the last whitespace-separated token).
+		const parts = input.trim().split(/\s+/);
+		if (parts.length < 2) {
+			vscode.window.showWarningMessage('Provide both an entity kind and an id, e.g. "hru 81".');
+			return;
+		}
+		const id = parts[parts.length - 1];
+		const kind = parts.slice(0, -1).join(' ');
+		const table = datasetEngine.resolveEntityTable(kind);
+		if (!table) {
+			vscode.window.showWarningMessage(`Could not resolve "${kind}" to a SWAT+ table or file.`);
+			return;
+		}
+		const markdown = datasetEngine.describeEntity(table, id);
+		const doc = await vscode.workspace.openTextDocument({ content: markdown, language: 'markdown' });
+		await vscode.window.showTextDocument(doc, { preview: true });
+		await vscode.commands.executeCommand('markdown.showPreview', doc.uri);
+	});
+
 	// Command: Reveal the configured dataset folder in the VS Code Explorer
 	const revealWorkdataFolder = vscode.commands.registerCommand('swat-dataset-selector.revealWorkdataFolder', async () => {
 		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -1067,6 +1103,7 @@ export function activate(context: vscode.ExtensionContext) {
 		useAsDataset,
 		switchDataset,
 		editSchema,
+		describeEntityCmd,
 		statusBarItem,
 		hruProcessorOutput
 	);

@@ -101,6 +101,16 @@ export class EnrichedSchemaProvider {
     public getOutputColumnDoc(fileName: string, column: string): OutputColumnDoc | undefined {
         return this.outputIndex.getColumnDoc(fileName, column);
     }
+
+    /** The underlying vscode-free input-schema index (for the dataset engine). */
+    public get inputIndex(): EnrichedSchemaIndex {
+        return this.index;
+    }
+
+    /** The underlying vscode-free output-schema index (for the dataset engine). */
+    public get outputIndexRef(): OutputSchemaIndex {
+        return this.outputIndex;
+    }
 }
 
 /**

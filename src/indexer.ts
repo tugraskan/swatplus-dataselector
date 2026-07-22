@@ -1093,6 +1093,15 @@ export class SwatIndexer {
     }
 
     /**
+     * Get FK references that point at a given (target table, pk value).
+     * Case-insensitive on the pk value, mirroring the reverse index.
+     */
+    public getIncomingFKReferences(targetTable: string, pkValue: string): FKReference[] {
+        const reverseKey = `${targetTable}:${pkValue.toLowerCase()}`;
+        return this.reverseIndex.get(reverseKey) ?? [];
+    }
+
+    /**
      * Look up a FK target location
      */
     public resolveFKTarget(tableName: string, pkValue: string): IndexedRow | undefined {
