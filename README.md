@@ -1,6 +1,31 @@
 # SWAT+ Dataset Selector
 
-A VS Code extension for SWAT+ development that lets you select dataset folders, browse inputs and outputs, and launch debug sessions against the active dataset.
+A VS Code extension for **SWAT+** (Soil & Water Assessment Tool) development. It lets you
+select dataset folders, cross-index the model's many interlinked input files, navigate
+foreign keys with IDE-grade Go to Definition / hover / diagnostics, launch debug and run
+sessions against the active dataset, and explore inputs and outputs as tables, graphs, and
+notebooks.
+
+> Looking for a compact technical overview? See **[SPEC.md](SPEC.md)** for the full
+> specification sheet (platform, architecture, modules, commands, and tooling).
+
+## What This Repo Contains
+
+This repository is the VS Code extension itself plus the tooling that generates its SWAT+
+schema. It is a two-layer project:
+
+- **TypeScript extension (`src/`)** — the VS Code extension host, webview panels (dataset
+  selector sidebar, table viewers, dependency graph, output DataFrame explorer), and the
+  language features (foreign-key definition/hover/diagnostics providers) that power
+  navigation across SWAT+ input files.
+- **Python scripts (`scripts/`)** — schema extraction from the
+  [`swatplus-editor`](https://github.com/swat-model/swatplus-editor) project, pandas-based
+  indexing, HRU-subset processing, and output→DataFrame conversion. These are invoked by
+  the extension and can also be run standalone.
+- **Generated schema (`resources/schema/`)** — the machine-readable schema for all 213
+  SWAT+ input tables that the extension indexes and validates against.
+- **Documentation (`docs/`)** — deep-dive guides on indexing, schema, and file/FK
+  relationships.
 
 ## Features
 
@@ -9,6 +34,8 @@ A VS Code extension for SWAT+ development that lets you select dataset folders, 
 - **Dataset Folder Listing**: Show datasets from a configured parent folder such as `workdata/`.
 - **Quick Debug Launch**: Start debugging with the selected dataset as the working directory.
 - **HRU Subsets**: Create a reduced TxtInOut folder for selected HRU IDs, with optional downstream routing preservation.
+- **Output Exploration**: Open `.csv` / `.out` / `.txt` output files as DataFrames and generate Jupyter notebooks from them.
+- **Data Quality**: Run a preflight report of unresolved references and orphan rows, plus an input-file format checker (headers, column counts, data types).
 - **Seamless Integration**: Works with CMake Tools and gdb debugger configurations.
 - **Comprehensive Schema**: Auto-generated schema for all 213 SWAT+ input tables from swatplus-editor.
 - **Enhanced Indexing**: Pandas-backed indexing system with FK navigation, hover info, and validation.
@@ -42,18 +69,43 @@ After pulling updates, reload VS Code so the latest extension bundle is active.
 
 ## Commands
 
+**Dataset**
+
 - `SWAT+: Select Dataset Folder` - Browse and select a dataset folder.
 - `SWAT+: Select Dataset and Debug` - Browse for a dataset folder and launch debug immediately.
 - `SWAT+: Debug with Selected Dataset` - Launch debug with the current dataset.
 - `SWAT+: Switch Dataset` - Open a quick pick with recent datasets and dataset-folder entries.
 - `SWAT+: Reveal Dataset Folder in Explorer` - Open the configured dataset folder in Explorer.
+- `Use as SWAT+ Dataset` - Set the selected Explorer folder as the active dataset.
+
+**Index**
+
 - `SWAT+: Build Inputs Index` - Build an index of all SWAT+ input files in the selected dataset.
-- `SWAT+: Load Cached Index` - Load a cached index from the dataset folder.
 - `SWAT+: Rebuild Inputs Index` - Rebuild the current dataset index.
+- `SWAT+: Load Cached Index` - Load a cached index from the dataset folder.
+- `SWAT+: Export Index to JSON` - Export the current index to a JSON file.
+
+**Navigation & views**
+
+- `SWAT+: Show FK References` - List incoming references to the current row.
+- `SWAT+: View Tables` - Open the multi-table viewer.
+- `SWAT+: Edit / Create Schema` - Open the schema editor.
+- `SWAT+: Show Dependency Graph` - Open a graph of table-to-table dependencies.
+
+**Data quality**
+
+- `SWAT+: Run Data Quality Preflight` - Generate a markdown report with unresolved references and potential orphan rows.
+- `SWAT+: Check Input Files` - Validate input file headers, column counts, and data types.
+
+**HRU subsets**
+
 - `SWAT+: Create HRU Subset` - Create a reduced TxtInOut folder for selected HRU IDs.
 - `SWAT+: Create HRU Subset and Run` - Create a reduced HRU subset and run SWAT+ with the selected executable.
-- `SWAT+: Show Dependency Graph` - Open a graph of table-to-table dependencies.
-- `SWAT+: Run Data Quality Preflight` - Generate a markdown report with unresolved references and potential orphan rows.
+
+**Outputs**
+
+- `SWAT+: Generate Output Notebooks` - Generate Jupyter notebooks for output files.
+- `SWAT+: Explore Output File` - Open an output file (`.csv` / `.out` / `.txt`) as a DataFrame.
 
 ## Usage
 
@@ -84,6 +136,24 @@ After pulling updates, reload VS Code so the latest extension bundle is active.
 2. In the **Dataset Folder** section, click the folder button.
 3. Choose the parent directory that contains your dataset folders.
 4. Select a dataset from that list.
+
+## Repository Layout
+
+```
+src/                 TypeScript extension source (~30 files)
+  extension.ts         Entry point: activation and command registration
+  indexer.ts           Cross-file input index, FK resolution, reverse index
+  swatWebviewProvider  Dataset Selector sidebar webview
+  *TableViewerPanel    Table / single-table data viewers
+  fk*Provider          Foreign-key definition, hover, and diagnostics providers
+  hruProcessor.ts      HRU subset generation
+  output*              Output DataFrame explorer and notebook generation
+  test/                Mocha test suites
+scripts/             Python tooling (schema extraction, pandas indexing, HRU, outputs)
+resources/schema/    Generated SWAT+ schema JSON (213 input tables)
+docs/                Deep-dive guides on indexing, schema, and FK relationships
+esbuild.js           Bundler config (produces dist/extension.js)
+```
 
 ## How It Works
 
@@ -126,15 +196,32 @@ python3 scripts/extract_all_models.py
 
 ## Requirements
 
+- VS Code `^1.106.1`
+- Jupyter extension (`ms-toolsai.jupyter`) — a required extension dependency
 - CMake Tools extension for `${command:cmake.launchTargetPath}`
 - C/C++ extension for gdb debugging
 - Properly configured CMake project
-- Python 3.6+ for schema extraction
+- Python 3.6+ with `pandas>=2.2.0` for schema extraction and indexing
 
 ## Extension Settings
 
 - `swatplus.datasetDirectory`: Parent directory that contains SWAT+ dataset folders. Defaults to `workdata`.
 - `swatplus.schemaDirectories`: Additional directories to scan for SWAT+ schema JSON files.
+
+## Development
+
+Built with TypeScript, bundled with esbuild, and linted with ESLint.
+
+```bash
+npm install            # install dependencies
+npm run compile        # type-check, lint, and bundle
+npm run watch          # rebuild on change
+npm run test           # run the VS Code test suite
+npm run package        # production build (used for packaging the .vsix)
+```
+
+Press `F5` in VS Code to launch an Extension Development Host with the extension loaded.
+See [vsc-extension-quickstart.md](vsc-extension-quickstart.md) for more.
 
 ## Known Issues
 
