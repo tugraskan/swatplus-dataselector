@@ -11,6 +11,8 @@ import { SwatFilePointerDiagnosticsProvider } from './filePointerDiagnostics';
 import { SwatFileFormatDiagnosticsProvider } from './fileFormatDiagnostics';
 import { SwatFKDecorationProvider } from './fkDecorations';
 import { SwatFKHoverProvider } from './fkHoverProvider';
+import { EnrichedSchemaProvider, setSharedEnrichedSchema } from './enrichedSchema';
+import { SwatDatasetEngine } from './datasetEngine';
 import { SwatFKReferencesPanel } from './fkReferencesPanel';
 import { SwatTableViewerPanel } from './tableViewerPanel';
 import { SwatSingleTableViewerPanel } from './singleTableViewerPanel';
@@ -33,6 +35,9 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Initialize indexer and FK features
 	const indexer = new SwatIndexer(context);
+	const enrichedSchema = new EnrichedSchemaProvider(context);
+	setSharedEnrichedSchema(enrichedSchema);
+	const datasetEngine = new SwatDatasetEngine(indexer, enrichedSchema);
 	const hruProcessorOutput = vscode.window.createOutputChannel('SWAT+ HRU Processor');
 	// Create and register the webview view provider
 	const swatProvider = new SwatDatasetWebviewProvider(context, indexer);
@@ -41,11 +46,27 @@ export function activate(context: vscode.ExtensionContext) {
 		swatProvider
 	);
 	const fkDefinitionProvider = new SwatFKDefinitionProvider(indexer);
-	const fkHoverProvider = new SwatFKHoverProvider(indexer);
+	const fkHoverProvider = new SwatFKHoverProvider(indexer, enrichedSchema);
 	const fkDiagnostics = new SwatFKDiagnosticsProvider(indexer, context);
 	const filePointerDiagnostics = new SwatFilePointerDiagnosticsProvider(indexer, context);
 	const fileFormatDiagnostics = new SwatFileFormatDiagnosticsProvider(indexer, context);
 	const fkDecorations = new SwatFKDecorationProvider(indexer, context);
+
+	// Status bar item showing which SWAT+ source version the enriched docs target.
+	// Shown only once an index is active, so it stays out of unrelated projects.
+	const docsVersionStatus = vscode.window.createStatusBarItem(
+		vscode.StatusBarAlignment.Right, 90);
+	context.subscriptions.push(docsVersionStatus);
+	const showDocsVersion = (): void => {
+		const version = enrichedSchema.getSwatplusVersion();
+		if (enrichedSchema.isAvailable() && version) {
+			docsVersionStatus.text = `$(book) SWAT+ docs ${version}`;
+			docsVersionStatus.tooltip =
+				`Column documentation sourced from SWAT+ ${version} (swatplus-doc-builder). ` +
+				`Hover a column to see its meaning, units, and source.`;
+			docsVersionStatus.show();
+		}
+	};
 
 	const tryAutoLoadIndex = async (datasetPath: string): Promise<void> => {
 		if (!indexer.hasIndexCache(datasetPath)) {
@@ -54,6 +75,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 		const success = await indexer.loadIndexFromCache(datasetPath, { notifyIfIncompatible: false });
 		if (success) {
+			showDocsVersion();
 			fkDiagnostics.updateDiagnostics();
 			filePointerDiagnostics.updateDiagnostics();
 			fileFormatDiagnostics.updateDiagnostics();
@@ -238,6 +260,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 		const success = await indexer.buildIndex(selectedPath);
 		if (success) {
+			showDocsVersion();
 			// Update diagnostics and decorations
 			fkDiagnostics.updateDiagnostics();
 			filePointerDiagnostics.updateDiagnostics();
@@ -798,6 +821,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 		const success = await indexer.rebuildIndex();
 		if (success) {
+			showDocsVersion();
 			// Update diagnostics and decorations
 			fkDiagnostics.updateDiagnostics();
 			filePointerDiagnostics.updateDiagnostics();
@@ -881,6 +905,40 @@ export function activate(context: vscode.ExtensionContext) {
 	// Command: Open schema editor for a given schema file path
 	const editSchema = vscode.commands.registerCommand('swat-dataset-selector.editSchema', (schemaPath?: string) => {
 		SchemaEditorPanel.createOrShow(context, schemaPath);
+	});
+
+	// Command: Describe an entity ("hru 81") using the headless dataset engine.
+	const describeEntityCmd = vscode.commands.registerCommand('swat-dataset-selector.describeEntity', async () => {
+		if (!indexer.isIndexBuilt()) {
+			vscode.window.showWarningMessage('Build the inputs index first (SWAT+: Build Inputs Index).');
+			return;
+		}
+		const input = await vscode.window.showInputBox({
+			title: 'SWAT+: Describe Entity',
+			prompt: 'Entity to describe — e.g. "hru 81", "aquifer 3", or "soils.sol clay_loam"',
+			placeHolder: 'hru 81',
+			ignoreFocusOut: true,
+		});
+		if (!input) {
+			return;
+		}
+		// Split into a kind/file token and an id (the last whitespace-separated token).
+		const parts = input.trim().split(/\s+/);
+		if (parts.length < 2) {
+			vscode.window.showWarningMessage('Provide both an entity kind and an id, e.g. "hru 81".');
+			return;
+		}
+		const id = parts[parts.length - 1];
+		const kind = parts.slice(0, -1).join(' ');
+		const table = datasetEngine.resolveEntityTable(kind);
+		if (!table) {
+			vscode.window.showWarningMessage(`Could not resolve "${kind}" to a SWAT+ table or file.`);
+			return;
+		}
+		const markdown = datasetEngine.describeEntity(table, id);
+		const doc = await vscode.workspace.openTextDocument({ content: markdown, language: 'markdown' });
+		await vscode.window.showTextDocument(doc, { preview: true });
+		await vscode.commands.executeCommand('markdown.showPreview', doc.uri);
 	});
 
 	// Command: Reveal the configured dataset folder in the VS Code Explorer
@@ -1045,6 +1103,7 @@ export function activate(context: vscode.ExtensionContext) {
 		useAsDataset,
 		switchDataset,
 		editSchema,
+		describeEntityCmd,
 		statusBarItem,
 		hruProcessorOutput
 	);

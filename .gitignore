@@ -10,3 +10,6 @@ __pycache__/
 # Dataset uploads - ignore all contents of workdata/ except the placeholder
 workdata/*
 !workdata/.gitkeep
+
+# Packaged extension artifacts
+*.vsix

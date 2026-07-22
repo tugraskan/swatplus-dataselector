@@ -32,6 +32,9 @@
     "onCommand:swat-dataset-selector.openOutputAsDataFrame"
   ],
   "main": "./dist/extension.js",
+  "bin": {
+    "swatplus-mcp": "./dist/mcp-server.js"
+  },
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -152,6 +155,11 @@
         "command": "swat-dataset-selector.openOutputAsDataFrame",
         "title": "SWAT+: Explore Output File",
         "icon": "$(table)"
+      },
+      {
+        "command": "swat-dataset-selector.describeEntity",
+        "title": "SWAT+: Describe Entity",
+        "icon": "$(info)"
       }
     ],
     "menus": {
@@ -199,7 +207,9 @@
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "package:vsix": "npm run package && vsce package --allow-star-activation",
+    "publish:pre-release": "npm run package && vsce publish --pre-release --allow-star-activation"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
@@ -207,6 +217,7 @@
     "@types/vscode": "^1.106.1",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.27.1",
     "eslint": "^9.39.1",
     "npm-run-all": "^4.1.5",
@@ -214,6 +225,6 @@
     "typescript-eslint": "^8.46.3"
   },
   "dependencies": {
-    "sharp": "^0.34.5"
+    "@modelcontextprotocol/sdk": "^1.29.0"
   }
 }

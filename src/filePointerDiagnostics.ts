@@ -8,6 +8,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { SwatIndexer } from './indexer';
+import { getSharedEnrichedSchema } from './enrichedSchema';
 
 export class SwatFilePointerDiagnosticsProvider {
     private diagnosticCollection: vscode.DiagnosticCollection;
@@ -44,8 +45,13 @@ export class SwatFilePointerDiagnosticsProvider {
 
             const line = issue.sourceLine - 1; // Convert to 0-based
 
-            const descriptionPart = issue.columnDescription
-                ? ` (${issue.columnDescription})`
+            // Prefer the metadata description; fall back to the source-backed
+            // enriched-schema description when metadata has none.
+            const enrichedDescription = getSharedEnrichedSchema()
+                ?.getColumnDoc(path.basename(issue.sourceFile), issue.sourceColumn)?.description;
+            const columnDescription = issue.columnDescription || enrichedDescription;
+            const descriptionPart = columnDescription
+                ? ` (${columnDescription})`
                 : '';
 
             const message =
