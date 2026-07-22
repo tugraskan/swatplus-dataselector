@@ -11,6 +11,7 @@ import { SwatFilePointerDiagnosticsProvider } from './filePointerDiagnostics';
 import { SwatFileFormatDiagnosticsProvider } from './fileFormatDiagnostics';
 import { SwatFKDecorationProvider } from './fkDecorations';
 import { SwatFKHoverProvider } from './fkHoverProvider';
+import { EnrichedSchemaProvider } from './enrichedSchema';
 import { SwatFKReferencesPanel } from './fkReferencesPanel';
 import { SwatTableViewerPanel } from './tableViewerPanel';
 import { SwatSingleTableViewerPanel } from './singleTableViewerPanel';
@@ -33,6 +34,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Initialize indexer and FK features
 	const indexer = new SwatIndexer(context);
+	const enrichedSchema = new EnrichedSchemaProvider(context);
 	const hruProcessorOutput = vscode.window.createOutputChannel('SWAT+ HRU Processor');
 	// Create and register the webview view provider
 	const swatProvider = new SwatDatasetWebviewProvider(context, indexer);
@@ -41,11 +43,27 @@ export function activate(context: vscode.ExtensionContext) {
 		swatProvider
 	);
 	const fkDefinitionProvider = new SwatFKDefinitionProvider(indexer);
-	const fkHoverProvider = new SwatFKHoverProvider(indexer);
+	const fkHoverProvider = new SwatFKHoverProvider(indexer, enrichedSchema);
 	const fkDiagnostics = new SwatFKDiagnosticsProvider(indexer, context);
 	const filePointerDiagnostics = new SwatFilePointerDiagnosticsProvider(indexer, context);
 	const fileFormatDiagnostics = new SwatFileFormatDiagnosticsProvider(indexer, context);
 	const fkDecorations = new SwatFKDecorationProvider(indexer, context);
+
+	// Status bar item showing which SWAT+ source version the enriched docs target.
+	// Shown only once an index is active, so it stays out of unrelated projects.
+	const docsVersionStatus = vscode.window.createStatusBarItem(
+		vscode.StatusBarAlignment.Right, 90);
+	context.subscriptions.push(docsVersionStatus);
+	const showDocsVersion = (): void => {
+		const version = enrichedSchema.getSwatplusVersion();
+		if (enrichedSchema.isAvailable() && version) {
+			docsVersionStatus.text = `$(book) SWAT+ docs ${version}`;
+			docsVersionStatus.tooltip =
+				`Column documentation sourced from SWAT+ ${version} (swatplus-doc-builder). ` +
+				`Hover a column to see its meaning, units, and source.`;
+			docsVersionStatus.show();
+		}
+	};
 
 	const tryAutoLoadIndex = async (datasetPath: string): Promise<void> => {
 		if (!indexer.hasIndexCache(datasetPath)) {
@@ -54,6 +72,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 		const success = await indexer.loadIndexFromCache(datasetPath, { notifyIfIncompatible: false });
 		if (success) {
+			showDocsVersion();
 			fkDiagnostics.updateDiagnostics();
 			filePointerDiagnostics.updateDiagnostics();
 			fileFormatDiagnostics.updateDiagnostics();
@@ -238,6 +257,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 		const success = await indexer.buildIndex(selectedPath);
 		if (success) {
+			showDocsVersion();
 			// Update diagnostics and decorations
 			fkDiagnostics.updateDiagnostics();
 			filePointerDiagnostics.updateDiagnostics();
@@ -798,6 +818,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 		const success = await indexer.rebuildIndex();
 		if (success) {
+			showDocsVersion();
 			// Update diagnostics and decorations
 			fkDiagnostics.updateDiagnostics();
 			filePointerDiagnostics.updateDiagnostics();

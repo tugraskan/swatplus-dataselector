@@ -43,6 +43,7 @@ schema. It is a two-layer project:
   - Parses decision tables (`*.dtl`)
   - Supports Go to Definition for foreign keys
   - Shows hover tooltips with file purpose and FK targets
+  - Shows source-backed column documentation on hover — meaning, units, type, default, and the SWAT+ source line — merged from swatplus-doc-builder (SWAT+ 62.0.0)
   - Warns on unresolved references
   - Builds a reverse index for incoming references
 

@@ -10,9 +10,13 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
 import { pathStartsWith } from './pathUtils';
+import { EnrichedSchemaProvider, appendColumnDoc } from './enrichedSchema';
 
 export class SwatFKHoverProvider implements vscode.HoverProvider {
-    constructor(private indexer: SwatIndexer) {}
+    constructor(
+        private indexer: SwatIndexer,
+        private enrichedSchema?: EnrichedSchemaProvider
+    ) {}
 
     public async provideHover(
         document: vscode.TextDocument,
@@ -175,13 +179,17 @@ export class SwatFKHoverProvider implements vscode.HoverProvider {
             col => col.name === columnName && col.is_foreign_key
         );
 
+        // Look up source-backed documentation for this column, if available.
+        const columnDoc = this.enrichedSchema?.getColumnDoc(fileName, columnName);
+
         if (fkColumn && fkColumn.fk_target) {
             // This is a FK column
             const targetFileName = this.indexer.getFileNameForTable(fkColumn.fk_target.table);
             const targetPurpose = targetFileName ? this.indexer.getFilePurpose(targetFileName) : undefined;
-            
+
             markdown.appendMarkdown(`**Foreign Key: \`${columnName}\`**\n\n`);
-            
+            appendColumnDoc(markdown, columnDoc);
+
             if (targetFileName) {
                 // Make the filename clickable if the file exists
                 const txtInOutPath = this.indexer.getTxtInOutPath();
@@ -214,8 +222,9 @@ export class SwatFKHoverProvider implements vscode.HoverProvider {
                 }
             }
         } else {
-            // Regular column - just show basic info
+            // Regular column - show source-backed documentation when available.
             markdown.appendMarkdown(`**Column: \`${columnName}\`**\n\n`);
+            appendColumnDoc(markdown, columnDoc);
             markdown.appendMarkdown(`Value: \`${cellValue}\``);
         }
 

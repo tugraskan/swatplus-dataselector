@@ -1,0 +1,92 @@
+/**
+ * Enriched SWAT+ schema loader (vscode wrapper).
+ *
+ * Resolves and reads `swatplus-schema-enriched.json` (structure from the editor
+ * schema plus source-backed semantics merged from swatplus-doc-builder), then
+ * delegates all parsing and lookups to the vscode-free {@link EnrichedSchemaIndex}.
+ *
+ * This is a read-only documentation layer, kept separate from the indexer's own
+ * schema loading (which drives FK resolution). If the enriched file is absent,
+ * accessors return `undefined` and callers fall back to their existing behavior.
+ */
+
+import * as vscode from 'vscode';
+import * as path from 'path';
+import * as fs from 'fs';
+import {
+    EnrichedSchemaIndex,
+    EnrichedSchemaFile,
+    ColumnDoc,
+    FileDoc,
+    renderColumnDocLines,
+} from './enrichedSchemaCore';
+
+export { ColumnDoc, FileDoc } from './enrichedSchemaCore';
+
+const ENRICHED_FILENAME = 'swatplus-schema-enriched.json';
+
+export class EnrichedSchemaProvider {
+    private index: EnrichedSchemaIndex;
+
+    constructor(private context: vscode.ExtensionContext) {
+        this.index = new EnrichedSchemaIndex(this.loadData());
+    }
+
+    /** Resolve the enriched schema path: user schemaDirectories first, then the shipped copy. */
+    private resolvePath(): string | undefined {
+        const config = vscode.workspace.getConfiguration('swatplus');
+        const dirs = config.get<string[]>('schemaDirectories', []) || [];
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        for (const dir of dirs) {
+            const resolved = workspaceFolder
+                ? dir.replace('${workspaceFolder}', workspaceFolder)
+                : dir;
+            const candidate = path.join(resolved, ENRICHED_FILENAME);
+            if (fs.existsSync(candidate)) {
+                return candidate;
+            }
+        }
+        const shipped = path.join(
+            this.context.extensionPath, 'resources', 'schema', ENRICHED_FILENAME);
+        return fs.existsSync(shipped) ? shipped : undefined;
+    }
+
+    private loadData(): EnrichedSchemaFile | null {
+        try {
+            const enrichedPath = this.resolvePath();
+            if (!enrichedPath) {
+                return null;
+            }
+            return JSON.parse(fs.readFileSync(enrichedPath, 'utf-8'));
+        } catch (error) {
+            console.log(`Failed to load enriched SWAT+ schema: ${error}`);
+            return null;
+        }
+    }
+
+    public isAvailable(): boolean {
+        return this.index.isAvailable();
+    }
+
+    public getSwatplusVersion(): string | undefined {
+        return this.index.getSwatplusVersion();
+    }
+
+    public getFileDoc(fileName: string): FileDoc | undefined {
+        return this.index.getFileDoc(fileName);
+    }
+
+    public getColumnDoc(fileName: string, columnName: string): ColumnDoc | undefined {
+        return this.index.getColumnDoc(fileName, columnName);
+    }
+}
+
+/**
+ * Append a column's documentation to a hover/markdown string, consistently with
+ * other panels. Appends nothing when `doc` is undefined.
+ */
+export function appendColumnDoc(md: vscode.MarkdownString, doc: ColumnDoc | undefined): void {
+    for (const line of renderColumnDocLines(doc)) {
+        md.appendMarkdown(`${line}\n\n`);
+    }
+}

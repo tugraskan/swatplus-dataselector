@@ -10,14 +10,14 @@
   "files_scanned": 55,
   "models_found": 256,
   "tables_mapped": 218,
-  "table_count": 228
+  "table_count": 236
  },
  "enrichment": {
   "overlays_repo": "tugraskan/swatplus-doc-builder",
   "swatplus_version": "62.0.0",
-  "files_enriched": 106,
+  "files_enriched": 107,
   "files_inherited": 19,
-  "overlay_only_tables": 85,
+  "overlay_only_tables": 84,
   "note": "Enrichment is additive under 'doc' keys. Output is deterministic; no wall-clock timestamp is recorded so that re-runs are byte-identical."
  },
  "tables": {
@@ -598,6 +598,14 @@
      "references": {
       "table": "initial_aqu",
       "column": "id"
+     }
+    },
+    {
+     "column": "aqu_init",
+     "db_column": "aqu_init",
+     "references": {
+      "table": "initial_aqu",
+      "column": "name"
      }
     }
    ],
@@ -5102,6 +5110,30 @@
       "table": "nutrients_cha",
       "column": "name"
      }
+    },
+    {
+     "column": "ini",
+     "db_column": "ini",
+     "references": {
+      "table": "initial_cha",
+      "column": "name"
+     }
+    },
+    {
+     "column": "hyd",
+     "db_column": "hyd",
+     "references": {
+      "table": "hyd_sed_lte_cha",
+      "column": "name"
+     }
+    },
+    {
+     "column": "nut",
+     "db_column": "nut",
+     "references": {
+      "table": "sed_nut_cha",
+      "column": "name"
+     }
     }
    ],
    "notes": "Auto-generated via dynamic scan",
@@ -5848,6 +5880,292 @@
    ],
    "foreign_keys": [],
    "notes": "Auto-generated via dynamic scan"
+  },
+  "pcp.cli": {
+   "file_name": "pcp.cli",
+   "table_name": "pcp_cli",
+   "model_class": "climate.Pcp_cli",
+   "source_file": "climate.py",
+   "has_metadata_line": true,
+   "has_header_line": true,
+   "data_starts_after": 2,
+   "columns": [
+    {
+     "name": "id",
+     "db_column": "id",
+     "type": "AutoField",
+     "nullable": false,
+     "is_primary_key": true,
+     "is_foreign_key": false
+    },
+    {
+     "name": "filename",
+     "db_column": "filename",
+     "type": "CharField",
+     "nullable": false,
+     "is_primary_key": false,
+     "is_foreign_key": false,
+     "doc": {
+      "description": "Filename of the precipitation data file for the station",
+      "source_meaning": "Name of the precipitation data file for the station",
+      "fortran_type": "character (len=50)",
+      "fortran_target": "pcp%filename",
+      "default": "\"\"",
+      "source_ref": "climate_module.f90:162",
+      "match": "target"
+     }
+    }
+   ],
+   "primary_keys": [
+    "id"
+   ],
+   "foreign_keys": [],
+   "notes": "Simple list file containing filenames - added for compatibility",
+   "doc": {
+    "reader_source": "cli_pmeas.f90",
+    "primary_target": "`pcp(:)` (array of `type climate_measured_data`)",
+    "summary": [
+     "The file `pcp.cli` contains metadata and filenames for measured daily precipitation data used by the model.",
+     "It is optional and only read if the file exists and is not set to \"null\" in the configuration.",
+     "The reader subroutine `cli_pmeas` loads this file, allocating and filling the `pcp` array with precipitation station metadata and then reads each referenced precipitation data file."
+    ],
+    "layout_notes": "The `pcp.cli` file contains a list of precipitation station records. Each record includes a station identifier number followed by the filename of the precipitation data file for that station. The reader loads these filenames and then reads each referenced precipitation data file to populate the precipitation data arrays.",
+    "module_usage": {
+     "climate_module": "Provides the derived type `climate_measured_data` used for the `pcp` array to store precipitation station data and time series.",
+     "maximum_data_module": "Provides the variable `pcp_n` which stores the number of precipitation stations read from the file.",
+     "basin_module": "Provides the variable `db_mx` where the number of precipitation files (`pcpfiles`) is stored after reading.",
+     "input_file_module": "Provides the input configuration variable `in_cli` which contains the filename for `pcp.cli`.",
+     "time_module": "Provides the `time` module variables such as `time%step`, `time%yrc`, and `time%day_start` used for time indexing and allocation of precipitation time series arrays."
+    }
+   }
+  },
+  "tmp.cli": {
+   "file_name": "tmp.cli",
+   "table_name": "tmp_cli",
+   "model_class": "climate.Tmp_cli",
+   "source_file": "climate.py",
+   "has_metadata_line": true,
+   "has_header_line": true,
+   "data_starts_after": 2,
+   "columns": [
+    {
+     "name": "id",
+     "db_column": "id",
+     "type": "AutoField",
+     "nullable": false,
+     "is_primary_key": true,
+     "is_foreign_key": false
+    },
+    {
+     "name": "filename",
+     "db_column": "filename",
+     "type": "CharField",
+     "nullable": false,
+     "is_primary_key": false,
+     "is_foreign_key": false,
+     "doc": {
+      "description": "Filename of the temperature data file for this raingage",
+      "source_meaning": "Name of the file containing the detailed temperature time series for this raingage",
+      "fortran_type": "character (len=50)",
+      "fortran_target": "tmp%filename",
+      "default": "\"\"",
+      "source_ref": "climate_module.f90:162",
+      "match": "target"
+     }
+    }
+   ],
+   "primary_keys": [
+    "id"
+   ],
+   "foreign_keys": [],
+   "notes": "Simple list file containing filenames - added for compatibility",
+   "doc": {
+    "reader_source": "cli_tmeas.f90",
+    "primary_target": "`tmp(:)` (array of `type climate_measured_data`)",
+    "summary": [
+     "The file `tmp.cli` contains measured daily temperature data for multiple raingages, including metadata and time series of temperature values.",
+     "It is optional and only read if the filename is not \"null\" and the file exists.",
+     "The reader subroutine `cli_tmeas` loads this file, allocating and populating an array `tmp` of `type climate_measured_data` with the data."
+    ],
+    "layout_notes": "The `tmp.cli` file contains measured daily temperature data for multiple raingages, with each record describing metadata and daily temperature time series for one raingage. The file is read into an array of `type climate_measured_data` where each element corresponds to one raingage's data.",
+    "module_usage": {
+     "input_file_module": "provides the input file path variable `in_cli%tmp_cli` used to locate the `tmp.cli` file.",
+     "climate_module": "provides the derived type `climate_measured_data` and the array `tmp` where the file data is stored.",
+     "maximum_data_module": "provides the variable `db_mx%tmpfiles` which is set to the number of records read from `tmp.cli`.",
+     "time_module": "provides the current simulation year `time%yrc` and start day `time%day_start` used to filter and align the temperature time series data."
+    }
+   }
+  },
+  "slr.cli": {
+   "file_name": "slr.cli",
+   "table_name": "slr_cli",
+   "model_class": "climate.Slr_cli",
+   "source_file": "climate.py",
+   "has_metadata_line": true,
+   "has_header_line": true,
+   "data_starts_after": 2,
+   "columns": [
+    {
+     "name": "id",
+     "db_column": "id",
+     "type": "AutoField",
+     "nullable": false,
+     "is_primary_key": true,
+     "is_foreign_key": false
+    },
+    {
+     "name": "filename",
+     "db_column": "filename",
+     "type": "CharField",
+     "nullable": false,
+     "is_primary_key": false,
+     "is_foreign_key": false,
+     "doc": {
+      "description": "Filename of the solar radiation data file for this station.",
+      "source_meaning": "Name of the file containing the measured solar radiation data for this record.",
+      "fortran_type": "character (len=50)",
+      "fortran_target": "slr%filename",
+      "default": "\"\"",
+      "source_ref": "climate_module.f90:162",
+      "match": "target"
+     }
+    }
+   ],
+   "primary_keys": [
+    "id"
+   ],
+   "foreign_keys": [],
+   "notes": "Simple list file containing filenames - added for compatibility",
+   "doc": {
+    "reader_source": "cli_smeas.f90",
+    "primary_target": "`slr(:)` (array of `type climate_measured_data`)",
+    "summary": [
+     "The file `slr.cli` contains measured daily solar radiation data for multiple stations or locations.",
+     "It is optional; if the file does not exist or is set to \"null\", the model allocates empty arrays and proceeds without measured solar radiation data.",
+     "The reader subroutine `cli_smeas` loads this file and populates the `slr` array of `climate_measured_data` records with metadata and time series of solar radiation."
+    ],
+    "layout_notes": "The `slr.cli` file contains multiple records of measured daily solar radiation data, each identified by a filename and associated metadata such as location coordinates, elevation, number of years, and time step. Each record includes a time series array of solar radiation values indexed by day and year. The file is read in multiple passes to first count records, then read metadata counts, and finally read detailed data for each record into the `slr` array of `climate_measured_data` type.",
+    "module_usage": {
+     "climate_module": "Provides the derived type `climate_measured_data` which defines the structure of each solar radiation record stored in `slr`.",
+     "input_file_module": "Supplies the `in_cli` variable which contains the filename path for `slr.cli` and possibly `in_path_slr` for relative paths.",
+     "time_module": "Provides the `time` variable used to compare and align the solar radiation data years and days with the simulation time step and start day.",
+     "maximum_data_module": "Provides the `db_mx` variable where the number of solar radiation files read (`slrfiles`) is stored."
+    }
+   }
+  },
+  "hmd.cli": {
+   "file_name": "hmd.cli",
+   "table_name": "hmd_cli",
+   "model_class": "climate.Hmd_cli",
+   "source_file": "climate.py",
+   "has_metadata_line": true,
+   "has_header_line": true,
+   "data_starts_after": 2,
+   "columns": [
+    {
+     "name": "id",
+     "db_column": "id",
+     "type": "AutoField",
+     "nullable": false,
+     "is_primary_key": true,
+     "is_foreign_key": false
+    },
+    {
+     "name": "filename",
+     "db_column": "filename",
+     "type": "CharField",
+     "nullable": false,
+     "is_primary_key": false,
+     "is_foreign_key": false,
+     "doc": {
+      "description": "filename of the precipitation data file for this raingage",
+      "source_meaning": "filename of the precipitation data file for this raingage",
+      "fortran_type": "character (len=50)",
+      "fortran_target": "hmd%filename",
+      "default": "\"\"",
+      "source_ref": "climate_module.f90:162",
+      "match": "target"
+     }
+    }
+   ],
+   "primary_keys": [
+    "id"
+   ],
+   "foreign_keys": [],
+   "notes": "Simple list file containing filenames - added for compatibility",
+   "doc": {
+    "reader_source": "cli_hmeas.f90",
+    "primary_target": "`hmd(:)` (array of `type climate_measured_data`)",
+    "summary": [
+     "The file `hmd.cli` contains measured daily precipitation data for multiple raingages, including metadata and time series values.",
+     "It is optional; if the file does not exist or is set to \"null\", no precipitation data is loaded.",
+     "The reader subroutine `cli_hmeas` loads this file and populates the array `hmd` of type `climate_measured_data`."
+    ],
+    "layout_notes": "The `hmd.cli` file contains multiple precipitation measurement records, each with metadata and daily precipitation time series. Each record corresponds to one raingage and is read into an element of the `hmd` array of type `climate_measured_data`. The file includes header lines, counts, filenames, and then detailed precipitation data per raingage.",
+    "module_usage": {
+     "input_file_module": "provides the input file path variable `in_cli%hmd_cli` used to locate the `hmd.cli` file.",
+     "climate_module": "provides the derived type `climate_measured_data` and the array `hmd` where the precipitation data and metadata are stored.",
+     "maximum_data_module": "provides the variable `db_mx%rhfiles` which is set to the number of precipitation files read.",
+     "time_module": "provides the current simulation year `time%yrc` and day start `time%day_start` used to align precipitation data with the simulation time."
+    }
+   }
+  },
+  "wnd.cli": {
+   "file_name": "wnd.cli",
+   "table_name": "wnd_cli",
+   "model_class": "climate.Wnd_cli",
+   "source_file": "climate.py",
+   "has_metadata_line": true,
+   "has_header_line": true,
+   "data_starts_after": 2,
+   "columns": [
+    {
+     "name": "id",
+     "db_column": "id",
+     "type": "AutoField",
+     "nullable": false,
+     "is_primary_key": true,
+     "is_foreign_key": false
+    },
+    {
+     "name": "filename",
+     "db_column": "filename",
+     "type": "CharField",
+     "nullable": false,
+     "is_primary_key": false,
+     "is_foreign_key": false,
+     "doc": {
+      "description": "filename of the wind data file for the station",
+      "source_meaning": "filename of the wind data file for the station",
+      "fortran_type": "character (len=50)",
+      "fortran_target": "wnd%filename",
+      "default": "\"\"",
+      "source_ref": "climate_module.f90:162",
+      "match": "target"
+     }
+    }
+   ],
+   "primary_keys": [
+    "id"
+   ],
+   "foreign_keys": [],
+   "notes": "Simple list file containing filenames - added for compatibility",
+   "doc": {
+    "reader_source": "cli_wmeas.f90",
+    "primary_target": "`wnd(:)` (array of `type climate_measured_data`)",
+    "summary": [
+     "The file `wnd.cli` contains measured daily wind data records used to configure wind climate inputs in the model.",
+     "It is optional; if the file does not exist or is set to \"null\", no wind data are loaded and an empty array is allocated.",
+     "The reader subroutine `cli_wmeas` loads this file and populates the `wnd` array of `type climate_measured_data`."
+    ],
+    "layout_notes": "The `wnd.cli` file contains multiple records of measured daily wind data, each corresponding to a wind station. Each record is read into an element of the `wnd` array of type `climate_measured_data`. The file format includes header lines, counts of records, filenames for individual station data, and time series data for each station.",
+    "module_usage": {
+     "input_file_module": "provides the input file path variable `in_cli%wnd_cli` used to locate the `wnd.cli` file.",
+     "climate_module": "provides the derived type `climate_measured_data` and the `wnd` array where the wind data records are stored.",
+     "maximum_data_module": "provides the global data structure `db_mx` where the number of wind files read (`wndfiles`) is stored.",
+     "time_module": "provides the global time variables `time%yrc` (current year) and `time%day_start` used to control reading of time series data."
+    }
+   }
   },
   "atmo.cli": {
    "file_name": "atmo.cli",
@@ -6693,6 +7011,151 @@
      "input_file_module": "Supplies `in_ru`; `in_ru%ru_ele` holds the `rout_unit.ele` filename opened on unit 107.",
      "maximum_data_module": "Supplies `db_mx`; the reader stores the element count in `db_mx%ru_elem`.",
      "dr_module": "Supplies `dr_db`/`dr`; each element's `dr_name` is crosswalked to a delivery-ratio record."
+    }
+   }
+  },
+  "rout-unit.def": {
+   "file_name": "rout-unit.def",
+   "table_name": "rout_unit_def",
+   "model_class": "project.routing_unit.Rout_unit_def",
+   "source_file": "project/routing_unit.py",
+   "has_metadata_line": true,
+   "has_header_line": true,
+   "data_starts_after": 2,
+   "columns": [
+    {
+     "name": "id",
+     "db_column": "id",
+     "type": "AutoField",
+     "nullable": false,
+     "is_primary_key": true,
+     "is_foreign_key": false
+    },
+    {
+     "name": "name",
+     "db_column": "name",
+     "type": "CharField",
+     "nullable": false,
+     "is_primary_key": false,
+     "is_foreign_key": false,
+     "doc": {
+      "description": "The name of the routing unit, used as an identifier.",
+      "source_meaning": "Name identifier of the routing unit.",
+      "fortran_type": "character(len=16)",
+      "fortran_target": "ru_def%name",
+      "default": "\"\"",
+      "source_ref": "hydrograph_module.f90:475",
+      "match": "target"
+     }
+    },
+    {
+     "name": "elem_tot",
+     "db_column": "elem_tot",
+     "type": "IntegerField",
+     "nullable": false,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "elem1",
+     "db_column": "elem1",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "elem2",
+     "db_column": "elem2",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "elem3",
+     "db_column": "elem3",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "elem4",
+     "db_column": "elem4",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "elem5",
+     "db_column": "elem5",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "elem6",
+     "db_column": "elem6",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "elem7",
+     "db_column": "elem7",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "elem8",
+     "db_column": "elem8",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "elem9",
+     "db_column": "elem9",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "elem10",
+     "db_column": "elem10",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    }
+   ],
+   "primary_keys": [
+    "id"
+   ],
+   "foreign_keys": [],
+   "notes": "Auto-generated via dynamic scan",
+   "doc": {
+    "reader_source": "ru_read_elements.f90",
+    "primary_target": "`ru_def(:)` (array of `type routing_unit_data`)",
+    "summary": [
+     "The file `rout_unit.def` defines routing units (RUs) in the model, specifying their names and the elements (subbasin elements) they contain.",
+     "It is an optional input file, checked for existence before reading.",
+     "The reader `ru_read_elements` loads this file and stores its data into the `ru_def` array of `type routing_unit_data`."
+    ],
+    "layout_notes": "The file consists of records defining routing units, each with a name, total number of elements, and a list of element indices pointing to subbasin elements. The Fortran reader maps each record into an element of the `ru_def` array of `type routing_unit_data`.",
+    "module_usage": {
+     "hydrograph_module": "Provides the derived type `routing_unit_data` and the arrays `ru_def`, `ru_elem`, and related counters used to store routing unit and element data.",
+     "input_file_module": "Supplies the `in_ru` input file paths, including `in_ru%ru_def` for the routing unit definition file.",
+     "maximum_data_module": "Provides maximum counts such as `db_mx%ru_elem` and `db_mx%dr_om` used for array sizing and loops.",
+     "dr_module": "Provides the delivery ratio database `dr_db` and related arrays used to crosswalk delivery ratio names to delivery ratio objects."
     }
    }
   },
@@ -14291,7 +14754,16 @@
    "primary_keys": [
     "id"
    ],
-   "foreign_keys": [],
+   "foreign_keys": [
+    {
+     "column": "plnt_name",
+     "db_column": "plnt_name",
+     "references": {
+      "table": "plants_plt",
+      "column": "name"
+     }
+    }
+   ],
    "notes": "Auto-generated via dynamic scan",
    "doc": {
     "reader_source": "readpcom.f90",
@@ -17592,6 +18064,22 @@
       "table": "bmpuser_str",
       "column": "id"
      }
+    },
+    {
+     "column": "cons_prac",
+     "db_column": "cons_prac",
+     "references": {
+      "table": "cons_practice_lum",
+      "column": "name"
+     }
+    },
+    {
+     "column": "urb_ro",
+     "db_column": "urb_ro",
+     "references": {
+      "table": "urban_urb",
+      "column": "name"
+     }
     }
    ],
    "notes": "Auto-generated via dynamic scan",
@@ -20234,6 +20722,14 @@
      "references": {
       "table": "nutrients_res",
       "column": "id"
+     }
+    },
+    {
+     "column": "rel",
+     "db_column": "rel",
+     "references": {
+      "table": "res_rel_dtl",
+      "column": "name"
      }
     }
    ],
@@ -24280,7 +24776,16 @@
    "primary_keys": [
     "id"
    ],
-   "foreign_keys": [],
+   "foreign_keys": [
+    {
+     "column": "typ",
+     "db_column": "typ",
+     "references": {
+      "table": "septic_sep",
+      "column": "name"
+     }
+    }
+   ],
    "notes": "Auto-generated via dynamic scan",
    "doc": {
     "reader_source": "sep_read.f90",
@@ -28387,11 +28892,11 @@
    "foreign_keys": [],
    "notes": "Auto-generated schema for Wind Speed weather data files"
   },
-  "pcp.cli": {
-   "file_name": "pcp.cli",
-   "table_name": "pcp_cli",
-   "model_class": "climate.Pcp_cli",
-   "source_file": "climate.py",
+  "hru.con": {
+   "file_name": "hru.con",
+   "table_name": "hru_con",
+   "model_class": "project.connect.Hru_con",
+   "source_file": "project/connect.py",
    "has_metadata_line": true,
    "has_header_line": true,
    "data_starts_after": 2,
@@ -28399,57 +28904,164 @@
     {
      "name": "id",
      "db_column": "id",
-     "type": "AutoField",
+     "type": "IntegerField",
      "nullable": false,
      "is_primary_key": true,
      "is_foreign_key": false
     },
     {
-     "name": "filename",
-     "db_column": "filename",
+     "name": "name",
+     "db_column": "name",
      "type": "CharField",
      "nullable": false,
      "is_primary_key": false,
-     "is_foreign_key": false,
-     "doc": {
-      "description": "Filename of the precipitation data file for the station",
-      "source_meaning": "Name of the precipitation data file for the station",
-      "fortran_type": "character (len=50)",
-      "fortran_target": "pcp%filename",
-      "default": "\"\"",
-      "source_ref": "climate_module.f90:162",
-      "match": "target"
+     "is_foreign_key": false
+    },
+    {
+     "name": "gis_id",
+     "db_column": "gis_id",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "area",
+     "db_column": "area",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "lat",
+     "db_column": "lat",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "lon",
+     "db_column": "lon",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "elev",
+     "db_column": "elev",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "hru",
+     "db_column": "hru",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": true
+    },
+    {
+     "name": "wst",
+     "db_column": "wst",
+     "type": "CharField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": true,
+     "fk_target": {
+      "table": "weather_sta_cli",
+      "column": "name"
      }
+    },
+    {
+     "name": "cst",
+     "db_column": "cst",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "ovfl",
+     "db_column": "ovfl",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "rule",
+     "db_column": "rule",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "out_tot",
+     "db_column": "out_tot",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "obj_typ",
+     "db_column": "obj_typ",
+     "type": "CharField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "obj_id",
+     "db_column": "obj_id",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": true
+    },
+    {
+     "name": "hyd_typ",
+     "db_column": "hyd_typ",
+     "type": "CharField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "frac",
+     "db_column": "frac",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
     }
    ],
    "primary_keys": [
     "id"
    ],
-   "foreign_keys": [],
-   "notes": "Simple list file containing filenames - added for compatibility",
-   "doc": {
-    "reader_source": "cli_pmeas.f90",
-    "primary_target": "`pcp(:)` (array of `type climate_measured_data`)",
-    "summary": [
-     "The file `pcp.cli` contains metadata and filenames for measured daily precipitation data used by the model.",
-     "It is optional and only read if the file exists and is not set to \"null\" in the configuration.",
-     "The reader subroutine `cli_pmeas` loads this file, allocating and filling the `pcp` array with precipitation station metadata and then reads each referenced precipitation data file."
-    ],
-    "layout_notes": "The `pcp.cli` file contains a list of precipitation station records. Each record includes a station identifier number followed by the filename of the precipitation data file for that station. The reader loads these filenames and then reads each referenced precipitation data file to populate the precipitation data arrays.",
-    "module_usage": {
-     "climate_module": "Provides the derived type `climate_measured_data` used for the `pcp` array to store precipitation station data and time series.",
-     "maximum_data_module": "Provides the variable `pcp_n` which stores the number of precipitation stations read from the file.",
-     "basin_module": "Provides the variable `db_mx` where the number of precipitation files (`pcpfiles`) is stored after reading.",
-     "input_file_module": "Provides the input configuration variable `in_cli` which contains the filename for `pcp.cli`.",
-     "time_module": "Provides the `time` module variables such as `time%step`, `time%yrc`, and `time%day_start` used for time indexing and allocation of precipitation time series arrays."
+   "foreign_keys": [
+    {
+     "column": "wst",
+     "db_column": "wst",
+     "references": {
+      "table": "weather_sta_cli",
+      "column": "name"
+     }
     }
-   }
+   ],
+   "notes": "Auto-generated for HRU connectivity"
   },
-  "tmp.cli": {
-   "file_name": "tmp.cli",
-   "table_name": "tmp_cli",
-   "model_class": "climate.Tmp_cli",
-   "source_file": "climate.py",
+  "rout_unit.con": {
+   "file_name": "rout_unit.con",
+   "table_name": "rout_unit_con",
+   "model_class": "project.connect.Rout_unit_con",
+   "source_file": "project/connect.py",
    "has_metadata_line": true,
    "has_header_line": true,
    "data_starts_after": 2,
@@ -28457,56 +29069,164 @@
     {
      "name": "id",
      "db_column": "id",
-     "type": "AutoField",
+     "type": "IntegerField",
      "nullable": false,
      "is_primary_key": true,
      "is_foreign_key": false
     },
     {
-     "name": "filename",
-     "db_column": "filename",
+     "name": "name",
+     "db_column": "name",
      "type": "CharField",
      "nullable": false,
      "is_primary_key": false,
-     "is_foreign_key": false,
-     "doc": {
-      "description": "Filename of the temperature data file for this raingage",
-      "source_meaning": "Name of the file containing the detailed temperature time series for this raingage",
-      "fortran_type": "character (len=50)",
-      "fortran_target": "tmp%filename",
-      "default": "\"\"",
-      "source_ref": "climate_module.f90:162",
-      "match": "target"
+     "is_foreign_key": false
+    },
+    {
+     "name": "gis_id",
+     "db_column": "gis_id",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "area",
+     "db_column": "area",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "lat",
+     "db_column": "lat",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "lon",
+     "db_column": "lon",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "elev",
+     "db_column": "elev",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "ru",
+     "db_column": "ru",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": true
+    },
+    {
+     "name": "wst",
+     "db_column": "wst",
+     "type": "CharField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": true,
+     "fk_target": {
+      "table": "weather_sta_cli",
+      "column": "name"
      }
+    },
+    {
+     "name": "cst",
+     "db_column": "cst",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "ovfl",
+     "db_column": "ovfl",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "rule",
+     "db_column": "rule",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "out_tot",
+     "db_column": "out_tot",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "obj_typ",
+     "db_column": "obj_typ",
+     "type": "CharField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "obj_id",
+     "db_column": "obj_id",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": true
+    },
+    {
+     "name": "hyd_typ",
+     "db_column": "hyd_typ",
+     "type": "CharField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "frac",
+     "db_column": "frac",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
     }
    ],
    "primary_keys": [
     "id"
    ],
-   "foreign_keys": [],
-   "notes": "Simple list file containing filenames - added for compatibility",
-   "doc": {
-    "reader_source": "cli_tmeas.f90",
-    "primary_target": "`tmp(:)` (array of `type climate_measured_data`)",
-    "summary": [
-     "The file `tmp.cli` contains measured daily temperature data for multiple raingages, including metadata and time series of temperature values.",
-     "It is optional and only read if the filename is not \"null\" and the file exists.",
-     "The reader subroutine `cli_tmeas` loads this file, allocating and populating an array `tmp` of `type climate_measured_data` with the data."
-    ],
-    "layout_notes": "The `tmp.cli` file contains measured daily temperature data for multiple raingages, with each record describing metadata and daily temperature time series for one raingage. The file is read into an array of `type climate_measured_data` where each element corresponds to one raingage's data.",
-    "module_usage": {
-     "input_file_module": "provides the input file path variable `in_cli%tmp_cli` used to locate the `tmp.cli` file.",
-     "climate_module": "provides the derived type `climate_measured_data` and the array `tmp` where the file data is stored.",
-     "maximum_data_module": "provides the variable `db_mx%tmpfiles` which is set to the number of records read from `tmp.cli`.",
-     "time_module": "provides the current simulation year `time%yrc` and start day `time%day_start` used to filter and align the temperature time series data."
+   "foreign_keys": [
+    {
+     "column": "wst",
+     "db_column": "wst",
+     "references": {
+      "table": "weather_sta_cli",
+      "column": "name"
+     }
     }
-   }
+   ],
+   "notes": "Auto-generated for routing unit connectivity"
   },
-  "slr.cli": {
-   "file_name": "slr.cli",
-   "table_name": "slr_cli",
-   "model_class": "climate.Slr_cli",
-   "source_file": "climate.py",
+  "aquifer.con": {
+   "file_name": "aquifer.con",
+   "table_name": "aquifer_con",
+   "model_class": "project.connect.Aquifer_con",
+   "source_file": "project/connect.py",
    "has_metadata_line": true,
    "has_header_line": true,
    "data_starts_after": 2,
@@ -28514,56 +29234,164 @@
     {
      "name": "id",
      "db_column": "id",
-     "type": "AutoField",
+     "type": "IntegerField",
      "nullable": false,
      "is_primary_key": true,
      "is_foreign_key": false
     },
     {
-     "name": "filename",
-     "db_column": "filename",
+     "name": "name",
+     "db_column": "name",
      "type": "CharField",
      "nullable": false,
      "is_primary_key": false,
-     "is_foreign_key": false,
-     "doc": {
-      "description": "Filename of the solar radiation data file for this station.",
-      "source_meaning": "Name of the file containing the measured solar radiation data for this record.",
-      "fortran_type": "character (len=50)",
-      "fortran_target": "slr%filename",
-      "default": "\"\"",
-      "source_ref": "climate_module.f90:162",
-      "match": "target"
+     "is_foreign_key": false
+    },
+    {
+     "name": "gis_id",
+     "db_column": "gis_id",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "area",
+     "db_column": "area",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "lat",
+     "db_column": "lat",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "lon",
+     "db_column": "lon",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "elev",
+     "db_column": "elev",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "aqu",
+     "db_column": "aqu",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": true
+    },
+    {
+     "name": "wst",
+     "db_column": "wst",
+     "type": "CharField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": true,
+     "fk_target": {
+      "table": "weather_sta_cli",
+      "column": "name"
      }
+    },
+    {
+     "name": "cst",
+     "db_column": "cst",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "ovfl",
+     "db_column": "ovfl",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "rule",
+     "db_column": "rule",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "out_tot",
+     "db_column": "out_tot",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "obj_typ",
+     "db_column": "obj_typ",
+     "type": "CharField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "obj_id",
+     "db_column": "obj_id",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": true
+    },
+    {
+     "name": "hyd_typ",
+     "db_column": "hyd_typ",
+     "type": "CharField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "frac",
+     "db_column": "frac",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
     }
    ],
    "primary_keys": [
     "id"
    ],
-   "foreign_keys": [],
-   "notes": "Simple list file containing filenames - added for compatibility",
-   "doc": {
-    "reader_source": "cli_smeas.f90",
-    "primary_target": "`slr(:)` (array of `type climate_measured_data`)",
-    "summary": [
-     "The file `slr.cli` contains measured daily solar radiation data for multiple stations or locations.",
-     "It is optional; if the file does not exist or is set to \"null\", the model allocates empty arrays and proceeds without measured solar radiation data.",
-     "The reader subroutine `cli_smeas` loads this file and populates the `slr` array of `climate_measured_data` records with metadata and time series of solar radiation."
-    ],
-    "layout_notes": "The `slr.cli` file contains multiple records of measured daily solar radiation data, each identified by a filename and associated metadata such as location coordinates, elevation, number of years, and time step. Each record includes a time series array of solar radiation values indexed by day and year. The file is read in multiple passes to first count records, then read metadata counts, and finally read detailed data for each record into the `slr` array of `climate_measured_data` type.",
-    "module_usage": {
-     "climate_module": "Provides the derived type `climate_measured_data` which defines the structure of each solar radiation record stored in `slr`.",
-     "input_file_module": "Supplies the `in_cli` variable which contains the filename path for `slr.cli` and possibly `in_path_slr` for relative paths.",
-     "time_module": "Provides the `time` variable used to compare and align the solar radiation data years and days with the simulation time step and start day.",
-     "maximum_data_module": "Provides the `db_mx` variable where the number of solar radiation files read (`slrfiles`) is stored."
+   "foreign_keys": [
+    {
+     "column": "wst",
+     "db_column": "wst",
+     "references": {
+      "table": "weather_sta_cli",
+      "column": "name"
+     }
     }
-   }
+   ],
+   "notes": "Auto-generated for aquifer connectivity"
   },
-  "hmd.cli": {
-   "file_name": "hmd.cli",
-   "table_name": "hmd_cli",
-   "model_class": "climate.Hmd_cli",
-   "source_file": "climate.py",
+  "chandeg.con": {
+   "file_name": "chandeg.con",
+   "table_name": "chandeg_con",
+   "model_class": "project.connect.Chandeg_con",
+   "source_file": "project/connect.py",
    "has_metadata_line": true,
    "has_header_line": true,
    "data_starts_after": 2,
@@ -28571,56 +29399,164 @@
     {
      "name": "id",
      "db_column": "id",
-     "type": "AutoField",
+     "type": "IntegerField",
      "nullable": false,
      "is_primary_key": true,
      "is_foreign_key": false
     },
     {
-     "name": "filename",
-     "db_column": "filename",
+     "name": "name",
+     "db_column": "name",
      "type": "CharField",
      "nullable": false,
      "is_primary_key": false,
-     "is_foreign_key": false,
-     "doc": {
-      "description": "filename of the precipitation data file for this raingage",
-      "source_meaning": "filename of the precipitation data file for this raingage",
-      "fortran_type": "character (len=50)",
-      "fortran_target": "hmd%filename",
-      "default": "\"\"",
-      "source_ref": "climate_module.f90:162",
-      "match": "target"
+     "is_foreign_key": false
+    },
+    {
+     "name": "gis_id",
+     "db_column": "gis_id",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "area",
+     "db_column": "area",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "lat",
+     "db_column": "lat",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "lon",
+     "db_column": "lon",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "elev",
+     "db_column": "elev",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "lcha",
+     "db_column": "lcha",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": true
+    },
+    {
+     "name": "wst",
+     "db_column": "wst",
+     "type": "CharField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": true,
+     "fk_target": {
+      "table": "weather_sta_cli",
+      "column": "name"
      }
+    },
+    {
+     "name": "cst",
+     "db_column": "cst",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "ovfl",
+     "db_column": "ovfl",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "rule",
+     "db_column": "rule",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "out_tot",
+     "db_column": "out_tot",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "obj_typ",
+     "db_column": "obj_typ",
+     "type": "CharField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "obj_id",
+     "db_column": "obj_id",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": true
+    },
+    {
+     "name": "hyd_typ",
+     "db_column": "hyd_typ",
+     "type": "CharField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "frac",
+     "db_column": "frac",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
     }
    ],
    "primary_keys": [
     "id"
    ],
-   "foreign_keys": [],
-   "notes": "Simple list file containing filenames - added for compatibility",
-   "doc": {
-    "reader_source": "cli_hmeas.f90",
-    "primary_target": "`hmd(:)` (array of `type climate_measured_data`)",
-    "summary": [
-     "The file `hmd.cli` contains measured daily precipitation data for multiple raingages, including metadata and time series values.",
-     "It is optional; if the file does not exist or is set to \"null\", no precipitation data is loaded.",
-     "The reader subroutine `cli_hmeas` loads this file and populates the array `hmd` of type `climate_measured_data`."
-    ],
-    "layout_notes": "The `hmd.cli` file contains multiple precipitation measurement records, each with metadata and daily precipitation time series. Each record corresponds to one raingage and is read into an element of the `hmd` array of type `climate_measured_data`. The file includes header lines, counts, filenames, and then detailed precipitation data per raingage.",
-    "module_usage": {
-     "input_file_module": "provides the input file path variable `in_cli%hmd_cli` used to locate the `hmd.cli` file.",
-     "climate_module": "provides the derived type `climate_measured_data` and the array `hmd` where the precipitation data and metadata are stored.",
-     "maximum_data_module": "provides the variable `db_mx%rhfiles` which is set to the number of precipitation files read.",
-     "time_module": "provides the current simulation year `time%yrc` and day start `time%day_start` used to align precipitation data with the simulation time."
+   "foreign_keys": [
+    {
+     "column": "wst",
+     "db_column": "wst",
+     "references": {
+      "table": "weather_sta_cli",
+      "column": "name"
+     }
     }
-   }
+   ],
+   "notes": "Auto-generated for channel connectivity"
   },
-  "wnd.cli": {
-   "file_name": "wnd.cli",
-   "table_name": "wnd_cli",
-   "model_class": "climate.Wnd_cli",
-   "source_file": "climate.py",
+  "reservoir.con": {
+   "file_name": "reservoir.con",
+   "table_name": "reservoir_con",
+   "model_class": "project.connect.Reservoir_con",
+   "source_file": "project/connect.py",
    "has_metadata_line": true,
    "has_header_line": true,
    "data_starts_after": 2,
@@ -28628,50 +29564,488 @@
     {
      "name": "id",
      "db_column": "id",
-     "type": "AutoField",
+     "type": "IntegerField",
      "nullable": false,
      "is_primary_key": true,
      "is_foreign_key": false
     },
     {
-     "name": "filename",
-     "db_column": "filename",
+     "name": "name",
+     "db_column": "name",
      "type": "CharField",
      "nullable": false,
      "is_primary_key": false,
-     "is_foreign_key": false,
-     "doc": {
-      "description": "filename of the wind data file for the station",
-      "source_meaning": "filename of the wind data file for the station",
-      "fortran_type": "character (len=50)",
-      "fortran_target": "wnd%filename",
-      "default": "\"\"",
-      "source_ref": "climate_module.f90:162",
-      "match": "target"
+     "is_foreign_key": false
+    },
+    {
+     "name": "gis_id",
+     "db_column": "gis_id",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "area",
+     "db_column": "area",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "lat",
+     "db_column": "lat",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "lon",
+     "db_column": "lon",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "elev",
+     "db_column": "elev",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "res",
+     "db_column": "res",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": true
+    },
+    {
+     "name": "wst",
+     "db_column": "wst",
+     "type": "CharField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": true,
+     "fk_target": {
+      "table": "weather_sta_cli",
+      "column": "name"
      }
+    },
+    {
+     "name": "cst",
+     "db_column": "cst",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "ovfl",
+     "db_column": "ovfl",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "rule",
+     "db_column": "rule",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "out_tot",
+     "db_column": "out_tot",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "obj_typ",
+     "db_column": "obj_typ",
+     "type": "CharField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "obj_id",
+     "db_column": "obj_id",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": true
+    },
+    {
+     "name": "hyd_typ",
+     "db_column": "hyd_typ",
+     "type": "CharField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "frac",
+     "db_column": "frac",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
     }
    ],
    "primary_keys": [
     "id"
    ],
-   "foreign_keys": [],
-   "notes": "Simple list file containing filenames - added for compatibility",
-   "doc": {
-    "reader_source": "cli_wmeas.f90",
-    "primary_target": "`wnd(:)` (array of `type climate_measured_data`)",
-    "summary": [
-     "The file `wnd.cli` contains measured daily wind data records used to configure wind climate inputs in the model.",
-     "It is optional; if the file does not exist or is set to \"null\", no wind data are loaded and an empty array is allocated.",
-     "The reader subroutine `cli_wmeas` loads this file and populates the `wnd` array of `type climate_measured_data`."
-    ],
-    "layout_notes": "The `wnd.cli` file contains multiple records of measured daily wind data, each corresponding to a wind station. Each record is read into an element of the `wnd` array of type `climate_measured_data`. The file format includes header lines, counts of records, filenames for individual station data, and time series data for each station.",
-    "module_usage": {
-     "input_file_module": "provides the input file path variable `in_cli%wnd_cli` used to locate the `wnd.cli` file.",
-     "climate_module": "provides the derived type `climate_measured_data` and the `wnd` array where the wind data records are stored.",
-     "maximum_data_module": "provides the global data structure `db_mx` where the number of wind files read (`wndfiles`) is stored.",
-     "time_module": "provides the global time variables `time%yrc` (current year) and `time%day_start` used to control reading of time series data."
+   "foreign_keys": [
+    {
+     "column": "wst",
+     "db_column": "wst",
+     "references": {
+      "table": "weather_sta_cli",
+      "column": "name"
+     }
     }
-   }
+   ],
+   "notes": "Auto-generated for reservoir connectivity"
+  },
+  "recall.con": {
+   "file_name": "recall.con",
+   "table_name": "recall_con",
+   "model_class": "project.connect.Recall_con",
+   "source_file": "project/connect.py",
+   "has_metadata_line": true,
+   "has_header_line": true,
+   "data_starts_after": 2,
+   "columns": [
+    {
+     "name": "id",
+     "db_column": "id",
+     "type": "IntegerField",
+     "nullable": false,
+     "is_primary_key": true,
+     "is_foreign_key": false
+    },
+    {
+     "name": "name",
+     "db_column": "name",
+     "type": "CharField",
+     "nullable": false,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "gis_id",
+     "db_column": "gis_id",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "area",
+     "db_column": "area",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "lat",
+     "db_column": "lat",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "lon",
+     "db_column": "lon",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "elev",
+     "db_column": "elev",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "rec",
+     "db_column": "rec",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": true
+    },
+    {
+     "name": "wst",
+     "db_column": "wst",
+     "type": "CharField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": true,
+     "fk_target": {
+      "table": "weather_sta_cli",
+      "column": "name"
+     }
+    },
+    {
+     "name": "cst",
+     "db_column": "cst",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "ovfl",
+     "db_column": "ovfl",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "rule",
+     "db_column": "rule",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "out_tot",
+     "db_column": "out_tot",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "obj_typ",
+     "db_column": "obj_typ",
+     "type": "CharField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "obj_id",
+     "db_column": "obj_id",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": true
+    },
+    {
+     "name": "hyd_typ",
+     "db_column": "hyd_typ",
+     "type": "CharField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "frac",
+     "db_column": "frac",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    }
+   ],
+   "primary_keys": [
+    "id"
+   ],
+   "foreign_keys": [
+    {
+     "column": "wst",
+     "db_column": "wst",
+     "references": {
+      "table": "weather_sta_cli",
+      "column": "name"
+     }
+    }
+   ],
+   "notes": "Auto-generated for recall connectivity"
+  },
+  "outlet.con": {
+   "file_name": "outlet.con",
+   "table_name": "out_con",
+   "model_class": "project.connect.Outlet_con",
+   "source_file": "project/connect.py",
+   "has_metadata_line": true,
+   "has_header_line": true,
+   "data_starts_after": 2,
+   "columns": [
+    {
+     "name": "id",
+     "db_column": "id",
+     "type": "IntegerField",
+     "nullable": false,
+     "is_primary_key": true,
+     "is_foreign_key": false
+    },
+    {
+     "name": "name",
+     "db_column": "name",
+     "type": "CharField",
+     "nullable": false,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "gis_id",
+     "db_column": "gis_id",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "area",
+     "db_column": "area",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "lat",
+     "db_column": "lat",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "lon",
+     "db_column": "lon",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "elev",
+     "db_column": "elev",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "out",
+     "db_column": "out",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": true
+    },
+    {
+     "name": "wst",
+     "db_column": "wst",
+     "type": "CharField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": true,
+     "fk_target": {
+      "table": "weather_sta_cli",
+      "column": "name"
+     }
+    },
+    {
+     "name": "cst",
+     "db_column": "cst",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "ovfl",
+     "db_column": "ovfl",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "rule",
+     "db_column": "rule",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "out_tot",
+     "db_column": "out_tot",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "obj_typ",
+     "db_column": "obj_typ",
+     "type": "CharField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "obj_id",
+     "db_column": "obj_id",
+     "type": "IntegerField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": true
+    },
+    {
+     "name": "hyd_typ",
+     "db_column": "hyd_typ",
+     "type": "CharField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    },
+    {
+     "name": "frac",
+     "db_column": "frac",
+     "type": "DecimalField",
+     "nullable": true,
+     "is_primary_key": false,
+     "is_foreign_key": false
+    }
+   ],
+   "primary_keys": [
+    "id"
+   ],
+   "foreign_keys": [
+    {
+     "column": "wst",
+     "db_column": "wst",
+     "references": {
+      "table": "weather_sta_cli",
+      "column": "name"
+     }
+    }
+   ],
+   "notes": "Auto-generated for outlet connectivity"
   },
   "pesticide.pes": {
    "file_name": "pesticide.pes",
@@ -31776,27 +33150,6 @@
      "reservoir_module": "Used for reservoir-related data structures, likely including `res_dat` where resolved indices are stored.",
      "res_salt_module": "Supplies the `res_salt_data` array containing salt names used to resolve the `salt` field from the input file.",
      "res_cs_module": "Likely provides additional constituent salt related data structures, complementing `res_cs_data`."
-    }
-   }
-  },
-  "rout_unit.def": {
-   "file_name": "rout_unit.def",
-   "origin": "overlay-only",
-   "columns": [],
-   "doc": {
-    "reader_source": "ru_read_elements.f90",
-    "primary_target": "`ru_def(:)` (array of `type routing_unit_data`)",
-    "summary": [
-     "The file `rout_unit.def` defines routing units (RUs) in the model, specifying their names and the elements (subbasin elements) they contain.",
-     "It is an optional input file, checked for existence before reading.",
-     "The reader `ru_read_elements` loads this file and stores its data into the `ru_def` array of `type routing_unit_data`."
-    ],
-    "layout_notes": "The file consists of records defining routing units, each with a name, total number of elements, and a list of element indices pointing to subbasin elements. The Fortran reader maps each record into an element of the `ru_def` array of `type routing_unit_data`.",
-    "module_usage": {
-     "hydrograph_module": "Provides the derived type `routing_unit_data` and the arrays `ru_def`, `ru_elem`, and related counters used to store routing unit and element data.",
-     "input_file_module": "Supplies the `in_ru` input file paths, including `in_ru%ru_def` for the routing unit definition file.",
-     "maximum_data_module": "Provides maximum counts such as `db_mx%ru_elem` and `db_mx%dr_om` used for array sizing and loops.",
-     "dr_module": "Provides the delivery ratio database `dr_db` and related arrays used to crosswalk delivery ratio names to delivery ratio objects."
     }
    }
   },

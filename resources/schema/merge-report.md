@@ -2,10 +2,10 @@
 
 - SWAT+ version: **62.0.0**
 - Overlays repo: tugraskan/swatplus-doc-builder
-- Tables enriched directly: **106**
+- Tables enriched directly: **107**
 - Tables enriched by parent inheritance: **19**
-- Overlay-only tables added: **85**
-- Schema tables with no overlay: **105**
+- Overlay-only tables added: **84**
+- Schema tables with no overlay: **112**
 
 > Columns are enriched only when they match an overlay row by name identity (file header or the Fortran field name in the overlay `target`). Position-based matching is intentionally not used: the editor schema's column order does not reliably match the file's physical read order, so a column that matches neither name is left unenriched rather than risk a wrong doc.
 
@@ -86,6 +86,7 @@
 | `plants.plt` | `plants.plt` | 8/57 |
 | `print.prt` | `print.prt` | 11/15 |
 | `reservoir.res` | `reservoir.res` | 5/8 |
+| `rout-unit.def` | `rout_unit.def` | 1/13 |
 | `rout-unit.ele` | `rout_unit.ele` | 3/7 |
 | `rout-unit.rtu` | `rout_unit.rtu` | 2/6 |
 | `salt-aqu.ini` | `salt_aqu.ini` | 1/15 |
@@ -212,7 +213,6 @@
 - `res_rel.dtl`
 - `rescell.gw`
 - `reservoir.res_cs`
-- `rout_unit.def`
 - `satbuffer.str`
 - `scen_dtl.upd`
 - `scen_lu.dtl`
@@ -234,6 +234,7 @@
 
 ## Schema tables with no overlay (no enrichment)
 
+- `aquifer.con`
 - `atmo-cli-sta-value.txt`
 - `atmo-cli.sta`
 - `atmo.cli`
@@ -241,6 +242,7 @@
 - `basin-crop-yld.yr`
 - `chan-aqu-lin.ob`
 - `chan-aqu.lin`
+- `chandeg.con`
 - `con.out`
 - `con.txt`
 - `cons-prac.lum`
@@ -291,21 +293,26 @@
 - `gwflow.zone`
 - `hmet-water-ini.item`
 - `hmet-water.ini`
+- `hru.con`
 - `hyd.base`
 - `metals.mtl`
 - `mgt.out`
+- `outlet.con`
 - `pesticide.pst`
 - `plant-parms.cal`
 - `print-prt-aa.int`
 - `project-config.txt`
 - `pts-no-type.base`
 - `pts.base`
+- `recall.con`
 - `recall.dat`
 - `recall.rec`
 - `region-def.elem`
 - `region.def`
 - `region.ele`
+- `reservoir.con`
 - `rout-unit.dr`
+- `rout_unit.con`
 - `salt-irrigation.txt`
 - `salt-module.txt`
 - `salt-plants-flags.txt`
@@ -417,6 +424,7 @@ _These columns are in an enriched file but their name matched no overlay row (th
 | `plants.plt` | `id`, `name`, `plnt_typ`, `gro_trig`, `bm_e`, `harv_idx`, `lai_pot`, `frac_hu1`, `lai_max1`, `frac_hu2`, `lai_max2`, `hu_lai_decl`, `can_ht_max`, `rt_dp_max`, `tmp_opt`, `tmp_base`, `frac_n_yld`, `frac_p_yld`, `frac_n_em`, `frac_n_50`, `frac_n_mat`, `frac_p_em`, `frac_p_50`, `frac_p_mat`, `harv_idx_ws`, `usle_c_min`, `stcon_max`, `vpd`, `frac_stcon`, `ru_vpd`, `bm_e_hi`, `plnt_decomp`, `lai_min`, `bm_tree_acc`, `yrs_mat`, `bm_tree_max`, `ext_co`, `leaf_tov_mn`, `leaf_tov_mx`, `rt_st_beg`, `rt_st_end`, `plnt_pop1`, `frac_lai1`, `plnt_pop2`, `frac_lai2`, `frac_sw_gro`, `wnd_dead`, `wnd_flat`, `description` |
 | `print.prt` | `id`, `interval`, `dbout`, `soilout` |
 | `reservoir.res` | `id`, `rel`, `description` |
+| `rout-unit.def` | `id`, `elem_tot`, `elem1`, `elem2`, `elem3`, `elem4`, `elem5`, `elem6`, `elem7`, `elem8`, `elem9`, `elem10` |
 | `rout-unit.ele` | `rtu`, `obj_typ`, `obj_id`, `dlr` |
 | `rout-unit.rtu` | `id`, `dlr`, `topo`, `description` |
 | `salt-aqu.ini` | `id`, `so4`, `ca`, `mg`, `na`, `k`, `cl`, `co3`, `hco3`, `caco3`, `mgco3`, `caso4`, `mgso4`, `nacl` |
