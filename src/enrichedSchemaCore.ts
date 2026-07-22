@@ -132,6 +132,72 @@ export function renderColumnDocLines(doc: ColumnDoc | undefined): string[] {
     return lines;
 }
 
+// --- Output-file schema (from output-family overlays) ---------------------
+
+export interface OutputColumnDoc {
+    description?: string;
+    units?: string;
+    source_field?: string;
+}
+
+export interface OutputFileDoc {
+    family?: string;
+    summary?: string;
+    columns?: { [column: string]: OutputColumnDoc };
+}
+
+export interface OutputSchemaFile {
+    enrichment?: { swatplus_version?: string };
+    files?: { [stem: string]: OutputFileDoc };
+}
+
+/** Strip a `.txt`/`.csv` extension and lowercase, yielding the output-file stem. */
+export function outputFileStem(fileName: string): string {
+    return fileName.replace(/\.(txt|csv)$/i, '').toLowerCase();
+}
+
+/**
+ * Indexed, read-only view over the output-file schema. Keyed by output-file stem
+ * (the name without `.txt`/`.csv`), since those pairs share a column layout.
+ */
+export class OutputSchemaIndex {
+    private version: string | undefined;
+    private files = new Map<string, OutputFileDoc>();
+
+    constructor(data: OutputSchemaFile | null | undefined) {
+        if (!data) {
+            return;
+        }
+        this.version = data.enrichment?.swatplus_version;
+        for (const [stem, doc] of Object.entries(data.files || {})) {
+            this.files.set(stem.toLowerCase(), doc);
+        }
+    }
+
+    public isAvailable(): boolean {
+        return this.files.size > 0;
+    }
+
+    public getSwatplusVersion(): string | undefined {
+        return this.version;
+    }
+
+    public getFileDoc(fileName: string): OutputFileDoc | undefined {
+        return this.files.get(outputFileStem(fileName));
+    }
+
+    public getColumnDoc(fileName: string, column: string): OutputColumnDoc | undefined {
+        const file = this.files.get(outputFileStem(fileName));
+        if (!file?.columns) {
+            return undefined;
+        }
+        // Exact, then case-insensitive.
+        return file.columns[column]
+            ?? file.columns[Object.keys(file.columns).find(
+                k => k.toLowerCase() === column.toLowerCase()) ?? ''];
+    }
+}
+
 /**
  * Build a plain-text (newline-separated) documentation snippet for a column,
  * suitable for an HTML `title=` tooltip attribute. Returns '' when no doc.
@@ -159,6 +225,28 @@ export function columnDocTooltip(doc: ColumnDoc | undefined): string {
     }
     if (doc.source_ref) {
         parts.push(`Source: ${doc.source_ref}`);
+    }
+    return parts.join('\n');
+}
+
+/** Plain-text tooltip for an output column (description, units, source field). */
+export function outputColumnDocTooltip(doc: OutputColumnDoc | undefined): string {
+    if (!doc) {
+        return '';
+    }
+    const parts: string[] = [];
+    if (doc.description) {
+        parts.push(doc.description);
+    }
+    const facts: string[] = [];
+    if (doc.units) {
+        facts.push(`Units: ${doc.units}`);
+    }
+    if (doc.source_field) {
+        facts.push(`Field: ${doc.source_field}`);
+    }
+    if (facts.length > 0) {
+        parts.push(facts.join('  '));
     }
     return parts.join('\n');
 }

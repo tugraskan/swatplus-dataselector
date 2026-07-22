@@ -5,6 +5,9 @@ import {
     EnrichedSchemaIndex,
     renderColumnDocLines,
     columnDocTooltip,
+    OutputSchemaIndex,
+    outputFileStem,
+    outputColumnDocTooltip,
 } from '../enrichedSchemaCore';
 
 suite('Enriched schema core', () => {
@@ -112,5 +115,65 @@ suite('Enriched schema core', () => {
         // the id column must never carry a non-id doc (regression guard)
         const codesId = idx.getColumnDoc('codes.bsn', 'id');
         assert.strictEqual(codesId, undefined);
+    });
+});
+
+suite('Output schema core', () => {
+
+    test('outputFileStem strips .txt/.csv and lowercases', () => {
+        assert.strictEqual(outputFileStem('aquifer_day.txt'), 'aquifer_day');
+        assert.strictEqual(outputFileStem('AQUIFER_DAY.CSV'), 'aquifer_day');
+        assert.strictEqual(outputFileStem('hru_wb_mon'), 'hru_wb_mon');
+    });
+
+    test('lookup by file resolves .txt and .csv to the same entry', () => {
+        const idx = new OutputSchemaIndex({
+            enrichment: { swatplus_version: '62.0.0' },
+            files: {
+                'aquifer_day': {
+                    family: 'aquifer_*',
+                    summary: 'aquifer budget',
+                    columns: {
+                        flo: { description: 'lateral flow from aquifer', units: 'mm',
+                               source_field: 'aqu_*(iaq)%flo' },
+                    },
+                },
+            },
+        });
+        assert.strictEqual(idx.isAvailable(), true);
+        assert.strictEqual(idx.getFileDoc('aquifer_day.txt')?.family, 'aquifer_*');
+        assert.strictEqual(idx.getFileDoc('aquifer_day.csv')?.summary, 'aquifer budget');
+        assert.strictEqual(idx.getColumnDoc('aquifer_day.txt', 'flo')?.units, 'mm');
+        // case-insensitive column lookup
+        assert.strictEqual(idx.getColumnDoc('aquifer_day.csv', 'FLO')?.units, 'mm');
+        assert.strictEqual(idx.getColumnDoc('aquifer_day.txt', 'nope'), undefined);
+        assert.strictEqual(idx.getFileDoc('unknown_day.txt'), undefined);
+    });
+
+    test('outputColumnDocTooltip is plain text with description and facts', () => {
+        const tip = outputColumnDocTooltip({
+            description: 'lateral flow from aquifer', units: 'mm',
+            source_field: 'aqu_*(iaq)%flo',
+        });
+        assert.ok(tip.startsWith('lateral flow from aquifer'));
+        assert.ok(tip.includes('Units: mm'));
+        assert.ok(tip.includes('Field: aqu_*(iaq)%flo'));
+        assert.ok(!tip.includes('**'));
+        assert.strictEqual(outputColumnDocTooltip(undefined), '');
+    });
+
+    test('the shipped output schema loads and documents known columns', () => {
+        const shipped = path.join(
+            __dirname, '..', '..', 'resources', 'schema',
+            'swatplus-output-schema.json');
+        if (!fs.existsSync(shipped)) {
+            return;
+        }
+        const idx = new OutputSchemaIndex(
+            JSON.parse(fs.readFileSync(shipped, 'utf-8')));
+        assert.strictEqual(idx.isAvailable(), true);
+        const flo = idx.getColumnDoc('aquifer_day.txt', 'flo');
+        assert.ok(flo, 'expected a doc for aquifer_day flo');
+        assert.strictEqual(flo?.units, 'mm');
     });
 });

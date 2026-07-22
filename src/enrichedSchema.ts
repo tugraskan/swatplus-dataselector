@@ -19,21 +19,33 @@ import {
     ColumnDoc,
     FileDoc,
     renderColumnDocLines,
+    OutputSchemaIndex,
+    OutputSchemaFile,
+    OutputFileDoc,
+    OutputColumnDoc,
 } from './enrichedSchemaCore';
 
-export { ColumnDoc, FileDoc, columnDocTooltip } from './enrichedSchemaCore';
+export {
+    ColumnDoc, FileDoc, OutputFileDoc, OutputColumnDoc,
+    columnDocTooltip, outputColumnDocTooltip,
+} from './enrichedSchemaCore';
 
 const ENRICHED_FILENAME = 'swatplus-schema-enriched.json';
+const OUTPUT_FILENAME = 'swatplus-output-schema.json';
 
 export class EnrichedSchemaProvider {
     private index: EnrichedSchemaIndex;
+    private outputIndex: OutputSchemaIndex;
 
     constructor(private context: vscode.ExtensionContext) {
-        this.index = new EnrichedSchemaIndex(this.loadData());
+        this.index = new EnrichedSchemaIndex(
+            this.loadData(ENRICHED_FILENAME, 'enriched schema'));
+        this.outputIndex = new OutputSchemaIndex(
+            this.loadData(OUTPUT_FILENAME, 'output schema'));
     }
 
-    /** Resolve the enriched schema path: user schemaDirectories first, then the shipped copy. */
-    private resolvePath(): string | undefined {
+    /** Resolve a schema file: user schemaDirectories first, then the shipped copy. */
+    private resolvePath(fileName: string): string | undefined {
         const config = vscode.workspace.getConfiguration('swatplus');
         const dirs = config.get<string[]>('schemaDirectories', []) || [];
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -41,25 +53,25 @@ export class EnrichedSchemaProvider {
             const resolved = workspaceFolder
                 ? dir.replace('${workspaceFolder}', workspaceFolder)
                 : dir;
-            const candidate = path.join(resolved, ENRICHED_FILENAME);
+            const candidate = path.join(resolved, fileName);
             if (fs.existsSync(candidate)) {
                 return candidate;
             }
         }
         const shipped = path.join(
-            this.context.extensionPath, 'resources', 'schema', ENRICHED_FILENAME);
+            this.context.extensionPath, 'resources', 'schema', fileName);
         return fs.existsSync(shipped) ? shipped : undefined;
     }
 
-    private loadData(): EnrichedSchemaFile | null {
+    private loadData<T>(fileName: string, label: string): T | null {
         try {
-            const enrichedPath = this.resolvePath();
-            if (!enrichedPath) {
+            const filePath = this.resolvePath(fileName);
+            if (!filePath) {
                 return null;
             }
-            return JSON.parse(fs.readFileSync(enrichedPath, 'utf-8'));
+            return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
         } catch (error) {
-            console.log(`Failed to load enriched SWAT+ schema: ${error}`);
+            console.log(`Failed to load SWAT+ ${label}: ${error}`);
             return null;
         }
     }
@@ -69,7 +81,7 @@ export class EnrichedSchemaProvider {
     }
 
     public getSwatplusVersion(): string | undefined {
-        return this.index.getSwatplusVersion();
+        return this.index.getSwatplusVersion() ?? this.outputIndex.getSwatplusVersion();
     }
 
     public getFileDoc(fileName: string): FileDoc | undefined {
@@ -78,6 +90,16 @@ export class EnrichedSchemaProvider {
 
     public getColumnDoc(fileName: string, columnName: string): ColumnDoc | undefined {
         return this.index.getColumnDoc(fileName, columnName);
+    }
+
+    // --- Output-file documentation ---
+
+    public getOutputFileDoc(fileName: string): OutputFileDoc | undefined {
+        return this.outputIndex.getFileDoc(fileName);
+    }
+
+    public getOutputColumnDoc(fileName: string, column: string): OutputColumnDoc | undefined {
+        return this.outputIndex.getColumnDoc(fileName, column);
     }
 }
 
