@@ -151,6 +151,11 @@
         "command": "swat-dataset-selector.describeEntity",
         "title": "SWAT+: Describe Entity",
         "icon": "$(info)"
+      },
+      {
+        "command": "swat-dataset-selector.searchDataset",
+        "title": "SWAT+: Search Dataset",
+        "icon": "$(search)"
       }
     ],
     "menus": {

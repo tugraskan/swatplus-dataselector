@@ -2,6 +2,17 @@
 
 **Theme:** user value · **Effort:** M · **Priority:** medium
 
+> **Status: implemented.** `src/datasetQuery.ts` (vscode-free) lifts the output
+> explorer's operator model into a testable evaluator with `queryRows` /
+> `findOrphans` / `renderQueryResult`. Exposed via `SwatDatasetEngine`
+> (`queryRows` / `findOrphans`), a new **SWAT+: Search Dataset** command
+> (predicate flow or orphan mode), and MCP tools `query_rows` / `find_orphans`.
+> Results are bounded (default 100). Validated on the real Ames_sub1 dataset:
+> `query_rows(hru, soil=soil_02)` finds hru0002; `find_orphans(soils.sol)` flags
+> the unused soils. The shared engine-tools refactor (folding these + the other
+> tools into one module reused by MCP and the future chat participant) is deferred
+> to Plan 03.
+
 ## Why
 
 Modelers constantly ask locational questions: *"which HRUs use soil X?"*, *"list

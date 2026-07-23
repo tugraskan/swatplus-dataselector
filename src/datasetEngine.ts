@@ -23,6 +23,13 @@ import {
     mergeIncomingReferences,
     ENTITY_FILE_ALIASES,
 } from './datasetEngineCore';
+import {
+    Predicate,
+    QueryOptions,
+    queryRows,
+    findOrphans,
+    renderQueryResult,
+} from './datasetQuery';
 
 export class SwatIndexerDatasetModel implements DatasetModel {
     constructor(private indexer: SwatIndexer) {}
@@ -153,4 +160,36 @@ export class SwatDatasetEngine {
     lookupDocs(file: string, column?: string): string {
         return lookupDocs(this.docs, file, column);
     }
+
+    /** Rows in a table matching predicates, rendered as compact markdown. */
+    queryRows(table: string, predicates: Predicate[], options?: QueryOptions): string {
+        const fileName = this.model.getFileName(table) ?? table;
+        const result = queryRows(this.model, table, predicates, options);
+        const heading = predicates.length
+            ? `rows matching ${describePredicates(predicates, options?.match ?? 'all')}`
+            : 'rows';
+        return renderQueryResult(result, fileName, heading);
+    }
+
+    /** Rows in a table that nothing references (unused), rendered as markdown. */
+    findOrphans(table: string, limit?: number): string {
+        const fileName = this.model.getFileName(table) ?? table;
+        const result = findOrphans(this.model, table, { limit });
+        return renderQueryResult(result, fileName, 'unreferenced (orphan) rows');
+    }
+
+    getModel(): SwatIndexerDatasetModel {
+        return this.model;
+    }
+}
+
+/** Human-readable summary of a predicate list, for result headings. */
+function describePredicates(predicates: Predicate[], match: 'all' | 'any'): string {
+    const parts = predicates.map(p => {
+        const not = p.negate ? 'NOT ' : '';
+        return p.operator === 'is_empty'
+            ? `${not}${p.column} is empty`
+            : `${not}${p.column} ${p.operator} ${p.value ?? ''}`.trim();
+    });
+    return parts.join(match === 'any' ? ' OR ' : ' AND ');
 }

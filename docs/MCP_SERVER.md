@@ -23,6 +23,8 @@ the same enriched schemas the extension uses for hovers and diagnostics.
 | `find_references` | `entity`, `id` | Rows that reference the entity (reverse lookup) |
 | `lookup_docs` | `file`, `column?` | Documentation for a file or column (works with no dataset) |
 | `list_entities` | `entity`, `limit?` | Ids/names in an entity table, to discover what to describe |
+| `query_rows` | `entity`, `predicates[]`, `match?`, `limit?` | Rows matching column predicates (equals/contains/gt/gte/lt/lte/in/is_empty, AND/OR) |
+| `find_orphans` | `entity`, `limit?` | Rows nothing references (unused/dead data) |
 
 `entity` accepts an entity kind (`hru`, `aquifer`, `channel`, `reservoir`,
 `wetland`, `plant`, `soil`), a file name (`hru-data.hru`), or a table name.

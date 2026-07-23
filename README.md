@@ -93,6 +93,8 @@ After pulling updates, reload VS Code so the latest extension bundle is active.
 - `SWAT+: View Tables` - Open the multi-table viewer.
 - `SWAT+: Edit / Create Schema` - Open the schema editor.
 - `SWAT+: Show Dependency Graph` - Open a graph of table-to-table dependencies.
+- `SWAT+: Describe Entity` - Describe an entity (e.g. `hru 81`) — its columns, connections, and references.
+- `SWAT+: Search Dataset` - Find rows by column predicate (e.g. `slope > 0.1`) or list unreferenced (orphan) rows.
 
 **Data quality**
 

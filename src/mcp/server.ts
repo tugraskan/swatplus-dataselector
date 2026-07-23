@@ -34,6 +34,7 @@ import {
     ENTITY_FILE_ALIASES,
 } from '../datasetEngineCore';
 import { EnrichedSchemaIndex, OutputSchemaIndex } from '../enrichedSchemaCore';
+import { queryRows, findOrphans, renderQueryResult } from '../datasetQuery';
 
 interface CliArgs {
     index?: string;
@@ -189,6 +190,52 @@ function main(): void {
         const file = model.getFileName(table) ?? table;
         const more = rows.length > ids.length ? ` (of ${rows.length})` : '';
         return textResult(`# ${file}: ${ids.length}${more} ids\n\n${ids.join(', ')}`);
+    });
+
+    const operatorEnum = z.enum(['equals', 'contains', 'gt', 'gte', 'lt', 'lte', 'in', 'is_empty']);
+
+    server.registerTool('query_rows', {
+        title: 'Query rows in a SWAT+ table',
+        description: 'Find rows in a table matching one or more column predicates. '
+            + 'Operators: equals, contains, gt, gte, lt, lte, in (comma-separated), is_empty. '
+            + 'Example: entity="channel.cha", predicates=[{column:"slope",operator:"gt",value:"0.1"}].',
+        inputSchema: {
+            entity: z.string().describe('Entity kind, file name, or table name'),
+            predicates: z.array(z.object({
+                column: z.string(),
+                operator: operatorEnum,
+                value: z.string().optional(),
+                negate: z.boolean().optional(),
+            })).describe('Column predicates to match'),
+            match: z.enum(['all', 'any']).optional().describe('Combine predicates with all (AND) or any (OR); default all'),
+            limit: z.number().int().positive().max(1000).optional().describe('Max rows (default 100)'),
+        },
+    }, async ({ entity, predicates, match, limit }) => {
+        const { table, hint } = resolve(entity);
+        if (!table) {
+            return textResult(hint!);
+        }
+        const fileName = model.getFileName(table) ?? table;
+        const result = queryRows(model, table, predicates, { match, limit });
+        return textResult(renderQueryResult(result, fileName, 'matching rows'));
+    });
+
+    server.registerTool('find_orphans', {
+        title: 'Find unreferenced rows in a SWAT+ table',
+        description: 'List rows in a table that nothing references — candidates for unused/dead '
+            + 'data. Example: entity="soils.sol".',
+        inputSchema: {
+            entity: z.string().describe('Entity kind, file name, or table name'),
+            limit: z.number().int().positive().max(1000).optional().describe('Max rows (default 100)'),
+        },
+    }, async ({ entity, limit }) => {
+        const { table, hint } = resolve(entity);
+        if (!table) {
+            return textResult(hint!);
+        }
+        const fileName = model.getFileName(table) ?? table;
+        const result = findOrphans(model, table, { limit });
+        return textResult(renderQueryResult(result, fileName, 'unreferenced (orphan) rows'));
     });
 
     const transport = new StdioServerTransport();
