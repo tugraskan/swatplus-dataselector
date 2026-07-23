@@ -2,6 +2,14 @@
 
 **Theme:** correctness · **Effort:** S · **Priority:** medium
 
+> **Status: implemented.** `src/versionUtils.ts` (vscode-free, unit-tested) parses
+> and compares versions; `showDocsVersion` in `src/extension.ts` compares the
+> dataset's `file.cio` revision to the docs version and, on a confident major/minor
+> mismatch, colours the status bar as a warning and shows a one-time-per-dataset
+> notice (suppressible, tracked in `workspaceState`). Unknown/patch differences are
+> treated as a match to avoid noise. The preflight-header line (below) was not
+> added.
+
 ## Why
 
 The enriched documentation is pinned to **SWAT+ 62.0.0**

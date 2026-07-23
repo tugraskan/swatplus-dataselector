@@ -13,6 +13,7 @@ import { SwatFKDecorationProvider } from './fkDecorations';
 import { SwatFKHoverProvider } from './fkHoverProvider';
 import { EnrichedSchemaProvider, setSharedEnrichedSchema } from './enrichedSchema';
 import { SwatDatasetEngine } from './datasetEngine';
+import { compareSwatVersions } from './versionUtils';
 import { SwatFKReferencesPanel } from './fkReferencesPanel';
 import { SwatTableViewerPanel } from './tableViewerPanel';
 import { SwatSingleTableViewerPanel } from './singleTableViewerPanel';
@@ -59,13 +60,46 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(docsVersionStatus);
 	const showDocsVersion = (): void => {
 		const version = enrichedSchema.getSwatplusVersion();
-		if (enrichedSchema.isAvailable() && version) {
+		if (!enrichedSchema.isAvailable() || !version) {
+			return;
+		}
+
+		// Compare the docs version to the dataset's own SWAT+ revision (from the
+		// file.cio header). Warn only on a confident mismatch.
+		const header = indexer.getFileCioHeaderInfo();
+		const datasetVersion = header?.swatRevision ?? header?.editorVersion;
+		const drift = compareSwatVersions(datasetVersion, version);
+
+		if (drift === 'major-drift' || drift === 'minor-drift') {
+			docsVersionStatus.text = `$(warning) SWAT+ docs ${version}`;
+			docsVersionStatus.tooltip =
+				`Documentation targets SWAT+ ${version}, but this dataset reports ` +
+				`${datasetVersion}. Some column meanings, units, or defaults may not match.`;
+			docsVersionStatus.backgroundColor =
+				new vscode.ThemeColor('statusBarItem.warningBackground');
+
+			// One dismissable notice per dataset.
+			const datasetKey = indexer.getDatasetPath() ?? 'unknown';
+			const mementoKey = `swatplus.versionDriftDismissed:${datasetKey}`;
+			if (!context.workspaceState.get<boolean>(mementoKey)) {
+				vscode.window.showInformationMessage(
+					`SWAT+ column documentation targets version ${version}, but this dataset ` +
+					`reports ${datasetVersion}. Docs may not perfectly match your dataset.`,
+					"Don't show again"
+				).then(choice => {
+					if (choice === "Don't show again") {
+						context.workspaceState.update(mementoKey, true);
+					}
+				});
+			}
+		} else {
 			docsVersionStatus.text = `$(book) SWAT+ docs ${version}`;
 			docsVersionStatus.tooltip =
 				`Column documentation sourced from SWAT+ ${version} (swatplus-doc-builder). ` +
 				`Hover a column to see its meaning, units, and source.`;
-			docsVersionStatus.show();
+			docsVersionStatus.backgroundColor = undefined;
 		}
+		docsVersionStatus.show();
 	};
 
 	const tryAutoLoadIndex = async (datasetPath: string): Promise<void> => {
