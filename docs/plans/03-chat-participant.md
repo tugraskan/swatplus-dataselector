@@ -2,6 +2,17 @@
 
 **Theme:** user value · **Effort:** M · **Priority:** high
 
+> **Status: implemented.** `src/engineTools.ts` is the shared tool module
+> (`createEngineHost` + `ENGINE_TOOLS`), consumed by both `src/chatParticipant.ts`
+> (the `@swat` participant, with a private-tool calling loop over `request.model`)
+> and the refactored `src/mcp/server.ts` — so the two register the same behavior
+> and can't drift. Registered via `contributes.chatParticipants` in `package.json`.
+> Guardrails: index-not-built check, grounding system prompt, bounded tool rounds.
+> Tests in `src/test/engineTools.test.ts`; MCP re-validated on Ames_sub1 after the
+> refactor. Declarative `languageModelTools` registration (exposing the tools to
+> Copilot agent mode globally) and slash commands were not added — the participant
+> uses private tools instead.
+
 ## Why
 
 The dataset engine (`src/datasetEngineCore.ts`) and MCP server

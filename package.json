@@ -27,6 +27,15 @@
     "swatplus-mcp": "./dist/mcp-server.js"
   },
   "contributes": {
+    "chatParticipants": [
+      {
+        "id": "swatplus.chat",
+        "name": "swat",
+        "fullName": "SWAT+ Dataset",
+        "description": "Ask about your indexed SWAT+ dataset — describe HRUs, find references, search rows, look up column docs",
+        "isSticky": true
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {

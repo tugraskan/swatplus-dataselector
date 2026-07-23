@@ -15,6 +15,14 @@ SWAT+ dataset:
 The server is source-backed by `swatplus-doc-builder` (SWAT+ 62.0.0) and reuses
 the same enriched schemas the extension uses for hovers and diagnostics.
 
+> **In-editor alternative:** the extension also ships a `@swat` chat participant
+> that exposes the identical tool set in the VS Code chat panel, using your
+> configured language model — no MCP setup required. Both the chat participant and
+> this server register the same tools from one shared definition
+> (`src/engineTools.ts`), so they never drift. Use the chat participant for
+> interactive editor use; use this MCP server for external agents (Claude Code,
+> Claude Desktop).
+
 ## Tools
 
 | Tool | Arguments | Returns |

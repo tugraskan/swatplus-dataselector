@@ -14,6 +14,7 @@ import { SwatFKHoverProvider } from './fkHoverProvider';
 import { EnrichedSchemaProvider, setSharedEnrichedSchema } from './enrichedSchema';
 import { SwatDatasetEngine } from './datasetEngine';
 import { compareSwatVersions } from './versionUtils';
+import { registerSwatChatParticipant } from './chatParticipant';
 import { SwatFKReferencesPanel } from './fkReferencesPanel';
 import { SwatTableViewerPanel } from './tableViewerPanel';
 import { SwatSingleTableViewerPanel } from './singleTableViewerPanel';
@@ -39,6 +40,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const enrichedSchema = new EnrichedSchemaProvider(context);
 	setSharedEnrichedSchema(enrichedSchema);
 	const datasetEngine = new SwatDatasetEngine(indexer, enrichedSchema);
+	registerSwatChatParticipant(context, indexer, datasetEngine);
 	const hruProcessorOutput = vscode.window.createOutputChannel('SWAT+ HRU Processor');
 	// Create and register the webview view provider
 	const swatProvider = new SwatDatasetWebviewProvider(context, indexer);

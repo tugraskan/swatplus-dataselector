@@ -30,6 +30,7 @@ import {
     findOrphans,
     renderQueryResult,
 } from './datasetQuery';
+import { EngineToolHost, createEngineHost } from './engineTools';
 
 export class SwatIndexerDatasetModel implements DatasetModel {
     constructor(private indexer: SwatIndexer) {}
@@ -180,6 +181,11 @@ export class SwatDatasetEngine {
 
     getModel(): SwatIndexerDatasetModel {
         return this.model;
+    }
+
+    /** An entity-string-based tool host over this engine's model + docs. */
+    getToolHost(): EngineToolHost {
+        return createEngineHost(this.model, this.docs);
     }
 }
 
