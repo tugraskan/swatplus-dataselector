@@ -20,6 +20,7 @@ vsc-extension-quickstart.md
 
 # Internal development notes and plans (not user-facing)
 PLAN.md
+docs/plans/**
 BUTTON_CLICK_FIX.md
 *_SUMMARY.md
 *_IMPLEMENTATION.md

@@ -160,6 +160,11 @@
         "command": "swat-dataset-selector.describeEntity",
         "title": "SWAT+: Describe Entity",
         "icon": "$(info)"
+      },
+      {
+        "command": "swat-dataset-selector.searchDataset",
+        "title": "SWAT+: Search Dataset",
+        "icon": "$(search)"
       }
     ],
     "menus": {
@@ -208,8 +213,10 @@
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
     "test": "vscode-test",
-    "package:vsix": "npm run package && vsce package --allow-star-activation",
-    "publish:pre-release": "npm run package && vsce publish --pre-release --allow-star-activation"
+    "test:unit": "npm run compile-tests && mocha",
+    "test:python": "python3 -m unittest scripts.test_merge_overlays scripts.test_merge_output_families",
+    "package:vsix": "npm run package && vsce package",
+    "publish:pre-release": "npm run package && vsce publish --pre-release"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",

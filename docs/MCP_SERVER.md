@@ -15,6 +15,14 @@ SWAT+ dataset:
 The server is source-backed by `swatplus-doc-builder` (SWAT+ 62.0.0) and reuses
 the same enriched schemas the extension uses for hovers and diagnostics.
 
+> **In-editor alternative:** the extension also ships a `@swat` chat participant
+> that exposes the identical tool set in the VS Code chat panel, using your
+> configured language model — no MCP setup required. Both the chat participant and
+> this server register the same tools from one shared definition
+> (`src/engineTools.ts`), so they never drift. Use the chat participant for
+> interactive editor use; use this MCP server for external agents (Claude Code,
+> Claude Desktop).
+
 ## Tools
 
 | Tool | Arguments | Returns |
@@ -23,6 +31,8 @@ the same enriched schemas the extension uses for hovers and diagnostics.
 | `find_references` | `entity`, `id` | Rows that reference the entity (reverse lookup) |
 | `lookup_docs` | `file`, `column?` | Documentation for a file or column (works with no dataset) |
 | `list_entities` | `entity`, `limit?` | Ids/names in an entity table, to discover what to describe |
+| `query_rows` | `entity`, `predicates[]`, `match?`, `limit?` | Rows matching column predicates (equals/contains/gt/gte/lt/lte/in/is_empty, AND/OR) |
+| `find_orphans` | `entity`, `limit?` | Rows nothing references (unused/dead data) |
 
 `entity` accepts an entity kind (`hru`, `aquifer`, `channel`, `reservoir`,
 `wetland`, `plant`, `soil`), a file name (`hru-data.hru`), or a table name.
@@ -36,13 +46,33 @@ npm install
 node esbuild.js        # produces dist/extension.js and dist/mcp-server.js
 ```
 
+### Consuming without building (release artifacts)
+
+Downstream consumers don't need to build from source. Each tagged release
+publishes the self-contained server and schemas as assets (see
+`.github/workflows/release.yml`):
+
+- `mcp-server.js` — the bundled, vscode-free server (run with `node mcp-server.js`)
+- `swatplus-schema-enriched.json`, `swatplus-output-schema.json` — the docs
+
+Pin a release tag and download those files. The server finds the schemas
+alongside the bundle automatically; otherwise pass `--schema` / `--output-schema`.
+This is the recommended integration path for external tools (e.g. the SWAT+
+Assistant).
+
 ## Running
 
 The server reads a **pandas index** — the JSON produced by
 `scripts/pandas_indexer.py`. Point it at a prebuilt index, or at a dataset
-directory to have it build one (requires `python3` + `pandas`):
+directory to have it build one (requires `python3` + `pandas`). A dataset is
+optional: with neither flag the server runs in **docs-only mode**, where
+`lookup_docs` works from the shipped schemas and the dataset tools return no
+results.
 
 ```bash
+# Docs-only (lookup_docs works with no dataset)
+node dist/mcp-server.js
+
 # Against a prebuilt index
 node dist/mcp-server.js --index /path/to/index.json
 
