@@ -1,0 +1,8 @@
+{
+  "ui": "tdd",
+  "spec": "out/test/**/*.test.js",
+  "ignore": [
+    "out/test/extension.test.js",
+    "out/test/missingForeignKeyFileIssues.test.js"
+  ]
+}

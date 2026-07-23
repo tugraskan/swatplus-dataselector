@@ -1,4 +1,3 @@
-import * as path from 'path';
 import type { FKReference } from './indexer';
 
 interface FilePointerMetadata {
@@ -18,7 +17,10 @@ export function shouldSuppressUnresolvedFkDiagnostic(
         return false;
     }
 
-    const sourceFileName = path.basename(ref.sourceFile).toLowerCase();
+    // Extract the file name in a separator-agnostic way: node's path.basename is
+    // platform-specific (POSIX ignores '\\'), so a Windows-style path processed on
+    // Linux/WSL — or vice versa — would otherwise fail to match. Split on both.
+    const sourceFileName = (ref.sourceFile.split(/[\\/]/).pop() ?? '').toLowerCase();
     const sourceConfigEntry = Object.entries(filePointerColumns).find(
         ([fileName]) => fileName.toLowerCase() === sourceFileName
     );
