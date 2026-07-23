@@ -2,6 +2,14 @@
 
 **Theme:** polish / performance · **Effort:** XS · **Priority:** medium
 
+> **Status: implemented.** `activationEvents` is now
+> `["workspaceContains:**/file.cio", "onView:swatDatasetView"]` — the extension no
+> longer activates in non-SWAT windows. The explicit `onCommand:*` entries were
+> dropped (VS Code infers command activation from `contributes.commands`), and
+> `--allow-star-activation` was removed from the packaging scripts (confirmed
+> `vsce package` no longer needs it). `activate()` has no startup-time auto-load,
+> so nothing depended on `onStartupFinished`.
+
 ## Problem
 
 `package.json` `activationEvents` starts with `onStartupFinished`, so the extension
