@@ -15,14 +15,6 @@ SWAT+ dataset:
 The server is source-backed by `swatplus-doc-builder` (SWAT+ 62.0.0) and reuses
 the same enriched schemas the extension uses for hovers and diagnostics.
 
-> **In-editor alternative:** the extension also ships a `@swat` chat participant
-> that exposes the identical tool set in the VS Code chat panel, using your
-> configured language model — no MCP setup required. Both the chat participant and
-> this server register the same tools from one shared definition
-> (`src/engineTools.ts`), so they never drift. Use the chat participant for
-> interactive editor use; use this MCP server for external agents (Claude Code,
-> Claude Desktop).
-
 ## Tools
 
 | Tool | Arguments | Returns |
@@ -31,8 +23,6 @@ the same enriched schemas the extension uses for hovers and diagnostics.
 | `find_references` | `entity`, `id` | Rows that reference the entity (reverse lookup) |
 | `lookup_docs` | `file`, `column?` | Documentation for a file or column (works with no dataset) |
 | `list_entities` | `entity`, `limit?` | Ids/names in an entity table, to discover what to describe |
-| `query_rows` | `entity`, `predicates[]`, `match?`, `limit?` | Rows matching column predicates (equals/contains/gt/gte/lt/lte/in/is_empty, AND/OR) |
-| `find_orphans` | `entity`, `limit?` | Rows nothing references (unused/dead data) |
 
 `entity` accepts an entity kind (`hru`, `aquifer`, `channel`, `reservoir`,
 `wetland`, `plant`, `soil`), a file name (`hru-data.hru`), or a table name.

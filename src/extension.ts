@@ -13,8 +13,6 @@ import { SwatFKDecorationProvider } from './fkDecorations';
 import { SwatFKHoverProvider } from './fkHoverProvider';
 import { EnrichedSchemaProvider, setSharedEnrichedSchema } from './enrichedSchema';
 import { SwatDatasetEngine } from './datasetEngine';
-import { compareSwatVersions } from './versionUtils';
-import { registerSwatChatParticipant } from './chatParticipant';
 import { SwatFKReferencesPanel } from './fkReferencesPanel';
 import { SwatTableViewerPanel } from './tableViewerPanel';
 import { SwatSingleTableViewerPanel } from './singleTableViewerPanel';
@@ -40,7 +38,6 @@ export function activate(context: vscode.ExtensionContext) {
 	const enrichedSchema = new EnrichedSchemaProvider(context);
 	setSharedEnrichedSchema(enrichedSchema);
 	const datasetEngine = new SwatDatasetEngine(indexer, enrichedSchema);
-	registerSwatChatParticipant(context, indexer, datasetEngine);
 	const hruProcessorOutput = vscode.window.createOutputChannel('SWAT+ HRU Processor');
 	// Create and register the webview view provider
 	const swatProvider = new SwatDatasetWebviewProvider(context, indexer);
@@ -62,46 +59,13 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(docsVersionStatus);
 	const showDocsVersion = (): void => {
 		const version = enrichedSchema.getSwatplusVersion();
-		if (!enrichedSchema.isAvailable() || !version) {
-			return;
-		}
-
-		// Compare the docs version to the dataset's own SWAT+ revision (from the
-		// file.cio header). Warn only on a confident mismatch.
-		const header = indexer.getFileCioHeaderInfo();
-		const datasetVersion = header?.swatRevision ?? header?.editorVersion;
-		const drift = compareSwatVersions(datasetVersion, version);
-
-		if (drift === 'major-drift' || drift === 'minor-drift') {
-			docsVersionStatus.text = `$(warning) SWAT+ docs ${version}`;
-			docsVersionStatus.tooltip =
-				`Documentation targets SWAT+ ${version}, but this dataset reports ` +
-				`${datasetVersion}. Some column meanings, units, or defaults may not match.`;
-			docsVersionStatus.backgroundColor =
-				new vscode.ThemeColor('statusBarItem.warningBackground');
-
-			// One dismissable notice per dataset.
-			const datasetKey = indexer.getDatasetPath() ?? 'unknown';
-			const mementoKey = `swatplus.versionDriftDismissed:${datasetKey}`;
-			if (!context.workspaceState.get<boolean>(mementoKey)) {
-				vscode.window.showInformationMessage(
-					`SWAT+ column documentation targets version ${version}, but this dataset ` +
-					`reports ${datasetVersion}. Docs may not perfectly match your dataset.`,
-					"Don't show again"
-				).then(choice => {
-					if (choice === "Don't show again") {
-						context.workspaceState.update(mementoKey, true);
-					}
-				});
-			}
-		} else {
+		if (enrichedSchema.isAvailable() && version) {
 			docsVersionStatus.text = `$(book) SWAT+ docs ${version}`;
 			docsVersionStatus.tooltip =
 				`Column documentation sourced from SWAT+ ${version} (swatplus-doc-builder). ` +
 				`Hover a column to see its meaning, units, and source.`;
-			docsVersionStatus.backgroundColor = undefined;
+			docsVersionStatus.show();
 		}
-		docsVersionStatus.show();
 	};
 
 	const tryAutoLoadIndex = async (datasetPath: string): Promise<void> => {
@@ -977,77 +941,6 @@ export function activate(context: vscode.ExtensionContext) {
 		await vscode.commands.executeCommand('markdown.showPreview', doc.uri);
 	});
 
-	// Command: Structured search over the indexed dataset.
-	const searchDatasetCmd = vscode.commands.registerCommand('swat-dataset-selector.searchDataset', async () => {
-		if (!indexer.isIndexBuilt()) {
-			vscode.window.showWarningMessage('Build the inputs index first (SWAT+: Build Inputs Index).');
-			return;
-		}
-		const entity = await vscode.window.showInputBox({
-			title: 'SWAT+: Search Dataset',
-			prompt: 'Table to search — an entity kind (hru), file name (channel.cha), or table name',
-			placeHolder: 'channel.cha',
-			ignoreFocusOut: true,
-		});
-		if (!entity) { return; }
-		const table = datasetEngine.resolveEntityTable(entity);
-		if (!table) {
-			vscode.window.showWarningMessage(`Could not resolve "${entity}" to a SWAT+ table or file.`);
-			return;
-		}
-
-		const mode = await vscode.window.showQuickPick(
-			[
-				{ label: 'Filter by column', value: 'filter' },
-				{ label: 'Find unreferenced (orphan) rows', value: 'orphans' },
-			],
-			{ title: 'Search mode', ignoreFocusOut: true }
-		);
-		if (!mode) { return; }
-
-		let markdown: string;
-		if (mode.value === 'orphans') {
-			markdown = datasetEngine.findOrphans(table);
-		} else {
-			const columns = datasetEngine.getModel().getRows(table)[0]?.values ?? {};
-			const columnNames = Object.keys(columns);
-			if (columnNames.length === 0) {
-				vscode.window.showWarningMessage(`No rows found in ${entity} to search.`);
-				return;
-			}
-			const column = await vscode.window.showQuickPick(columnNames, { title: 'Column', ignoreFocusOut: true });
-			if (!column) { return; }
-			const operator = await vscode.window.showQuickPick(
-				[
-					{ label: 'equals', value: 'equals' as const },
-					{ label: 'contains', value: 'contains' as const },
-					{ label: '> (greater than)', value: 'gt' as const },
-					{ label: '>= (at least)', value: 'gte' as const },
-					{ label: '< (less than)', value: 'lt' as const },
-					{ label: '<= (at most)', value: 'lte' as const },
-					{ label: 'in (comma-separated list)', value: 'in' as const },
-					{ label: 'is empty', value: 'is_empty' as const },
-				],
-				{ title: `Operator for "${column}"`, ignoreFocusOut: true }
-			);
-			if (!operator) { return; }
-			let value: string | undefined;
-			if (operator.value !== 'is_empty') {
-				value = await vscode.window.showInputBox({
-					title: `${column} ${operator.label}`,
-					prompt: 'Value to match',
-					ignoreFocusOut: true,
-				});
-				if (value === undefined) { return; }
-			}
-			markdown = datasetEngine.queryRows(table, [{ column, operator: operator.value, value }]);
-		}
-
-		const doc = await vscode.workspace.openTextDocument({ content: markdown, language: 'markdown' });
-		await vscode.window.showTextDocument(doc, { preview: true });
-		await vscode.commands.executeCommand('markdown.showPreview', doc.uri);
-	});
-
 	// Command: Reveal the configured dataset folder in the VS Code Explorer
 	const revealWorkdataFolder = vscode.commands.registerCommand('swat-dataset-selector.revealWorkdataFolder', async () => {
 		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -1211,7 +1104,6 @@ export function activate(context: vscode.ExtensionContext) {
 		switchDataset,
 		editSchema,
 		describeEntityCmd,
-		searchDatasetCmd,
 		statusBarItem,
 		hruProcessorOutput
 	);
