@@ -23,7 +23,8 @@ const KIND_SOURCE: Record<FileFormatIssueKind, string> = {
     wrong_column_count: 'SWAT+ Format',
     invalid_integer: 'SWAT+ Data Type',
     invalid_decimal: 'SWAT+ Data Type',
-    invalid_boolean: 'SWAT+ Data Type'
+    invalid_boolean: 'SWAT+ Data Type',
+    missing_required_value: 'SWAT+ Data'
 };
 
 export class SwatFileFormatDiagnosticsProvider {

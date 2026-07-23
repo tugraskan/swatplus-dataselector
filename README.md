@@ -35,7 +35,7 @@ schema. It is a two-layer project:
 - **Quick Debug Launch**: Start debugging with the selected dataset as the working directory.
 - **HRU Subsets**: Create a reduced TxtInOut folder for selected HRU IDs, with optional downstream routing preservation.
 - **Output Exploration**: Open `.csv` / `.out` / `.txt` output files as DataFrames and generate Jupyter notebooks from them.
-- **Data Quality**: Run a preflight report of unresolved references and orphan rows, plus an input-file format checker (headers, column counts, data types).
+- **Data Quality**: Run a preflight report of unresolved references and orphan rows, plus an input-file checker for headers, column counts, data types, and **required (non-nullable) values left empty or `null`** — with each warning annotated by the column's documented meaning and units.
 - **Seamless Integration**: Works with CMake Tools and gdb debugger configurations.
 - **Describe Entity / MCP Server**: Ask "describe HRU 81" in the editor, or expose the dataset to an AI agent (Claude Code/Desktop) via a bundled [MCP server](docs/MCP_SERVER.md).
 - **Comprehensive Schema**: Auto-generated schema for all 213 SWAT+ input tables from swatplus-editor.

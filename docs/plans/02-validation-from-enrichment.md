@@ -2,6 +2,14 @@
 
 **Theme:** user value · **Effort:** S–M · **Priority:** high (best ROI right now)
 
+> **Status: partially implemented.** The required-value check
+> (`missing_required_value`) and enriched-doc context on all format-issue messages
+> are done (`src/indexer.ts` validation loop, `formatColumnContext` /
+> `isMissingRequiredValue` in `src/fileFormatUtils.ts`, wired through
+> `src/fileFormatDiagnostics.ts`). Type conformance already existed. **Still open:**
+> range/plausibility hints (§3 below) and the `swatplus.validation.rangeHints`
+> setting.
+
 ## Why
 
 The schema-enrichment work added per-column **units, Fortran types, and defaults**
