@@ -19,23 +19,23 @@
     "ms-toolsai.jupyter"
   ],
   "activationEvents": [
-    "onStartupFinished",
-    "onView:swatDatasetView",
-    "onCommand:swat-dataset-selector.selectDataset",
-    "onCommand:swat-dataset-selector.buildIndex",
-    "onCommand:swat-dataset-selector.loadIndex",
-    "onCommand:swat-dataset-selector.rebuildIndex",
-    "onCommand:swat-dataset-selector.processHruSubset",
-    "onCommand:swat-dataset-selector.processHruSubsetAndRun",
-    "onCommand:swat-dataset-selector.checkInputFiles",
-    "onCommand:swat-dataset-selector.generateOutputNotebooks",
-    "onCommand:swat-dataset-selector.openOutputAsDataFrame"
+    "workspaceContains:**/file.cio",
+    "onView:swatDatasetView"
   ],
   "main": "./dist/extension.js",
   "bin": {
     "swatplus-mcp": "./dist/mcp-server.js"
   },
   "contributes": {
+    "chatParticipants": [
+      {
+        "id": "swatplus.chat",
+        "name": "swat",
+        "fullName": "SWAT+ Dataset",
+        "description": "Ask about your indexed SWAT+ dataset — describe HRUs, find references, search rows, look up column docs",
+        "isSticky": true
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
@@ -160,6 +160,11 @@
         "command": "swat-dataset-selector.describeEntity",
         "title": "SWAT+: Describe Entity",
         "icon": "$(info)"
+      },
+      {
+        "command": "swat-dataset-selector.searchDataset",
+        "title": "SWAT+: Search Dataset",
+        "icon": "$(search)"
       }
     ],
     "menus": {
@@ -208,8 +213,10 @@
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
     "test": "vscode-test",
-    "package:vsix": "npm run package && vsce package --allow-star-activation",
-    "publish:pre-release": "npm run package && vsce publish --pre-release --allow-star-activation"
+    "test:unit": "npm run compile-tests && mocha",
+    "test:python": "python3 -m unittest scripts.test_merge_overlays scripts.test_merge_output_families",
+    "package:vsix": "npm run package && vsce package",
+    "publish:pre-release": "npm run package && vsce publish --pre-release"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
@@ -220,6 +227,7 @@
     "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.27.1",
     "eslint": "^9.39.1",
+    "mocha": "^11.7.6",
     "npm-run-all": "^4.1.5",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.3"

@@ -1,6 +1,33 @@
 import * as assert from 'assert';
-import { analyzeHeaderLine, getPhysicalColumnsForValidation, isAcceptedBooleanLiteral, resolveValidationLayout } from '../fileFormatUtils';
+import { analyzeHeaderLine, getPhysicalColumnsForValidation, isAcceptedBooleanLiteral, resolveValidationLayout, formatColumnContext, isMissingRequiredValue } from '../fileFormatUtils';
 import type { SchemaColumn, SchemaTable } from '../indexer';
+
+suite('Validation helpers (enrichment-backed)', () => {
+    test('formatColumnContext composes meaning and units', () => {
+        assert.strictEqual(
+            formatColumnContext({ description: 'flow from aquifer', units: 'mm' }),
+            ' (flow from aquifer, mm)');
+        assert.strictEqual(
+            formatColumnContext({ description: 'HRU name' }),
+            ' (HRU name)');
+        assert.strictEqual(formatColumnContext({ units: 'mm' }), ' (mm)');
+        assert.strictEqual(formatColumnContext({}), '');
+        assert.strictEqual(formatColumnContext(undefined), '');
+    });
+
+    test('isMissingRequiredValue flags empty and null but not 0 or real data', () => {
+        assert.strictEqual(isMissingRequiredValue('null'), true);
+        assert.strictEqual(isMissingRequiredValue('NULL'), true);
+        assert.strictEqual(isMissingRequiredValue(' '), true);
+        assert.strictEqual(isMissingRequiredValue(''), true);
+        // a literal 0 is real data, not missing
+        assert.strictEqual(isMissingRequiredValue('0'), false);
+        assert.strictEqual(isMissingRequiredValue('0.05'), false);
+        assert.strictEqual(isMissingRequiredValue('clay_loam'), false);
+        // an absent cell is handled by the column-count check, not here
+        assert.strictEqual(isMissingRequiredValue(undefined), false);
+    });
+});
 
 suite('File Format Header Analysis', () => {
     const irrOpsColumns: SchemaColumn[] = [

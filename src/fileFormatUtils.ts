@@ -1,6 +1,42 @@
 import type { FileFormatIssueKind, SchemaColumn, SchemaTable } from './indexer';
+import type { ColumnDoc } from './enrichedSchemaCore';
 
 type HeaderIssueKind = Extract<FileFormatIssueKind, 'missing_header_line' | 'header_column_mismatch'>;
+
+/**
+ * Short "(meaning, units)" suffix for a validation message, drawn from the
+ * enriched column documentation. Returns '' when no doc is available, so callers
+ * can append it unconditionally.
+ */
+export function formatColumnContext(doc: ColumnDoc | undefined): string {
+    if (!doc) {
+        return '';
+    }
+    const parts: string[] = [];
+    if (doc.description) {
+        parts.push(doc.description);
+    }
+    if (doc.units) {
+        parts.push(doc.units);
+    }
+    return parts.length > 0 ? ` (${parts.join(', ')})` : '';
+}
+
+/**
+ * Whether a required (non-nullable) column's cell value should count as missing.
+ *
+ * Only an explicit empty token or a literal `null` counts — a `0` is real data,
+ * and an absent cell (`undefined`) is handled by the column-count check, not here.
+ * This keeps the required-value check high-trust (no false positives on `0` or on
+ * legitimately short rows).
+ */
+export function isMissingRequiredValue(raw: string | undefined): boolean {
+    if (raw === undefined) {
+        return false;
+    }
+    const value = raw.trim().toLowerCase();
+    return value === '' || value === 'null';
+}
 
 const HEADER_ALIASES_BY_FILE: Record<string, Record<string, string>> = {
     'calibration.cal': {

@@ -12,7 +12,8 @@ import * as path from 'path';
 import { spawnSync } from 'child_process';
 import * as os from 'os';
 import { normalizePathForComparison, resolveFileCioPath } from './pathUtils';
-import { getPhysicalColumnsForValidation, isAcceptedBooleanLiteral, resolveValidationLayout } from './fileFormatUtils';
+import { getPhysicalColumnsForValidation, isAcceptedBooleanLiteral, resolveValidationLayout, formatColumnContext, isMissingRequiredValue } from './fileFormatUtils';
+import { getSharedEnrichedSchema } from './enrichedSchema';
 import { CURRENT_INDEX_CACHE_VERSION, isIndexCacheCompatible } from './indexCacheUtils';
 
 // TxtInOut metadata interface
@@ -177,7 +178,8 @@ export type FileFormatIssueKind =
     | 'wrong_column_count'   // A data row has fewer columns than the schema defines
     | 'invalid_integer'      // An IntegerField column contains a non-integer value
     | 'invalid_decimal'      // A DoubleField column contains a non-numeric value
-    | 'invalid_boolean';     // A BooleanField column contains an invalid boolean literal
+    | 'invalid_boolean'      // A BooleanField column contains an invalid boolean literal
+    | 'missing_required_value'; // A required (non-nullable) column is empty or 'null'
 
 /**
  * A single format issue detected in a SWAT+ input file.
@@ -1589,6 +1591,14 @@ export class SwatIndexer {
             const integerColIndices: Array<{ idx: number; name: string }> = [];
             const decimalColIndices: Array<{ idx: number; name: string }> = [];
             const booleanColIndices: Array<{ idx: number; name: string }> = [];
+            // Required (non-nullable) columns whose value must be present and not 'null'.
+            // AutoField ids are database-generated, so they are never "required" in the file.
+            const requiredColIndices: Array<{ idx: number; name: string }> = [];
+
+            // Per-column "(meaning, units)" suffix from the enriched schema, so every
+            // validation message explains what the column is. Built once per file.
+            const enriched = getSharedEnrichedSchema();
+            const columnContext = new Map<string, string>();
 
             physicalColumns.forEach((col, idx) => {
                 const resolvedIdx = validationLayout.columnPositions.get(col.name) ?? idx;
@@ -1600,7 +1610,20 @@ export class SwatIndexer {
                 } else if (col.type === 'BooleanField') {
                     booleanColIndices.push({ idx: resolvedIdx, name: col.name });
                 }
+
+                if (col.nullable === false && col.type !== 'AutoField') {
+                    requiredColIndices.push({ idx: resolvedIdx, name: col.name });
+                }
+
+                if (enriched) {
+                    const ctx = formatColumnContext(enriched.getColumnDoc(fileName, col.name));
+                    if (ctx) {
+                        columnContext.set(col.name, ctx);
+                    }
+                }
             });
+
+            const ctxFor = (name: string): string => columnContext.get(name) ?? '';
 
             let rowIssueCount = 0;
 
@@ -1634,7 +1657,25 @@ export class SwatIndexer {
                     continue; // skip type checks for this malformed row
                 }
 
-                // ── 4b. Integer columns ────────────────────────────────────────
+                // ── 4b. Required (non-nullable) columns ────────────────────────
+                for (const { idx, name } of requiredColIndices) {
+                    if (rowIssueCount >= MAX_ISSUES_PER_FILE) { break; }
+                    if (isMissingRequiredValue(values[idx])) {
+                        issues.push({
+                            file: filePath,
+                            line: i + 1,
+                            column: name,
+                            kind: 'missing_required_value',
+                            message: `Missing required value in ${fileName} at line ${i + 1}, ` +
+                                `column "${name}"${ctxFor(name)}: found "${values[idx] ?? ''}"`,
+                            expected: 'a value',
+                            actual: values[idx] ?? ''
+                        });
+                        rowIssueCount++;
+                    }
+                }
+
+                // ── 4c. Integer columns ────────────────────────────────────────
                 for (const { idx, name } of integerColIndices) {
                     if (rowIssueCount >= MAX_ISSUES_PER_FILE) { break; }
                     const raw = values[idx];
@@ -1649,7 +1690,7 @@ export class SwatIndexer {
                             column: name,
                             kind: 'invalid_integer',
                             message: `Invalid integer value in ${fileName} at line ${i + 1}, ` +
-                                `column "${name}": "${raw}"`,
+                                `column "${name}"${ctxFor(name)}: "${raw}"`,
                             expected: 'integer',
                             actual: raw
                         });
@@ -1657,7 +1698,7 @@ export class SwatIndexer {
                     }
                 }
 
-                // ── 4c. Decimal columns ────────────────────────────────────────
+                // ── 4d. Decimal columns ────────────────────────────────────────
                 for (const { idx, name } of decimalColIndices) {
                     if (rowIssueCount >= MAX_ISSUES_PER_FILE) { break; }
                     const raw = values[idx];
@@ -1670,7 +1711,7 @@ export class SwatIndexer {
                             column: name,
                             kind: 'invalid_decimal',
                             message: `Invalid numeric value in ${fileName} at line ${i + 1}, ` +
-                                `column "${name}": "${raw}"`,
+                                `column "${name}"${ctxFor(name)}: "${raw}"`,
                             expected: 'number',
                             actual: raw
                         });
@@ -1678,7 +1719,7 @@ export class SwatIndexer {
                     }
                 }
 
-                // ── 4d. Boolean columns ────────────────────────────────────────
+                // ── 4e. Boolean columns ────────────────────────────────────────
                 for (const { idx, name } of booleanColIndices) {
                     if (rowIssueCount >= MAX_ISSUES_PER_FILE) { break; }
                     const raw = values[idx];
@@ -1691,7 +1732,7 @@ export class SwatIndexer {
                             column: name,
                             kind: 'invalid_boolean',
                             message: `Invalid boolean value in ${fileName} at line ${i + 1}, ` +
-                                `column "${name}": "${raw}" (expected 0/1, y/n, true/false, or yes/no)`,
+                                `column "${name}"${ctxFor(name)}: "${raw}" (expected 0/1, y/n, true/false, or yes/no)`,
                             expected: '0/1, y/n, true/false, or yes/no',
                             actual: raw
                         });

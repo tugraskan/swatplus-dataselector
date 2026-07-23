@@ -1,0 +1,48 @@
+name: Release
+
+# Publish the standalone MCP server, the enriched schemas, and the vsix as
+# release assets so downstream consumers (e.g. the SWAT+ Assistant) can pin a
+# version and download the files instead of building from source.
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build (extension + MCP server bundles)
+        run: npm run package
+      - name: Package vsix
+        run: npm run package:vsix
+      - name: Stage release assets
+        run: |
+          mkdir -p release-assets
+          cp dist/mcp-server.js release-assets/
+          cp resources/schema/swatplus-schema-enriched.json release-assets/
+          cp resources/schema/swatplus-output-schema.json release-assets/
+          cp swat-dataset-selector-*.vsix release-assets/ || true
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: |
+            release-assets/mcp-server.js
+            release-assets/swatplus-schema-enriched.json
+            release-assets/swatplus-output-schema.json
+            release-assets/*.vsix
