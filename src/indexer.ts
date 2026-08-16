@@ -9,12 +9,13 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { spawnSync } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import * as os from 'os';
 import { normalizePathForComparison, resolveFileCioPath } from './pathUtils';
 import { getPhysicalColumnsForValidation, isAcceptedBooleanLiteral, resolveValidationLayout, formatColumnContext, isMissingRequiredValue } from './fileFormatUtils';
 import { getSharedEnrichedSchema } from './enrichedSchema';
 import { CURRENT_INDEX_CACHE_VERSION, isIndexCacheCompatible } from './indexCacheUtils';
+import { MAX_TRACKED_STALE_FILES, shouldMarkStale } from './indexStalenessUtils';
 
 // TxtInOut metadata interface
 interface TxtInOutMetadata {
@@ -219,13 +220,28 @@ export class SwatIndexer {
     private readonly requiredPythonModules: string[] = ['pandas'];
     private readonly pythonPrereqCacheTtlMs = 10000;
     private pythonPrereqCache?: { checkedAt: number; status: IndexingPrerequisiteStatus };
+    private readonly outputChannel: vscode.OutputChannel;
+    private indexStale = false;
+    private staleFiles: Set<string> = new Set();
 
     constructor(private context: vscode.ExtensionContext) {
+        this.outputChannel = vscode.window.createOutputChannel('SWAT+ Indexer');
+        this.context.subscriptions.push(this.outputChannel);
         const storedSchemaPath = this.context.workspaceState.get<string>('swatplus.schemaPath');
         this.schemaPathOverride = storedSchemaPath || null;
         this.loadSchema();
         this.loadMetadata();
         this.loadGitbookUrls();
+    }
+
+    /** Append a timestamped line to the SWAT+ Indexer output channel. */
+    private log(message: string): void {
+        this.outputChannel.appendLine(`[${new Date().toISOString()}] ${message}`);
+    }
+
+    /** Reveal the indexer output channel (used by error notifications' "Show Details" action). */
+    public showOutput(): void {
+        this.outputChannel.show(true);
     }
 
     private loadSchema(): void {
@@ -623,9 +639,80 @@ export class SwatIndexer {
     }
 
     /**
+     * Run the Python indexer as a detached async process.
+     *
+     * `spawn` (rather than `spawnSync`) keeps the extension host responsive while the
+     * indexer runs, which can take a while on large datasets. The cancellation token is
+     * wired to the child process so the progress notification's Cancel button actually
+     * stops the work instead of only dismissing the notification.
+     */
+    private runPythonIndexer(
+        pythonExecutable: string,
+        args: string[],
+        token?: vscode.CancellationToken
+    ): Promise<{ status: number | null; stdout: string; stderr: string; startError?: Error; cancelled: boolean }> {
+        return new Promise(resolve => {
+            let stdout = '';
+            let stderr = '';
+            let cancelled = false;
+            let settled = false;
+
+            let child: import('child_process').ChildProcessWithoutNullStreams;
+            try {
+                child = spawn(pythonExecutable, args, { windowsHide: true });
+            } catch (err) {
+                resolve({
+                    status: null,
+                    stdout: '',
+                    stderr: '',
+                    startError: err instanceof Error ? err : new Error(String(err)),
+                    cancelled: false
+                });
+                return;
+            }
+
+            const cancelSubscription = token?.onCancellationRequested(() => {
+                cancelled = true;
+                // SIGTERM lets Python unwind; the process is killed outright if it ignores it.
+                child.kill('SIGTERM');
+                setTimeout(() => {
+                    if (!settled && !child.killed) {
+                        child.kill('SIGKILL');
+                    }
+                }, 2000).unref?.();
+            });
+
+            const settle = (result: { status: number | null; stdout: string; stderr: string; startError?: Error }) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                cancelSubscription?.dispose();
+                resolve({ ...result, cancelled });
+            };
+
+            child.stdout.setEncoding('utf-8');
+            child.stderr.setEncoding('utf-8');
+            child.stdout.on('data', chunk => { stdout += chunk; });
+            child.stderr.on('data', chunk => { stderr += chunk; });
+
+            child.on('error', err => {
+                settle({ status: null, stdout, stderr, startError: err });
+            });
+
+            child.on('close', code => {
+                settle({ status: code, stdout, stderr });
+            });
+        });
+    }
+
+    /**
      * Build the index using the pandas helper script for tabular processing
      */
-    private buildIndexWithPandas(datasetPath: string): { success: boolean; tableCount: number; fkCount: number; error?: string } {
+    private async buildIndexWithPandas(
+        datasetPath: string,
+        token?: vscode.CancellationToken
+    ): Promise<{ success: boolean; tableCount: number; fkCount: number; error?: string; cancelled?: boolean }> {
         const scriptPath = path.join(this.context.extensionPath, 'scripts', 'pandas_indexer.py');
         if (!fs.existsSync(scriptPath)) {
             console.log('[Indexer] pandas_indexer.py not found, skipping pandas pipeline');
@@ -655,48 +742,44 @@ export class SwatIndexer {
         console.log(`[Indexer] Attempting pandas-backed indexing via candidates: ${candidates.join(', ')}`);
 
         let lastError: string | undefined;
-        let result: import('child_process').SpawnSyncReturns<string> | null = null;
+        let result: Awaited<ReturnType<typeof this.runPythonIndexer>> | null = null;
 
         for (const pythonExecutable of candidates) {
-            try {
-                console.log(`[Indexer] Trying python executable: ${pythonExecutable}`);
-                // Increase maxBuffer to handle large JSON payloads emitted by the pandas indexer
-                result = spawnSync(pythonExecutable, args, { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 });
-            } catch (err: any) {
-                lastError = err.message || String(err);
-                console.warn(`[Indexer] Failed to start ${pythonExecutable}: ${lastError}`);
-                result = null;
+            if (token?.isCancellationRequested) {
+                return { success: false, tableCount: 0, fkCount: 0, cancelled: true, error: 'Index build cancelled.' };
             }
 
-            if (!result) {
-                continue;
+            console.log(`[Indexer] Trying python executable: ${pythonExecutable}`);
+            const attempt = await this.runPythonIndexer(pythonExecutable, args, token);
+
+            if (attempt.cancelled) {
+                return { success: false, tableCount: 0, fkCount: 0, cancelled: true, error: 'Index build cancelled.' };
             }
 
-            if (result.error) {
+            if (attempt.startError) {
                 // If executable not found, try next candidate
-                lastError = result.error.message;
+                lastError = attempt.startError.message;
                 console.warn(`[Indexer] ${pythonExecutable} start error: ${lastError}`);
                 continue;
             }
 
-            if (result.status === 0) {
+            result = attempt;
+
+            if (attempt.status === 0) {
                 // Success
                 console.log(`[Indexer] pandas pipeline succeeded with ${pythonExecutable}`);
                 break;
-            } else {
-                // Non-zero exit - capture stderr and try next candidate (in case of unexpected executable)
-                lastError = result.stderr || `Exit code ${result.status}`;
-                console.warn(`[Indexer] ${pythonExecutable} exited with code ${result.status}: ${lastError}`);
-                // continue trying other candidates
             }
+
+            // Non-zero exit - capture stderr and try next candidate (in case of unexpected executable)
+            lastError = attempt.stderr || `Exit code ${attempt.status}`;
+            console.warn(`[Indexer] ${pythonExecutable} exited with code ${attempt.status}: ${lastError}`);
+            this.log(`${pythonExecutable} exited with code ${attempt.status}:\n${lastError}`);
+            // continue trying other candidates
         }
 
         if (!result) {
-            return { success: false, tableCount: 0, fkCount: 0, error: `Python not found: tried ${candidates.join(', ')}. Please install Python or set the SWATPLUS_PYTHON environment variable to the Python executable.` };
-        }
-
-        if (result.error) {
-            return { success: false, tableCount: 0, fkCount: 0, error: `Python failed to start: ${result.error.message}` };
+            return { success: false, tableCount: 0, fkCount: 0, error: `Python not found: tried ${candidates.join(', ')}. Please install Python or set the SWATPLUS_PYTHON environment variable to the Python executable. Last error: ${lastError ?? 'none'}` };
         }
 
         if (result.status !== 0) {
@@ -785,28 +868,49 @@ export class SwatIndexer {
             title: 'Building SWAT+ Inputs Index',
             cancellable: true
         }, async (progress, token) => {
+            this.log(`Building index for ${datasetPath}`);
+
             // Use pandas-backed indexing (required)
-            progress.report({ message: 'Indexing files...', increment: 10 });
+            progress.report({ message: 'Reading input files…', increment: 10 });
             const pandasDatasetPath = this.txtInOutPath || datasetPath;
-            const pandasResult = this.buildIndexWithPandas(pandasDatasetPath);
+            const pandasResult = await this.buildIndexWithPandas(pandasDatasetPath, token);
+
+            if (pandasResult.cancelled || token.isCancellationRequested) {
+                this.log('Index build cancelled by user.');
+                vscode.window.showInformationMessage('SWAT+ index build cancelled.');
+                return false;
+            }
+
             if (!pandasResult.success) {
                 const errorDetail = pandasResult.error || 'Unknown error';
-                vscode.window.showErrorMessage(
-                    `Failed to build index: ${errorDetail}. ` +
-                    'Check the Output panel for details.'
-                );
+                this.log(`Index build failed: ${errorDetail}`);
+                void vscode.window
+                    .showErrorMessage(`Failed to build index: ${errorDetail}`, 'Show Details')
+                    .then(choice => {
+                        if (choice === 'Show Details') {
+                            this.showOutput();
+                        }
+                    });
                 return false;
             }
 
             // Parse file.cio after pandas indexing to add it to the index
             // file.cio has a special classification-based format handled separately
-            progress.report({ message: 'Parsing file.cio...', increment: 70 });
+            progress.report({ message: 'Parsing file.cio…', increment: 60 });
             this.parseFileCio();
 
-            progress.report({ message: 'Resolving foreign key references...', increment: 20 });
+            progress.report({ message: 'Resolving foreign key references…', increment: 25 });
             this.resolveFKReferences();
 
+            progress.report({ message: 'Saving index cache…', increment: 5 });
             this.saveIndexCache(datasetPath);
+            this.clearIndexStale();
+
+            const unresolvedCount = this.fkReferences.filter(ref => !ref.resolved).length;
+            this.log(
+                `Index built: ${pandasResult.tableCount} tables, ${this.fkReferences.length} FK references, ` +
+                `${unresolvedCount} unresolved.`
+            );
 
             vscode.window.showInformationMessage(
                 `Index built successfully: ${pandasResult.tableCount} tables, ${this.fkReferences.length} FK references`
@@ -1017,6 +1121,7 @@ export class SwatIndexer {
             }
 
             this.resolveFKReferences();
+            this.clearIndexStale();
 
             await this.context.workspaceState.update(`index:${datasetPath}`, {
                 built: true,
@@ -1155,6 +1260,53 @@ export class SwatIndexer {
      */
     public isIndexBuilt(): boolean {
         return this.index.size > 0;
+    }
+
+    /**
+     * True when input files changed on disk after the index was built, so FK
+     * navigation and diagnostics may no longer match what is in the editor.
+     */
+    public isIndexStale(): boolean {
+        return this.indexStale && this.isIndexBuilt();
+    }
+
+    /** Names of the files that changed since the index was built (capped for display). */
+    public getStaleFiles(): string[] {
+        return Array.from(this.staleFiles);
+    }
+
+    /**
+     * Record that an indexed input file changed on disk. Called by the dataset file
+     * watcher; the sidebar surfaces this as a "rebuild the index" prompt rather than
+     * letting navigation silently drift out of sync with the files.
+     */
+    public markIndexStale(changedFile?: string): void {
+        if (!changedFile) {
+            if (this.isIndexBuilt()) {
+                this.indexStale = true;
+            }
+            return;
+        }
+
+        const stale = shouldMarkStale(changedFile, {
+            indexBuilt: this.isIndexBuilt(),
+            isIndexedFile: filePath => Boolean(this.getTableNameFromFile(filePath))
+        });
+        if (!stale) {
+            return;
+        }
+
+        this.indexStale = true;
+        // Cap the set so a bulk rewrite cannot grow it without bound.
+        if (this.staleFiles.size < MAX_TRACKED_STALE_FILES) {
+            this.staleFiles.add(path.basename(changedFile));
+        }
+    }
+
+    /** Clear the stale marker after a successful build or cache load. */
+    public clearIndexStale(): void {
+        this.indexStale = false;
+        this.staleFiles.clear();
     }
 
     /**

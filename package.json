@@ -168,6 +168,93 @@
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "swat-dataset-selector.launchDebug",
+          "when": "swatplus.hasDataset"
+        },
+        {
+          "command": "swat-dataset-selector.buildIndex",
+          "when": "swatplus.hasDataset"
+        },
+        {
+          "command": "swat-dataset-selector.rebuildIndex",
+          "when": "swatplus.hasIndex"
+        },
+        {
+          "command": "swat-dataset-selector.loadIndex",
+          "when": "swatplus.hasDataset"
+        },
+        {
+          "command": "swat-dataset-selector.exportIndex",
+          "when": "swatplus.hasIndex"
+        },
+        {
+          "command": "swat-dataset-selector.showFKReferences",
+          "when": "swatplus.hasIndex"
+        },
+        {
+          "command": "swat-dataset-selector.showTableViewer",
+          "when": "swatplus.hasIndex"
+        },
+        {
+          "command": "swat-dataset-selector.showDependencyGraph",
+          "when": "swatplus.hasIndex"
+        },
+        {
+          "command": "swat-dataset-selector.runDataQualityPreflight",
+          "when": "swatplus.hasIndex"
+        },
+        {
+          "command": "swat-dataset-selector.checkInputFiles",
+          "when": "swatplus.hasIndex"
+        },
+        {
+          "command": "swat-dataset-selector.describeEntity",
+          "when": "swatplus.hasIndex"
+        },
+        {
+          "command": "swat-dataset-selector.searchDataset",
+          "when": "swatplus.hasIndex"
+        },
+        {
+          "command": "swat-dataset-selector.processHruSubset",
+          "when": "swatplus.hasDataset"
+        },
+        {
+          "command": "swat-dataset-selector.processHruSubsetAndRun",
+          "when": "swatplus.hasDataset"
+        },
+        {
+          "command": "swat-dataset-selector.generateOutputNotebooks",
+          "when": "swatplus.hasDataset"
+        },
+        {
+          "command": "swat-dataset-selector.revealWorkdataFolder",
+          "when": "swatplus.hasDataset"
+        },
+        {
+          "command": "swat-dataset-selector.useAsDataset",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "swat-dataset-selector.buildIndex",
+          "when": "view == swatDatasetView && swatplus.hasDataset",
+          "group": "navigation@1"
+        },
+        {
+          "command": "swat-dataset-selector.showTableViewer",
+          "when": "view == swatDatasetView && swatplus.hasIndex",
+          "group": "navigation@2"
+        },
+        {
+          "command": "swat-dataset-selector.switchDataset",
+          "when": "view == swatDatasetView",
+          "group": "navigation@3"
+        }
+      ],
       "explorer/context": [
         {
           "command": "swat-dataset-selector.openOutputAsDataFrame",

@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
 import { resolveFileCioPath, wslPathToWindows } from './pathUtils';
 import { detectEnvironment, hasWorkspace, isCmakeToolsInstalled, isSwatPlusWorkspace, resolvePathForEnvironment, EnvironmentInfo } from './environmentUtils';
+import { formatStaleSummary } from './indexStalenessUtils';
 
 /**
  * Escapes HTML special characters to prevent XSS attacks
@@ -391,6 +392,15 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
     public getSelectedDataset(): string | undefined {
         return this.selectedDataset;
+    }
+
+    /**
+     * Re-render the view. Called by the dataset file watcher so the inputs/outputs
+     * listing reflects files that a SWAT+ run (or an external edit) just created,
+     * changed, or removed.
+     */
+    public refresh(): void {
+        this._updateWebview();
     }
 
     /** Register a callback invoked whenever the active dataset changes. */
@@ -941,7 +951,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     let backButtonHtmlInputs = '';
                     if (isInSubdirectoryInputs) {
                         backButtonHtmlInputs = `
-                            <div class="txt-item back-item" data-action="navigate-up" data-section="inputs">
+                            <div class="txt-item back-item" role="button" tabindex="0" aria-label="Up to parent directory" data-action="navigate-up" data-section="inputs">
                                 ${svgs.folder}
                                 <div class="recent-item-info">
                                     <div class="recent-item-name">.. (Up to parent directory)</div>
@@ -954,7 +964,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     let backButtonHtmlOutputs = '';
                     if (isInSubdirectoryOutputs) {
                         backButtonHtmlOutputs = `
-                            <div class="txt-item back-item" data-action="navigate-up" data-section="outputs">
+                            <div class="txt-item back-item" role="button" tabindex="0" aria-label="Up to parent directory" data-action="navigate-up" data-section="outputs">
                                 ${svgs.folder}
                                 <div class="recent-item-info">
                                     <div class="recent-item-name">.. (Up to parent directory)</div>
@@ -970,9 +980,12 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         const ext = path.extname(ent.name).toLowerCase();
                         const category = ent.isDirectory() ? 'directory' : categorizeFile(ent.name);
                         const dirCategories = ent.isDirectory() ? getDirCategories(full).join(',') : '';
+                        const itemLabel = ent.isDirectory()
+                            ? `Open folder ${ent.name}`
+                            : `Open ${ent.name} as table`;
                         return `
-                            <div class="txt-item" data-path="${escapeHtml(full)}" data-ext="${escapeHtml(ext)}" data-category="${escapeHtml(category)}" data-isdir="${ent.isDirectory()}" data-dir-categories="${escapeHtml(dirCategories)}" data-section="inputs">
-                                <button class="icon-button txt-close-btn" data-path="${escapeHtml(full)}" title="Close file">
+                            <div class="txt-item" role="button" tabindex="0" aria-label="${escapeHtml(itemLabel)}" data-path="${escapeHtml(full)}" data-ext="${escapeHtml(ext)}" data-category="${escapeHtml(category)}" data-isdir="${ent.isDirectory()}" data-dir-categories="${escapeHtml(dirCategories)}" data-section="inputs">
+                                <button class="icon-button txt-close-btn" data-path="${escapeHtml(full)}" title="Close file" aria-label="Close ${escapeHtml(ent.name)}">
                                     ${svgs.close}
                                 </button>
                                 ${icon}
@@ -989,9 +1002,12 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         const icon = ent.isDirectory() ? svgs.folder : svgs.file;
                         const ext = path.extname(ent.name).toLowerCase();
                         const category = ent.isDirectory() ? 'directory' : 'output';
+                        const outputLabel = ent.isDirectory()
+                            ? `Open folder ${ent.name}`
+                            : `Open output file ${ent.name}`;
                         return `
-                            <div class="txt-item output-item" data-path="${escapeHtml(full)}" data-ext="${escapeHtml(ext)}" data-category="${escapeHtml(category)}" data-isdir="${ent.isDirectory()}" data-section="outputs">
-                                <button class="icon-button txt-close-btn" data-path="${escapeHtml(full)}" title="Close file">
+                            <div class="txt-item output-item" role="button" tabindex="0" aria-label="${escapeHtml(outputLabel)}" data-path="${escapeHtml(full)}" data-ext="${escapeHtml(ext)}" data-category="${escapeHtml(category)}" data-isdir="${ent.isDirectory()}" data-section="outputs">
+                                <button class="icon-button txt-close-btn" data-path="${escapeHtml(full)}" title="Close file" aria-label="Close ${escapeHtml(ent.name)}">
                                     ${svgs.close}
                                 </button>
                                 ${icon}
@@ -1031,7 +1047,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         
                         <!-- Inputs Section -->
                         <div class="dataset-section">
-                            <div class="section-header collapsible" data-section="inputs">
+                            <div class="section-header collapsible" role="button" tabindex="0" aria-label="Toggle inputs section" data-section="inputs">
                                 <span class="collapse-icon">${svgs.chevronDown}</span>
                                 <span class="section-title">📥 Inputs</span>
                                 <span class="badge" id="inputs-badge">${inputEntries.length}</span>
@@ -1042,7 +1058,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                     ${inputsHtml}
                                 </div>
                                 <!-- Categories collapsible sub-section -->
-                                <div class="section-header collapsible" data-section="categories" style="margin:4px 0 0;border-radius:3px;">
+                                <div class="section-header collapsible" role="button" tabindex="0" aria-label="Toggle categories section" data-section="categories" style="margin:4px 0 0;border-radius:3px;">
                                     <span class="collapse-icon">${svgs.chevronDown}</span>
                                     <span class="section-title">🏷️ Categories</span>
                                 </div>
@@ -1071,7 +1087,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         
                         <!-- Outputs Section -->
                         <div class="dataset-section">
-                            <div class="section-header collapsible" data-section="outputs">
+                            <div class="section-header collapsible" role="button" tabindex="0" aria-label="Toggle outputs section" data-section="outputs">
                                 <span class="collapse-icon">${svgs.chevronDown}</span>
                                 <span class="section-title">📤 Outputs</span>
                                 <span class="badge">${outputEntries.length}</span>
@@ -1102,7 +1118,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         }
 
         const recentDatasetsHtml = `<div class="section" id="recent-section">
-                <div class="section-header collapsible" data-section="recent">
+                <div class="section-header collapsible" role="button" tabindex="0" aria-label="Toggle recent datasets section" data-section="recent">
                     <span class="collapse-icon">${svgs.chevronDown}</span>
                     ${svgs.history}
                     <span class="section-title">Recent Datasets</span>
@@ -1110,7 +1126,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 </div>
                 <div class="section-content" id="recent-content">
                     ${this.recentDatasets.slice(0, 5).map(dataset => `
-                        <div class="recent-item" data-path="${escapeHtml(dataset)}">
+                        <div class="recent-item" role="button" tabindex="0" aria-label="Select dataset ${escapeHtml(path.basename(dataset))}" data-path="${escapeHtml(dataset)}">
                             ${svgs.folder}
                             <div class="recent-item-info">
                                 <div class="recent-item-name">${escapeHtml(path.basename(dataset))}</div>
@@ -1153,6 +1169,23 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 : effectiveDatasetDir)
             : 'workdata';
 
+        // Stale-index banner: input files changed on disk after the index was built, so
+        // FK navigation, hovers and diagnostics may point at rows that have moved.
+        const indexIsStale = this.indexer.isIndexStale();
+        const staleFiles = indexIsStale ? this.indexer.getStaleFiles() : [];
+        const staleSummary = formatStaleSummary(staleFiles);
+        const staleIndexBanner = indexIsStale
+            ? `<div class="stale-index-banner" title="${escapeHtml(staleSummary)}">
+                <div class="stale-index-text">
+                    <strong>Index out of date</strong>
+                    <span>${escapeHtml(staleSummary)} Navigation and diagnostics may be inaccurate.</span>
+                </div>
+                <button class="stale-index-rebuild" id="staleRebuildBtn" title="Rebuild the inputs index now">
+                    Rebuild
+                </button>
+               </div>`
+            : '';
+
         const noWorkspaceBanner = !hasWorkspaceOpen
             ? `<div class="no-workspace-banner">
                 <span class="codicon codicon-warning"></span>
@@ -1163,7 +1196,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         const wslMountHtml = ''; // WSL path row removed
 
         const workdataHtml = hasWorkspaceOpen ? `<div class="section" id="workdata-section">
-            <div class="section-header collapsible" data-section="workdata">
+            <div class="section-header collapsible" role="button" tabindex="0" aria-label="Toggle workspace folder section" data-section="workdata">
                 <span class="collapse-icon">${svgs.chevronDown}</span>
                 ${svgs.folder}
                 <span class="section-title" title="${escapeHtml(effectiveDatasetDir || datasetDirLabel)}">Workspace Folder</span>
@@ -1181,7 +1214,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             <div class="section-content" id="workdata-content">
                 <div class="dataset-dir-path" title="${escapeHtml(effectiveDatasetDir || datasetDirLabel)}">${escapeHtml(datasetDirLabel)}</div>
                 ${workdataDatasets.length === 0 ? '' : workdataDatasets.map(p => `
-                    <div class="workdata-item" data-path="${escapeHtml(p)}" title="${escapeHtml(p)}" style="cursor:pointer">
+                    <div class="workdata-item" role="button" tabindex="0" aria-label="Select dataset ${escapeHtml(path.basename(p))}" data-path="${escapeHtml(p)}" title="${escapeHtml(p)}" style="cursor:pointer">
                         ${svgs.folder}
                         <div class="recent-item-info">
                             <div class="recent-item-name">${escapeHtml(path.basename(p))}</div>
@@ -1333,20 +1366,23 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             flex: 1;
         }
 
-        /* Restyle specific buttons: Select Folder (blue) and Debug (green) */
+        /* Restyle specific buttons: Select Folder (blue), Debug (green), Index (purple).
+           The chart colors are theme-provided, so the colour coding survives light,
+           dark and high-contrast themes instead of being fixed brand hexes. The literal
+           values remain as fallbacks for themes that do not define the chart palette. */
         #selectDatasetBtn {
-            background-color: #0A84FF;
-            color: white;
+            background-color: var(--vscode-charts-blue, #0A84FF);
+            color: var(--vscode-button-foreground, white);
         }
 
         #launchDebugBtn {
-            background-color: #16a34a;
-            color: white;
+            background-color: var(--vscode-charts-green, #16a34a);
+            color: var(--vscode-button-foreground, white);
         }
 
         #buildIndexBtn {
-            background-color: #7c3aed;
-            color: white;
+            background-color: var(--vscode-charts-purple, #7c3aed);
+            color: var(--vscode-button-foreground, white);
         }
 
         /* Selected dataset */
@@ -1463,8 +1499,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         .dataset-header-info { max-width: calc(100% - 120px); }
 
         .close-all-btn {
-            background-color: #b91c1c;
-            color: white;
+            background-color: var(--vscode-charts-red, #b91c1c);
+            color: var(--vscode-button-foreground, white);
             border: none;
             padding: 8px 10px;
             border-radius: 6px;
@@ -1659,13 +1695,28 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             display: inline-flex;
         }
 
-        .recent-item:hover .icon-button {
+        .recent-item:hover .icon-button,
+        .recent-item:focus-within .icon-button {
             opacity: 0.7;
         }
 
         .icon-button:hover {
             opacity: 1 !important;
             background-color: var(--vscode-toolbar-hoverBackground);
+        }
+
+        /* Hover-reveal hides these buttons from keyboard users entirely, so anything
+           that receives focus is forced visible and outlined. */
+        .icon-button:focus-visible,
+        .section-header.collapsible:focus-visible,
+        .recent-item:focus-visible,
+        .workdata-item:focus-visible,
+        .txt-item:focus-visible,
+        .action-button:focus-visible,
+        .stale-index-rebuild:focus-visible {
+            opacity: 1 !important;
+            outline: 1px solid var(--vscode-focusBorder);
+            outline-offset: -1px;
         }
 
         #workdata-section .section-header .icon-button {
@@ -1728,6 +1779,45 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         .help-text a:hover {
             text-decoration: underline;
+        }
+
+        /* Stale-index banner */
+        .stale-index-banner {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--vscode-inputValidation-warningBackground, rgba(255,204,0,0.15));
+            border: 1px solid var(--vscode-inputValidation-warningBorder, rgba(255,204,0,0.5));
+            border-radius: 4px;
+            padding: 8px 10px;
+            margin-bottom: 8px;
+            font-size: 11px;
+            color: var(--vscode-foreground);
+            line-height: 1.45;
+        }
+
+        .stale-index-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+            flex: 1;
+        }
+
+        .stale-index-rebuild {
+            flex-shrink: 0;
+            padding: 4px 10px;
+            border-radius: 3px;
+            border: none;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 600;
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+        }
+
+        .stale-index-rebuild:hover {
+            background-color: var(--vscode-button-hoverBackground);
         }
 
         .no-workspace-banner {
@@ -2102,8 +2192,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             flex-shrink: 0;
         }
 
-        .mode-dot.active   { background-color: #16a34a; box-shadow: 0 0 0 2px rgba(22,163,74,0.2); }
-        .mode-dot.partial  { background-color: #d97706; box-shadow: 0 0 0 2px rgba(217,119,6,0.2); }
+        .mode-dot.active   { background-color: var(--vscode-charts-green, #16a34a); box-shadow: 0 0 0 2px rgba(22,163,74,0.2); }
+        .mode-dot.partial  { background-color: var(--vscode-charts-orange, #d97706); box-shadow: 0 0 0 2px rgba(217,119,6,0.2); }
         .mode-dot.inactive { background-color: var(--vscode-descriptionForeground); opacity: 0.4; }
 
         #recent-content {
@@ -2186,6 +2276,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 <body>
     <div class="container">
         ${noWorkspaceBanner}
+        ${staleIndexBanner}
         <div class="actions">
             <div class="button-row">
                 <button class="action-button secondary" id="selectDatasetBtn">
@@ -2330,6 +2421,61 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
                     try { console.log('SWAT webview: DOMContentLoaded - init'); } catch (e) { }
 
+                    // ---- UI state persistence ---------------------------------------
+                    // The extension host rebuilds this view by reassigning webview.html,
+                    // which reloads the document and would otherwise discard every bit of
+                    // client-side state. setState/getState survives those reloads, so
+                    // collapsed sections, category filters, scroll offsets and a
+                    // half-typed HRU list are restored instead of reset on each refresh.
+                    const DEFAULT_UI_STATE = {
+                        collapsedSections: [],
+                        hiddenCategories: [],
+                        scroll: {},
+                        hru: { open: false, ids: '', keepRouting: false },
+                        selectedWindowCollapsed: false
+                    };
+
+                    let uiState;
+                    try {
+                        uiState = Object.assign({}, DEFAULT_UI_STATE, vscode.getState() || {});
+                    } catch (e) {
+                        uiState = Object.assign({}, DEFAULT_UI_STATE);
+                    }
+
+                    function saveUiState(patch) {
+                        uiState = Object.assign({}, uiState, patch || {});
+                        try { vscode.setState(uiState); } catch (e) { /* state is best-effort */ }
+                    }
+
+                    // Scroll containers whose offset is worth preserving across refreshes.
+                    const SCROLL_KEYS = ['selected-files-content', 'output-files-content', 'recent-content', 'categories-content'];
+
+                    function restoreScrollPositions() {
+                        const saved = uiState.scroll || {};
+                        SCROLL_KEYS.forEach(key => {
+                            const el = document.getElementById(key);
+                            if (el && typeof saved[key] === 'number') {
+                                el.scrollTop = saved[key];
+                            }
+                        });
+                    }
+
+                    function wireScrollPersistence() {
+                        SCROLL_KEYS.forEach(key => {
+                            const el = document.getElementById(key);
+                            if (!el) { return; }
+                            let pending = null;
+                            el.addEventListener('scroll', () => {
+                                if (pending) { clearTimeout(pending); }
+                                pending = setTimeout(() => {
+                                    const scroll = Object.assign({}, uiState.scroll || {});
+                                    scroll[key] = el.scrollTop;
+                                    saveUiState({ scroll: scroll });
+                                }, 150);
+                            });
+                        });
+                    }
+
                     try {
                         window.addEventListener('message', (ev) => {
                             try { console.log('SWAT webview: received message from host', ev && ev.data); } catch (e) { }
@@ -2383,34 +2529,17 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             // Safe lookup to avoid null errors in webview script
             const $ = id => document.getElementById(id);
 
-            // Button click handlers (guarded)
-            const selectBtn = $('selectDatasetBtn');
-            if (selectBtn) selectBtn.addEventListener('click', () => {
-                swatHost.postMessage({ type: 'selectDataset' });
-            });
-
-            // 'Select Dataset & Debug' button removed; no handler required.
-
-            const launchBtn = $('launchDebugBtn');
-            if (launchBtn) launchBtn.addEventListener('click', () => {
-                swatHost.postMessage({ type: 'launchDebug' });
-            });
+            // NOTE: Clicks on buttons, list rows and file entries are handled by the
+            // single delegated listener on the document further below. Per-element click
+            // listeners are deliberately NOT added for those — having both meant every
+            // click dispatched twice (two folder pickers, two index builds, files opened
+            // twice). Only handlers the delegated listener does not cover live here.
 
             const openFolderLink = document.getElementById('openFolderLink');
             // openFolderLink only exists in the DOM when no workspace is open (rendered by noWorkspaceBanner)
             if (openFolderLink) openFolderLink.addEventListener('click', (e) => {
                 e.preventDefault();
                 swatHost.postMessage({ type: 'openFolder' });
-            });
-
-            const buildIndexBtn = $('buildIndexBtn');
-            if (buildIndexBtn) buildIndexBtn.addEventListener('click', () => {
-                swatHost.postMessage({ type: 'buildIndex' });
-            });
-
-            const processHruSubsetBtn = $('processHruSubsetBtn');
-            if (processHruSubsetBtn) processHruSubsetBtn.addEventListener('click', () => {
-                submitHruSubset();
             });
 
             function validateHruIds(value) {
@@ -2473,15 +2602,41 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             }
 
             const hruIdsInput = $('hruIdsInput');
+            const hruKeepRoutingCheckbox = $('hruKeepRoutingCheckbox');
+
+            function saveHruState() {
+                const toggle = $('hruPanelToggle');
+                saveUiState({
+                    hru: {
+                        open: toggle ? Boolean(toggle.checked) : false,
+                        ids: hruIdsInput ? String(hruIdsInput.value || '') : '',
+                        keepRouting: hruKeepRoutingCheckbox ? Boolean(hruKeepRoutingCheckbox.checked) : false
+                    }
+                });
+            }
+
             if (hruIdsInput) {
+                // Restore a half-typed HRU list so a background refresh does not wipe it.
+                if (uiState.hru && uiState.hru.ids && !hruIdsInput.value) {
+                    hruIdsInput.value = uiState.hru.ids;
+                    setHruValidation(validateHruIds(hruIdsInput.value));
+                }
                 hruIdsInput.addEventListener('input', () => {
                     setHruValidation(validateHruIds(hruIdsInput.value));
+                    saveHruState();
                 });
                 hruIdsInput.addEventListener('keydown', (event) => {
                     if (event.key === 'Enter') {
                         submitHruSubset();
                     }
                 });
+            }
+
+            if (hruKeepRoutingCheckbox) {
+                if (uiState.hru && uiState.hru.keepRouting) {
+                    hruKeepRoutingCheckbox.checked = true;
+                }
+                hruKeepRoutingCheckbox.addEventListener('change', saveHruState);
             }
 
             const hruPanelToggle = $('hruPanelToggle');
@@ -2494,19 +2649,16 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         hruProcessorContent.classList.add('hidden');
                     }
                 };
-                hruPanelToggle.addEventListener('change', syncHruPanel);
+                // Restore the open/closed state before the first sync.
+                if (uiState.hru && uiState.hru.open && !hruPanelToggle.disabled) {
+                    hruPanelToggle.checked = true;
+                }
+                hruPanelToggle.addEventListener('change', () => {
+                    syncHruPanel();
+                    saveHruState();
+                });
                 syncHruPanel();
             }
-
-            const loadIndexBtn = $('loadIndexBtn');
-            if (loadIndexBtn) loadIndexBtn.addEventListener('click', () => {
-                swatHost.postMessage({ type: 'loadIndex' });
-            });
-
-            const rebuildIndexBtn = $('rebuildIndexBtn');
-            if (rebuildIndexBtn) rebuildIndexBtn.addEventListener('click', () => {
-                swatHost.postMessage({ type: 'rebuildIndex' });
-            });
 
             const schemaSelect = $('schema-select');
             if (schemaSelect) {
@@ -2543,56 +2695,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 });
             }
 
-            // Recent dataset click handlers
-            document.querySelectorAll('.recent-item').forEach(item => {
-                item.addEventListener('click', (e) => {
-                    // Don't trigger if clicking the remove button (guard for text nodes)
-                    const tgt = e.target;
-                    if (tgt && typeof tgt.closest === 'function' && tgt.closest('.remove-btn')) return;
-                    const path = item.dataset.path;
-                    try { console.log('SWAT webview: recent-item clicked', path); } catch (e) {}
-                    swatHost.postMessage({ type: 'selectRecentDataset', path });
-                });
-            });
-
-            // Remove button handlers
-            document.querySelectorAll('.remove-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const path = btn.dataset.path;
-                    try { console.log('SWAT webview: remove-btn clicked', path); } catch (e) {}
-                    swatHost.postMessage({ type: 'removeRecentDataset', path });
-                });
-            });
-
-            // Workdata section: click-to-select items
-            document.querySelectorAll('.workdata-item').forEach(item => {
-                item.addEventListener('click', () => {
-                    const p = item.dataset.path;
-                    if (p) {
-                        try { console.log('SWAT webview: workdata-item clicked', p); } catch (e) {}
-                        swatHost.postMessage({ type: 'selectWorkdataDataset', path: p });
-                    }
-                });
-            });
-
-            // Workdata refresh button
-            const refreshWorkdataBtn = $('refreshWorkdataBtn');
-            if (refreshWorkdataBtn) {
-                refreshWorkdataBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    swatHost.postMessage({ type: 'refreshWorkdata' });
-                });
-            }
-
-            // Dataset folder reveal button
-            const revealWorkdataBtn = $('revealWorkdataBtn');
-            if (revealWorkdataBtn) {
-                revealWorkdataBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    swatHost.postMessage({ type: 'revealWorkdataFolder' });
-                });
-            }
+            // Recent items, workdata items, remove buttons, the workdata refresh and
+            // reveal buttons are all dispatched by the delegated document listener.
 
             // Change Dataset Directory button
             const changeDatasetDirBtn = $('changeDatasetDirBtn');
@@ -2607,18 +2711,26 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             const selectedWindowHeader = $('selected-window-header');
             const selectedWindowBodyWrapper = $('selected-window-body-wrapper');
             if (selectedWindowHeader && selectedWindowBodyWrapper) {
+                const applySelectedWindowCollapsed = (collapsed) => {
+                    selectedWindowBodyWrapper.style.display = collapsed ? 'none' : '';
+                    const collapseIcon = $('selected-window-collapse-icon');
+                    if (collapseIcon) {
+                        collapseIcon.style.transform = collapsed ? 'rotate(-90deg)' : '';
+                    }
+                };
+
+                // Restore the collapsed state chosen before the last refresh.
+                applySelectedWindowCollapsed(Boolean(uiState.selectedWindowCollapsed));
+
                 selectedWindowHeader.addEventListener('click', (e) => {
                     const tgt = e.target;
                     if (tgt && typeof tgt.closest === 'function') {
                         if (tgt.closest('.close-all-btn')) return;
                         if (tgt.closest('#revealDatasetBtn')) return;
                     }
-                    const isCollapsed = selectedWindowBodyWrapper.style.display === 'none';
-                    selectedWindowBodyWrapper.style.display = isCollapsed ? '' : 'none';
-                    const collapseIcon = $('selected-window-collapse-icon');
-                    if (collapseIcon) {
-                        collapseIcon.style.transform = isCollapsed ? '' : 'rotate(-90deg)';
-                    }
+                    const nowCollapsed = selectedWindowBodyWrapper.style.display !== 'none';
+                    applySelectedWindowCollapsed(nowCollapsed);
+                    saveUiState({ selectedWindowCollapsed: nowCollapsed });
                 });
             }
 
@@ -2652,35 +2764,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 });
             }
 
-            // TXT explorer item handlers
+            // TXT explorer items: left-click is handled by the delegated listener; only
+            // the context menu needs a per-item binding.
             document.querySelectorAll('.txt-item').forEach(item => {
-                item.addEventListener('click', (e) => {
-                    // Check if this is a back navigation item
-                    if (item.dataset.action === 'navigate-up') {
-                        const section = item.dataset.section || 'inputs';
-                        try { console.log('SWAT webview: navigate-up clicked, section:', section); } catch (e) {}
-                        swatHost.postMessage({ type: 'navigateUp', section: section });
-                        return;
-                    }
-                    
-                    const p = item.dataset.path;
-                    const isDir = item.dataset.isdir === 'true';
-                    const section = item.dataset.section || 'inputs';
-                    
-                    if (p) {
-                        if (isDir) {
-                            // Navigate into directory
-                            try { console.log('SWAT webview: navigate to directory', p, 'section:', section); } catch (e) {}
-                            swatHost.postMessage({ type: 'navigateToDirectory', path: p, section: section });
-                        } else {
-                            // Open file - pass section to distinguish inputs from outputs
-                            try { console.log('SWAT webview: txt-item clicked', p, 'section:', section); } catch (e) {}
-                            swatHost.postMessage({ type: 'openFile', path: p, section: section });
-                        }
-                    }
-                });
-                
-                // Context menu handler for all items
                 item.addEventListener('contextmenu', (e) => {
                     e.preventDefault();
 
@@ -2733,38 +2819,66 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 });
             });
 
-            // Collapsible section handlers
-            document.querySelectorAll('.section-header.collapsible').forEach(header => {
-                header.addEventListener('click', () => {
-                    header.classList.toggle('collapsed');
+            // Collapsible section handlers — collapsed sections persist across refreshes.
+            (function setupCollapsibleSections() {
+                const headers = Array.from(document.querySelectorAll('.section-header.collapsible'));
+                const collapsed = new Set(uiState.collapsedSections || []);
+
+                const applyCollapsed = (header, isCollapsed) => {
                     const sectionId = header.dataset.section;
                     const content = document.getElementById(sectionId + '-content');
+                    header.classList.toggle('collapsed', isCollapsed);
                     if (content) {
-                        content.classList.toggle('hidden');
+                        content.classList.toggle('hidden', isCollapsed);
+                    }
+                };
+
+                // Restore before wiring so no click events are emitted during restore.
+                headers.forEach(header => {
+                    if (collapsed.has(header.dataset.section)) {
+                        applyCollapsed(header, true);
                     }
                 });
-            });
 
-            // Close button for TXTINOUT header: close all open files for the selected dataset
-            document.querySelectorAll('.close-txt-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    // ask host to close all open files for the current dataset
-                    try { console.log('SWAT webview: close-all clicked'); } catch (e) {}
-                    swatHost.postMessage({ type: 'closeAllDatasetFiles' });
+                headers.forEach(header => {
+                    header.addEventListener('click', () => {
+                        const isCollapsed = !header.classList.contains('collapsed');
+                        applyCollapsed(header, isCollapsed);
+                        if (isCollapsed) {
+                            collapsed.add(header.dataset.section);
+                        } else {
+                            collapsed.delete(header.dataset.section);
+                        }
+                        saveUiState({ collapsedSections: Array.from(collapsed) });
+                    });
                 });
-            });
+            })();
 
-            // Per-file close buttons: use inline buttons present in each row (left-most now)
-            document.querySelectorAll('.txt-close-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const p = btn.dataset.path;
-                    if (p) {
-                        try { console.log('SWAT webview: txt-close clicked', p); } catch (e) {}
-                        swatHost.postMessage({ type: 'closeFile', path: p });
-                    }
-                });
+            // Close-all and per-file close buttons are dispatched by the delegated
+            // document listener below.
+
+            // Keyboard activation for the div-based rows and headers. They carry
+            // role="button" + tabindex, so Enter/Space must behave like a click; the
+            // synthesized click then flows through the delegated handler below.
+            document.addEventListener('keydown', (e) => {
+                if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') {
+                    return;
+                }
+                const target = e.target;
+                if (!target || typeof target.closest !== 'function') {
+                    return;
+                }
+                // Native controls already handle Enter/Space themselves.
+                const tag = target.tagName ? target.tagName.toLowerCase() : '';
+                if (tag === 'button' || tag === 'input' || tag === 'select' || tag === 'a' || tag === 'textarea') {
+                    return;
+                }
+                const activatable = target.closest('[role="button"]');
+                if (!activatable) {
+                    return;
+                }
+                e.preventDefault();
+                activatable.click();
             });
 
             // Delegated click handler fallback so clicks are handled even if direct listeners fail
@@ -2787,6 +2901,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     if (closest && closest('#buildIndexBtn')) {
                         try { console.log('SWAT webview: delegated buildIndex click'); } catch (e) {}
                         swatHost.postMessage({ type: 'buildIndex' });
+                        return;
+                    }
+                    if (closest && closest('#staleRebuildBtn')) {
+                        try { console.log('SWAT webview: delegated stale rebuild click'); } catch (e) {}
+                        swatHost.postMessage({ type: 'rebuildIndex' });
                         return;
                     }
                     if (closest && closest('#processHruSubsetBtn')) {
@@ -2907,6 +3026,20 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 const checkboxes = Array.from(document.querySelectorAll('.filter-checkbox'));
                 if (!checkboxes.length) {return;}
 
+                // Restore previously unchecked categories before the first applyFilter(),
+                // so the list renders already filtered rather than flashing everything.
+                const hidden = new Set(uiState.hiddenCategories || []);
+                checkboxes.forEach(cb => {
+                    if (hidden.has(cb.dataset.cat)) {
+                        cb.checked = false;
+                    }
+                });
+
+                function persistCategories() {
+                    const nowHidden = checkboxes.filter(cb => !cb.checked).map(cb => cb.dataset.cat);
+                    saveUiState({ hiddenCategories: nowHidden });
+                }
+
                 function applyFilter() {
                     const activeCats = checkboxes.filter(cb => cb.checked).map(cb => cb.dataset.cat);
                     let visibleCount = 0;
@@ -2954,6 +3087,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     cb.addEventListener('change', () => {
                         applyFilter();
                         updateSelectAllCheckbox();
+                        persistCategories();
                     });
                 });
 
@@ -2978,8 +3112,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         checkboxes.forEach(cb => {
                             cb.checked = shouldCheck;
                         });
-                        
+
                         applyFilter();
+                        persistCategories();
                     });
                 }
 
@@ -2987,6 +3122,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 updateSelectAllCheckbox();
                 applyFilter();
             })();
+
+            // Restore scroll offsets last, after filters have settled the list height,
+            // then start recording further scrolling.
+            restoreScrollPositions();
+            wireScrollPersistence();
                 } catch (err) {
                     try { console.error('SWAT webview script error', err); } catch (e) { /* ignore */ }
                 }

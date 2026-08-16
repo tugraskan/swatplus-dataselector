@@ -25,6 +25,7 @@ import { normalizePathForComparison, pathStartsWith, resolveFileCioPath } from '
 import { detectEnvironment, isCmakeToolsInstalled } from './environmentUtils';
 import { generateOutputNotebooks } from './outputNotebookGenerator';
 import { inspectHruRange, runHruProcessor, validateHruIdInput } from './hruProcessor';
+import { isSelfWrittenFile } from './indexStalenessUtils';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -116,6 +117,8 @@ export function activate(context: vscode.ExtensionContext) {
 			filePointerDiagnostics.updateDiagnostics();
 			fileFormatDiagnostics.updateDiagnostics();
 			fkDecorations.refresh();
+			await updateSwatContextKeys();
+			swatProvider.refresh();
 		}
 	};
 
@@ -261,9 +264,28 @@ export function activate(context: vscode.ExtensionContext) {
 		if (!datasetFolder) {
 			return;
 		}
+
+		// Find open documents that belong to this dataset
+		const docs = vscode.workspace.textDocuments.filter(d => d.uri && d.uri.fsPath && pathStartsWith(d.uri.fsPath, datasetFolder));
+
+		// Closing every editor for the dataset is not undoable, so confirm when there
+		// is more than a trivial amount to lose. Unsaved work is called out explicitly.
+		if (docs.length > 1) {
+			const dirtyCount = docs.filter(d => d.isDirty).length;
+			const detail = dirtyCount > 0
+				? `${dirtyCount} of them ${dirtyCount === 1 ? 'has' : 'have'} unsaved changes.`
+				: undefined;
+			const confirm = await vscode.window.showWarningMessage(
+				`Close all ${docs.length} open files for ${path.basename(datasetFolder)}?`,
+				{ modal: true, detail },
+				'Close All'
+			);
+			if (confirm !== 'Close All') {
+				return;
+			}
+		}
+
 		try {
-			// Find open documents that belong to this dataset
-			const docs = vscode.workspace.textDocuments.filter(d => d.uri && d.uri.fsPath && pathStartsWith(d.uri.fsPath, datasetFolder));
 			for (const doc of docs) {
 				try {
 					await vscode.window.showTextDocument(doc, { preview: false, preserveFocus: true });
@@ -302,6 +324,8 @@ export function activate(context: vscode.ExtensionContext) {
 			filePointerDiagnostics.updateDiagnostics();
 			fileFormatDiagnostics.updateDiagnostics();
 			fkDecorations.refresh();
+			await updateSwatContextKeys();
+			swatProvider.refresh();
 			// Open the full table viewer first so file_cio is the last (active) tab
 			SwatTableViewerPanel.createOrShow(indexer);
 			// Automatically open file_cio table after successful index build
@@ -863,6 +887,9 @@ export function activate(context: vscode.ExtensionContext) {
 			filePointerDiagnostics.updateDiagnostics();
 			fileFormatDiagnostics.updateDiagnostics();
 			fkDecorations.refresh();
+			await updateSwatContextKeys();
+			// Clears the stale-index banner now that the index matches disk again.
+			swatProvider.refresh();
 			// Open the full table viewer first so file_cio is the last (active) tab
 			SwatTableViewerPanel.createOrShow(indexer);
 			// Automatically open file_cio table after successful index rebuild
@@ -1080,6 +1107,85 @@ export function activate(context: vscode.ExtensionContext) {
 		await tryAutoLoadIndex(folderPath);
 	});
 
+	// --- Context keys ---------------------------------------------------------
+	// Drive `when` clauses so the command palette only offers commands that can
+	// actually run right now, instead of surfacing commands whose sole effect is
+	// to warn "select a dataset first" / "build the index first".
+	const updateSwatContextKeys = async (): Promise<void> => {
+		const hasDataset = Boolean(swatProvider.getSelectedDataset());
+		const hasIndex = indexer.isIndexBuilt();
+		await vscode.commands.executeCommand('setContext', 'swatplus.hasDataset', hasDataset);
+		await vscode.commands.executeCommand('setContext', 'swatplus.hasIndex', hasIndex);
+	};
+
+	// --- Dataset file watcher -------------------------------------------------
+	// Watches the active dataset's TxtInOut folder so the sidebar listing reflects
+	// files a SWAT+ run just wrote, and so the index is flagged stale when inputs
+	// change underneath it instead of silently drifting out of sync.
+	let datasetWatcher: vscode.FileSystemWatcher | undefined;
+	let refreshTimer: NodeJS.Timeout | undefined;
+
+	const scheduleSidebarRefresh = () => {
+		// Debounce: a SWAT+ run writes many files in quick succession.
+		if (refreshTimer) {
+			clearTimeout(refreshTimer);
+		}
+		refreshTimer = setTimeout(() => {
+			refreshTimer = undefined;
+			swatProvider.refresh();
+		}, 400);
+	};
+
+	const watchDataset = (datasetPath: string | undefined) => {
+		datasetWatcher?.dispose();
+		datasetWatcher = undefined;
+		if (!datasetPath) {
+			return;
+		}
+
+		const fileCioPath = resolveFileCioPath(datasetPath);
+		const watchRoot = fileCioPath ? path.dirname(fileCioPath) : datasetPath;
+		if (!fs.existsSync(watchRoot)) {
+			return;
+		}
+
+		datasetWatcher = vscode.workspace.createFileSystemWatcher(
+			new vscode.RelativePattern(watchRoot, '**/*')
+		);
+
+		const onInputTouched = (uri: vscode.Uri) => {
+			// index.json is written by the indexer itself — reacting to it would mark
+			// the index stale immediately after every successful build, and would also
+			// bounce the sidebar on each save.
+			if (isSelfWrittenFile(uri.fsPath)) {
+				return;
+			}
+			indexer.markIndexStale(uri.fsPath);
+			scheduleSidebarRefresh();
+		};
+
+		datasetWatcher.onDidCreate(onInputTouched);
+		datasetWatcher.onDidDelete(onInputTouched);
+		datasetWatcher.onDidChange(onInputTouched);
+		// Not pushed onto context.subscriptions: switching datasets replaces the
+		// watcher, and accumulating one disposed entry per switch would grow that
+		// array for the life of the session. The disposable registered below owns
+		// whichever watcher is current at deactivation.
+	};
+
+	watchDataset(swatProvider.getSelectedDataset());
+	// Seed the context keys for this session's initial state.
+	void updateSwatContextKeys();
+
+	context.subscriptions.push({
+		dispose: () => {
+			if (refreshTimer) {
+				clearTimeout(refreshTimer);
+			}
+			datasetWatcher?.dispose();
+		}
+	});
+
 	// Status bar item — always visible, shows the active dataset name
 	const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10);
 	statusBarItem.command = 'swat-dataset-selector.switchDataset';
@@ -1093,7 +1199,12 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	};
 	updateStatusBar(swatProvider.getSelectedDataset());
-	swatProvider.setOnChangeCallback(updateStatusBar);
+	swatProvider.setOnChangeCallback(dataset => {
+		updateStatusBar(dataset);
+		// Re-point the file watcher at the newly active dataset.
+		watchDataset(dataset);
+		void updateSwatContextKeys();
+	});
 	statusBarItem.show();
 
 	// Command: Switch dataset — quick-pick combining recent datasets, dataset folder entries, and browse
