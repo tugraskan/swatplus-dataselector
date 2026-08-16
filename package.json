@@ -283,6 +283,26 @@
           "type": "string",
           "default": "workdata",
           "description": "Directory (relative to the workspace root, or absolute) that contains SWAT+ dataset folders. It is shown in the Dataset Folder section beneath Recent Datasets. Defaults to 'workdata'."
+        },
+        "swatplus.debugLogging": {
+          "type": "boolean",
+          "default": false,
+          "description": "Log SWAT+ Dataset Selector activity to the developer console. Useful when diagnosing sidebar or navigation issues; off by default so the console stays quiet during normal use."
+        },
+        "swatplus.openTablesAfterIndex": {
+          "type": "string",
+          "enum": [
+            "prompt",
+            "always",
+            "never"
+          ],
+          "enumDescriptions": [
+            "Show a notification offering to open the table viewers.",
+            "Open the table viewer and file.cio automatically, as before.",
+            "Do not open any panels after indexing."
+          ],
+          "default": "prompt",
+          "description": "What to do with the table viewers after building or rebuilding the inputs index. 'always' reproduces the previous behaviour of taking over the editor area on every build."
         }
       }
     }

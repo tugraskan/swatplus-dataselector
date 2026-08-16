@@ -912,10 +912,8 @@ export class SwatIndexer {
                 `${unresolvedCount} unresolved.`
             );
 
-            vscode.window.showInformationMessage(
-                `Index built successfully: ${pandasResult.tableCount} tables, ${this.fkReferences.length} FK references`
-            );
-
+            // The success notification is raised by the caller so it can carry a
+            // follow-up action, rather than stacking two toasts for one build.
             await this.context.workspaceState.update(`index:${datasetPath}`, {
                 built: true,
                 timestamp: new Date().toISOString(),
@@ -1260,6 +1258,15 @@ export class SwatIndexer {
      */
     public isIndexBuilt(): boolean {
         return this.index.size > 0;
+    }
+
+    /** Headline counts for the current index, used for build notifications. */
+    public getIndexSummary(): { tableCount: number; fkCount: number; unresolvedCount: number } {
+        return {
+            tableCount: this.index.size,
+            fkCount: this.fkReferences.length,
+            unresolvedCount: this.fkReferences.filter(ref => !ref.resolved).length
+        };
     }
 
     /**

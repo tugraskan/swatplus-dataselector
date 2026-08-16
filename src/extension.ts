@@ -326,10 +326,7 @@ export function activate(context: vscode.ExtensionContext) {
 			fkDecorations.refresh();
 			await updateSwatContextKeys();
 			swatProvider.refresh();
-			// Open the full table viewer first so file_cio is the last (active) tab
-			SwatTableViewerPanel.createOrShow(indexer);
-			// Automatically open file_cio table after successful index build
-			SwatSingleTableViewerPanel.createOrShow(indexer, 'file_cio');
+			await announceIndexBuilt();
 		}
 	});
 
@@ -890,10 +887,7 @@ export function activate(context: vscode.ExtensionContext) {
 			await updateSwatContextKeys();
 			// Clears the stale-index banner now that the index matches disk again.
 			swatProvider.refresh();
-			// Open the full table viewer first so file_cio is the last (active) tab
-			SwatTableViewerPanel.createOrShow(indexer);
-			// Automatically open file_cio table after successful index rebuild
-			SwatSingleTableViewerPanel.createOrShow(indexer, 'file_cio');
+			await announceIndexBuilt();
 		}
 	});
 
@@ -1106,6 +1100,46 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.showInformationMessage(`SWAT+ Dataset: ${path.basename(folderPath)}`);
 		await tryAutoLoadIndex(folderPath);
 	});
+
+	/**
+	 * Report a finished index build and decide what to show afterwards.
+	 *
+	 * Force-opening both table viewers on every build takes over the editor area even
+	 * when the user only wanted navigation to work again, so the behaviour is
+	 * configurable and defaults to offering. The build summary and the offer share a
+	 * single notification rather than stacking two toasts for one build.
+	 */
+	const announceIndexBuilt = async (): Promise<void> => {
+		const mode = vscode.workspace
+			.getConfiguration('swatplus')
+			.get<string>('openTablesAfterIndex', 'prompt');
+
+		const { tableCount, fkCount, unresolvedCount } = indexer.getIndexSummary();
+		const summary = `Index built: ${tableCount} tables, ${fkCount} FK references`
+			+ (unresolvedCount > 0 ? `, ${unresolvedCount} unresolved.` : '.');
+
+		const reveal = () => {
+			// Open the full table viewer first so file_cio is the last (active) tab
+			SwatTableViewerPanel.createOrShow(indexer);
+			SwatSingleTableViewerPanel.createOrShow(indexer, 'file_cio');
+		};
+
+		if (mode === 'always') {
+			vscode.window.showInformationMessage(summary);
+			reveal();
+			return;
+		}
+
+		if (mode === 'never') {
+			vscode.window.showInformationMessage(summary);
+			return;
+		}
+
+		const choice = await vscode.window.showInformationMessage(summary, 'Open Tables');
+		if (choice === 'Open Tables') {
+			reveal();
+		}
+	};
 
 	// --- Context keys ---------------------------------------------------------
 	// Drive `when` clauses so the command palette only offers commands that can

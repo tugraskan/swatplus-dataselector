@@ -134,6 +134,14 @@ After pulling updates, reload VS Code so the latest extension bundle is active.
 3. Use **Debug** to launch a debug session.
 4. Use **Build Index** to index the selected dataset.
 
+Within the view, the **Inputs** and **Outputs** lists each have a filter box — type part
+of a file name to narrow the list, `Esc` to clear. The category checkboxes narrow the
+inputs list by kind and combine with the filter. Pin a dataset in **Recent Datasets**
+with the star to keep it at the top of the list.
+
+If input files change on disk after indexing, the view shows an **Index out of date**
+banner with a one-click **Rebuild**.
+
 ### Method 4: Configure the Dataset Folder
 
 1. Open the SWAT+ Dataset view.
@@ -211,6 +219,10 @@ python3 scripts/extract_all_models.py
 
 - `swatplus.datasetDirectory`: Parent directory that contains SWAT+ dataset folders. Defaults to `workdata`.
 - `swatplus.schemaDirectories`: Additional directories to scan for SWAT+ schema JSON files.
+- `swatplus.openTablesAfterIndex`: What to do with the table viewers after an index build —
+  `prompt` (default, offers to open them), `always` (opens them automatically), or `never`.
+- `swatplus.debugLogging`: Log extension and sidebar activity to the developer console.
+  Off by default; enable when diagnosing sidebar or navigation issues.
 
 ## Development
 
