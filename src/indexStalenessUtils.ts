@@ -51,6 +51,37 @@ export function shouldMarkStale(changedFile: string, context: StaleDecisionConte
 }
 
 /**
+ * Coarse "how long ago" label for the index build time, shown in the health strip.
+ * Deliberately low precision: the useful question is "is this minutes or days old",
+ * not the exact second.
+ */
+export function formatRelativeAge(builtAtIso: string | undefined, now: Date = new Date()): string {
+    if (!builtAtIso) {
+        return 'unknown';
+    }
+    const builtAt = new Date(builtAtIso);
+    const elapsedMs = now.getTime() - builtAt.getTime();
+    if (Number.isNaN(elapsedMs)) {
+        return 'unknown';
+    }
+    // Clock skew or a future timestamp reads as fresh rather than negative.
+    if (elapsedMs < 60_000) {
+        return 'just now';
+    }
+
+    const minutes = Math.floor(elapsedMs / 60_000);
+    if (minutes < 60) {
+        return `${minutes}m ago`;
+    }
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) {
+        return `${hours}h ago`;
+    }
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+}
+
+/**
  * Human-readable summary of which files went stale, for the sidebar banner.
  * Long lists are truncated so the banner stays a single readable line.
  */

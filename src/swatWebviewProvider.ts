@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
 import { resolveFileCioPath, wslPathToWindows } from './pathUtils';
 import { detectEnvironment, hasWorkspace, isCmakeToolsInstalled, isSwatPlusWorkspace, resolvePathForEnvironment, EnvironmentInfo } from './environmentUtils';
-import { formatStaleSummary } from './indexStalenessUtils';
+import { formatRelativeAge, formatStaleSummary } from './indexStalenessUtils';
 
 /**
  * Escapes HTML special characters to prevent XSS attacks
@@ -208,6 +208,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                             if (data.path && typeof data.path === 'string') {
                                 this.removeRecentDataset(data.path);
                             }
+                            break;
+                        case 'runDataQualityPreflight':
+                            vscode.commands.executeCommand('swat-dataset-selector.runDataQualityPreflight');
                             break;
                         case 'togglePinnedDataset':
                             if (data.path && typeof data.path === 'string') {
@@ -1260,6 +1263,36 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 : effectiveDatasetDir)
             : 'workdata';
 
+        // Dataset health strip: keeps index size and unresolved-reference count in
+        // view, so data quality is ambient instead of hidden behind a command the user
+        // has to remember to run.
+        const healthStripHtml = (() => {
+            if (!this.selectedDataset || !this.indexer.isIndexBuilt()) {
+                return '';
+            }
+            const { tableCount, fkCount, unresolvedCount } = this.indexer.getIndexSummary();
+            const age = formatRelativeAge(this.indexer.getIndexBuiltAt(this.selectedDataset));
+            const unresolvedClass = unresolvedCount > 0 ? ' health-warn' : ' health-ok';
+            const unresolvedTitle = unresolvedCount > 0
+                ? `${unresolvedCount} foreign key reference(s) do not resolve. Click to run the data quality preflight.`
+                : 'All foreign key references resolve.';
+            return `<div class="health-strip" aria-label="Index health">
+                    <span class="health-item" title="${tableCount} indexed tables">
+                        ${tableCount} tables
+                    </span>
+                    <span class="health-sep">·</span>
+                    <span class="health-item" title="${fkCount} foreign key references">
+                        ${fkCount} FKs
+                    </span>
+                    <span class="health-sep">·</span>
+                    <button class="health-item health-button${unresolvedClass}" id="healthPreflightBtn"
+                        title="${escapeHtml(unresolvedTitle)}">
+                        ${unresolvedCount} unresolved
+                    </button>
+                    <span class="health-age" title="Index last built ${escapeHtml(age)}">${escapeHtml(age)}</span>
+                   </div>`;
+        })();
+
         // Stale-index banner: input files changed on disk after the index was built, so
         // FK navigation, hovers and diagnostics may point at rows that have moved.
         const indexIsStale = this.indexer.isIndexStale();
@@ -1884,6 +1917,58 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             text-decoration: underline;
         }
 
+        /* Dataset health strip */
+        .health-strip {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            flex-wrap: wrap;
+            padding: 5px 8px;
+            margin-bottom: 8px;
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 4px;
+            background-color: var(--vscode-editor-background);
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+        }
+
+        .health-sep {
+            opacity: 0.5;
+        }
+
+        .health-age {
+            margin-left: auto;
+            opacity: 0.8;
+            white-space: nowrap;
+        }
+
+        .health-button {
+            background: transparent;
+            border: none;
+            padding: 0;
+            font-size: 11px;
+            font-family: var(--vscode-font-family);
+            cursor: pointer;
+            color: inherit;
+        }
+
+        .health-button:hover {
+            text-decoration: underline;
+        }
+
+        .health-button:focus-visible {
+            outline: 1px solid var(--vscode-focusBorder);
+        }
+
+        .health-warn {
+            color: var(--vscode-editorWarning-foreground, var(--vscode-charts-orange, #d97706));
+            font-weight: 600;
+        }
+
+        .health-ok {
+            color: var(--vscode-charts-green, #16a34a);
+        }
+
         /* Filename search row above each file list */
         .file-search-row {
             display: flex;
@@ -2318,9 +2403,12 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             transition: background-color 0.1s ease;
         }
 
-        .context-menu-item:hover {
+        .context-menu-item:hover,
+        .context-menu-item:focus,
+        .context-menu-item:focus-visible {
             background-color: var(--vscode-menu-selectionBackground);
             color: var(--vscode-menu-selectionForeground);
+            outline: none;
         }
 
         /* Environment indicator badge */
@@ -2451,6 +2539,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
     <div class="container">
         ${noWorkspaceBanner}
         ${staleIndexBanner}
+        ${healthStripHtml}
         <div class="actions">
             <div class="button-row">
                 <button class="action-button secondary" id="selectDatasetBtn">
@@ -2673,41 +2762,130 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 if (existing) {
                     existing.remove();
                 }
-                
+
+                // Return focus where it was so keyboard users are not dumped at the
+                // top of the document when the menu closes.
+                const previouslyFocused = document.activeElement;
+
                 const menu = document.createElement('div');
                 menu.id = 'custom-context-menu';
                 menu.className = 'context-menu';
+                menu.setAttribute('role', 'menu');
                 menu.style.left = x + 'px';
                 menu.style.top = y + 'px';
-                
+
+                const menuItems = [];
+
+                const closeAndRestore = (restoreFocus) => {
+                    menu.remove();
+                    document.removeEventListener('click', closeMenu, true);
+                    document.removeEventListener('keydown', onMenuKeydown, true);
+                    if (restoreFocus && previouslyFocused && typeof previouslyFocused.focus === 'function') {
+                        try { previouslyFocused.focus(); } catch (e) { /* element may be gone */ }
+                    }
+                };
+
                 items.forEach(item => {
                     const menuItem = document.createElement('div');
                     menuItem.className = 'context-menu-item';
                     menuItem.textContent = item.label;
+                    menuItem.setAttribute('role', 'menuitem');
+                    menuItem.tabIndex = -1;
                     menuItem.addEventListener('click', () => {
+                        closeAndRestore(false);
                         item.action();
-                        menu.remove();
                     });
                     menu.appendChild(menuItem);
+                    menuItems.push(menuItem);
                 });
-                
+
                 document.body.appendChild(menu);
-                
+
+                // Keep the menu inside the viewport when opened near an edge.
+                const rect = menu.getBoundingClientRect();
+                if (rect.right > window.innerWidth) {
+                    menu.style.left = Math.max(0, window.innerWidth - rect.width - 4) + 'px';
+                }
+                if (rect.bottom > window.innerHeight) {
+                    menu.style.top = Math.max(0, window.innerHeight - rect.height - 4) + 'px';
+                }
+
+                let activeIndex = -1;
+                const focusItem = (index) => {
+                    if (!menuItems.length) { return; }
+                    activeIndex = (index + menuItems.length) % menuItems.length;
+                    menuItems[activeIndex].focus();
+                };
+
+                function onMenuKeydown(e) {
+                    switch (e.key) {
+                        case 'Escape':
+                            e.preventDefault();
+                            e.stopPropagation();
+                            closeAndRestore(true);
+                            break;
+                        case 'ArrowDown':
+                            e.preventDefault();
+                            e.stopPropagation();
+                            focusItem(activeIndex + 1);
+                            break;
+                        case 'ArrowUp':
+                            e.preventDefault();
+                            e.stopPropagation();
+                            focusItem(activeIndex - 1);
+                            break;
+                        case 'Home':
+                            e.preventDefault();
+                            focusItem(0);
+                            break;
+                        case 'End':
+                            e.preventDefault();
+                            focusItem(menuItems.length - 1);
+                            break;
+                        case 'Enter':
+                        case ' ':
+                        case 'Spacebar':
+                            if (activeIndex >= 0) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                menuItems[activeIndex].click();
+                            }
+                            break;
+                        case 'Tab':
+                            // Tabbing away dismisses the menu rather than leaving it orphaned.
+                            closeAndRestore(false);
+                            break;
+                        default:
+                            break;
+                    }
+                }
+
                 // Close menu on click outside
                 const closeMenu = (e) => {
                     if (!menu.contains(e.target)) {
-                        menu.remove();
-                        document.removeEventListener('click', closeMenu);
+                        closeAndRestore(false);
                     }
                 };
+
+                // Capture phase so the menu's own keys are handled before the
+                // sidebar-level Enter/Space activation handler sees them.
+                document.addEventListener('keydown', onMenuKeydown, true);
                 setTimeout(() => {
-                    document.addEventListener('click', closeMenu);
+                    document.addEventListener('click', closeMenu, true);
                 }, 0);
-                
+
                 // Close menu on scroll
                 document.addEventListener('scroll', () => {
-                    menu.remove();
+                    closeAndRestore(false);
                 }, { once: true });
+
+                // Opened from the keyboard (Menu key / Shift+F10): move focus into the
+                // menu straight away. Mouse users keep hover-based selection.
+                if (event && event.__keyboardInvoked) {
+                    focusItem(0);
+                } else {
+                    menu.focus?.();
+                }
             }
 
             // Safe lookup to avoid null errors in webview script
@@ -2998,7 +3176,19 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                 swatHost.postMessage({ type: 'revealInOSExplorer', path: p });
                             }
                         });
-                        showContextMenu(e, menuItems, e.clientX, e.clientY);
+                        // The Menu key / Shift+F10 fire a contextmenu event with no
+                        // usable pointer coordinates; anchor to the row instead and
+                        // move focus into the menu.
+                        const keyboardInvoked = !e.clientX && !e.clientY;
+                        let menuX = e.clientX;
+                        let menuY = e.clientY;
+                        if (keyboardInvoked) {
+                            const rowRect = item.getBoundingClientRect();
+                            menuX = rowRect.left + 8;
+                            menuY = rowRect.bottom;
+                        }
+                        e.__keyboardInvoked = keyboardInvoked;
+                        showContextMenu(e, menuItems, menuX, menuY);
                     }
                 });
             });
@@ -3090,6 +3280,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     if (closest && closest('#staleRebuildBtn')) {
                         swatLog('SWAT webview: delegated stale rebuild click');
                         swatHost.postMessage({ type: 'rebuildIndex' });
+                        return;
+                    }
+                    if (closest && closest('#healthPreflightBtn')) {
+                        swatLog('SWAT webview: delegated preflight click');
+                        swatHost.postMessage({ type: 'runDataQualityPreflight' });
                         return;
                     }
                     if (closest && closest('#processHruSubsetBtn')) {

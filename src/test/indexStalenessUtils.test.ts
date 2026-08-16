@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import {
     baseName,
+    formatRelativeAge,
     formatStaleSummary,
     isSelfWrittenFile,
     shouldMarkStale,
@@ -95,6 +96,46 @@ suite('Index Staleness Utils', () => {
                 formatStaleSummary(['a.con', 'b.sol', 'c.hru', 'd.lum', 'e.cli']),
                 'Changed: a.con, b.sol, c.hru and 2 more.'
             );
+        });
+    });
+
+    suite('formatRelativeAge', () => {
+        const now = new Date('2026-08-16T12:00:00Z');
+        const ago = (ms: number) => new Date(now.getTime() - ms).toISOString();
+
+        test('reports unknown without a timestamp', () => {
+            assert.strictEqual(formatRelativeAge(undefined, now), 'unknown');
+        });
+
+        test('reports unknown for an unparseable timestamp', () => {
+            assert.strictEqual(formatRelativeAge('not-a-date', now), 'unknown');
+        });
+
+        test('reports sub-minute ages as just now', () => {
+            assert.strictEqual(formatRelativeAge(ago(30 * 1000), now), 'just now');
+        });
+
+        test('reports minutes', () => {
+            assert.strictEqual(formatRelativeAge(ago(5 * 60 * 1000), now), '5m ago');
+        });
+
+        test('reports hours', () => {
+            assert.strictEqual(formatRelativeAge(ago(3 * 60 * 60 * 1000), now), '3h ago');
+        });
+
+        test('reports days', () => {
+            assert.strictEqual(formatRelativeAge(ago(2 * 24 * 60 * 60 * 1000), now), '2d ago');
+        });
+
+        test('treats a future timestamp as fresh rather than negative', () => {
+            // Clock skew between the stored timestamp and now must not print "-3m ago".
+            const future = new Date(now.getTime() + 5 * 60 * 1000).toISOString();
+            assert.strictEqual(formatRelativeAge(future, now), 'just now');
+        });
+
+        test('rolls over at the hour boundary', () => {
+            assert.strictEqual(formatRelativeAge(ago(59 * 60 * 1000), now), '59m ago');
+            assert.strictEqual(formatRelativeAge(ago(60 * 60 * 1000), now), '1h ago');
         });
     });
 

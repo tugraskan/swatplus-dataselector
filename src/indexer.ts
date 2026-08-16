@@ -1260,6 +1260,12 @@ export class SwatIndexer {
         return this.index.size > 0;
     }
 
+    /** ISO timestamp of the last successful build/load for a dataset, if any. */
+    public getIndexBuiltAt(datasetPath: string): string | undefined {
+        const state = this.context.workspaceState.get<{ timestamp?: string }>(`index:${datasetPath}`);
+        return state?.timestamp;
+    }
+
     /** Headline counts for the current index, used for build notifications. */
     public getIndexSummary(): { tableCount: number; fkCount: number; unresolvedCount: number } {
         return {

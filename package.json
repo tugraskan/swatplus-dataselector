@@ -268,6 +268,63 @@
         }
       ]
     },
+    "walkthroughs": [
+      {
+        "id": "swatplusGettingStarted",
+        "title": "Get started with SWAT+",
+        "description": "Select a dataset, index it, and navigate your SWAT+ model like source code.",
+        "steps": [
+          {
+            "id": "selectDataset",
+            "title": "Select a dataset",
+            "description": "Choose the folder holding your SWAT+ inputs — the one containing file.cio.\n[Select Dataset Folder](command:swat-dataset-selector.selectDataset)",
+            "media": {
+              "markdown": "resources/walkthrough/select-dataset.md"
+            },
+            "completionEvents": [
+              "onCommand:swat-dataset-selector.selectDataset",
+              "onCommand:swat-dataset-selector.useAsDataset"
+            ]
+          },
+          {
+            "id": "buildIndex",
+            "title": "Build the inputs index",
+            "description": "Index the dataset so foreign keys, hovers, and validation work. Requires Python with pandas.\n[Build Inputs Index](command:swat-dataset-selector.buildIndex)",
+            "media": {
+              "markdown": "resources/walkthrough/build-index.md"
+            },
+            "completionEvents": [
+              "onCommand:swat-dataset-selector.buildIndex"
+            ]
+          },
+          {
+            "id": "navigate",
+            "title": "Navigate the model",
+            "description": "Ctrl+Click foreign keys to jump between files, hover for column documentation, and view the dependency graph.\n[View Tables](command:swat-dataset-selector.showTableViewer)",
+            "media": {
+              "markdown": "resources/walkthrough/navigate.md"
+            },
+            "completionEvents": [
+              "onCommand:swat-dataset-selector.showTableViewer",
+              "onCommand:swat-dataset-selector.showDependencyGraph",
+              "onCommand:swat-dataset-selector.showFKReferences"
+            ]
+          },
+          {
+            "id": "exploreOutputs",
+            "title": "Explore results",
+            "description": "Open output files as DataFrames, generate notebooks, or carve out an HRU subset to iterate faster.\n[Generate Output Notebooks](command:swat-dataset-selector.generateOutputNotebooks)",
+            "media": {
+              "markdown": "resources/walkthrough/explore-outputs.md"
+            },
+            "completionEvents": [
+              "onCommand:swat-dataset-selector.generateOutputNotebooks",
+              "onCommand:swat-dataset-selector.openOutputAsDataFrame"
+            ]
+          }
+        ]
+      }
+    ],
     "configuration": {
       "title": "SWAT+ Dataset Selector",
       "properties": {
@@ -309,11 +366,12 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
-    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "compile": "npm run check-types && npm run lint && npm run check-webview && node esbuild.js",
+    "check-webview": "python3 scripts/check_webview_scripts.py",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "package": "npm run check-types && npm run lint && npm run check-webview && node esbuild.js --production",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
