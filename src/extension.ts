@@ -107,6 +107,13 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const tryAutoLoadIndex = async (datasetPath: string): Promise<void> => {
 		if (!indexer.hasIndexCache(datasetPath)) {
+			indexer.clearActiveIndex();
+			fkDiagnostics.updateDiagnostics();
+			filePointerDiagnostics.updateDiagnostics();
+			fileFormatDiagnostics.updateDiagnostics();
+			fkDecorations.refresh();
+			await updateSwatContextKeys();
+			swatProvider.refresh();
 			return;
 		}
 
@@ -117,9 +124,9 @@ export function activate(context: vscode.ExtensionContext) {
 			filePointerDiagnostics.updateDiagnostics();
 			fileFormatDiagnostics.updateDiagnostics();
 			fkDecorations.refresh();
-			await updateSwatContextKeys();
-			swatProvider.refresh();
 		}
+		await updateSwatContextKeys();
+		swatProvider.refresh();
 	};
 
 	// Register FK definition provider for SWAT+ files
@@ -853,11 +860,14 @@ export function activate(context: vscode.ExtensionContext) {
 
 		const success = await indexer.loadIndexFromCache(selectedPath);
 		if (success) {
+			showDocsVersion();
 			// Update diagnostics and decorations
 			fkDiagnostics.updateDiagnostics();
 			filePointerDiagnostics.updateDiagnostics();
 			fileFormatDiagnostics.updateDiagnostics();
 			fkDecorations.refresh();
+			await updateSwatContextKeys();
+			swatProvider.refresh();
 			SwatTableViewerPanel.createOrShow(indexer);
 			SwatSingleTableViewerPanel.createOrShow(indexer, 'file_cio');
 		}
@@ -865,7 +875,8 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Command: Rebuild Inputs Index
 	const rebuildIndex = vscode.commands.registerCommand('swat-dataset-selector.rebuildIndex', async () => {
-		if (!indexer.isIndexBuilt()) {
+		const selectedPath = swatProvider.getSelectedDataset();
+		if (!indexer.isIndexBuiltForDataset(selectedPath)) {
 			vscode.window.showWarningMessage('No index exists yet. Use "Build Index" first.');
 			return;
 		}
@@ -1146,8 +1157,9 @@ export function activate(context: vscode.ExtensionContext) {
 	// actually run right now, instead of surfacing commands whose sole effect is
 	// to warn "select a dataset first" / "build the index first".
 	const updateSwatContextKeys = async (): Promise<void> => {
-		const hasDataset = Boolean(swatProvider.getSelectedDataset());
-		const hasIndex = indexer.isIndexBuilt();
+		const selectedDataset = swatProvider.getSelectedDataset();
+		const hasDataset = Boolean(selectedDataset);
+		const hasIndex = indexer.isIndexBuiltForDataset(selectedDataset);
 		await vscode.commands.executeCommand('setContext', 'swatplus.hasDataset', hasDataset);
 		await vscode.commands.executeCommand('setContext', 'swatplus.hasIndex', hasIndex);
 	};

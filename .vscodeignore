@@ -30,9 +30,9 @@ SCHEMA_IMPLEMENTATION.md
 # Generated merge/coverage reports (dev artifacts, not needed at runtime)
 resources/schema/*-report.md
 
-# Test-only python and CI config
+# Test-only scripts and CI config
 scripts/test_*.py
-scripts/check_webview_scripts.py
+scripts/check_webview_scripts.js
 .github/**
 
 # Python cache and backup/scratch artifacts

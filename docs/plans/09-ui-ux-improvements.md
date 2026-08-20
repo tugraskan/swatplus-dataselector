@@ -90,8 +90,9 @@ error type-checks, lints and bundles cleanly, then ships as a blank panel. A
 stray backtick inside a comment silently terminated the template literal twice
 during this work.
 
-`scripts/check_webview_scripts.py` extracts each `<script>` block, substitutes
-`${...}` interpolations, and runs `node --check`. Wired into `compile`,
+`scripts/check_webview_scripts.js` extracts each `<script>` block, substitutes
+`${...}` interpolations, and compiles the result with Node's `vm.Script` parser.
+Wired into `compile`,
 `package`, and CI. Covers all six webview files.
 
 ---

@@ -19,6 +19,8 @@ export interface StaleDecisionContext {
     indexBuilt: boolean;
     /** Resolves a file path to an indexed table name, or undefined when not indexed. */
     isIndexedFile: (filePath: string) => boolean;
+    /** True for generated output files that must not invalidate the inputs index. */
+    isOutputFile?: (filePath: string) => boolean;
 }
 
 /** Extract the lowercase base name of a path using either separator. */
@@ -47,7 +49,19 @@ export function shouldMarkStale(changedFile: string, context: StaleDecisionConte
     if (isSelfWrittenFile(changedFile)) {
         return false;
     }
+    if (context.isOutputFile?.(changedFile)) {
+        return false;
+    }
     return context.isIndexedFile(changedFile);
+}
+
+/** True when an indexed file was deleted or modified after a cache was created. */
+export function isFileChangedSince(cacheCreatedAt: string, modifiedAtMs: number | undefined): boolean {
+    const cacheTime = Date.parse(cacheCreatedAt);
+    if (Number.isNaN(cacheTime) || modifiedAtMs === undefined) {
+        return true;
+    }
+    return modifiedAtMs > cacheTime;
 }
 
 /**

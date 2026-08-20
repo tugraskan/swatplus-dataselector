@@ -15,7 +15,7 @@ import { normalizePathForComparison, resolveFileCioPath } from './pathUtils';
 import { getPhysicalColumnsForValidation, isAcceptedBooleanLiteral, resolveValidationLayout, formatColumnContext, isMissingRequiredValue } from './fileFormatUtils';
 import { getSharedEnrichedSchema } from './enrichedSchema';
 import { CURRENT_INDEX_CACHE_VERSION, isIndexCacheCompatible } from './indexCacheUtils';
-import { MAX_TRACKED_STALE_FILES, shouldMarkStale } from './indexStalenessUtils';
+import { isFileChangedSince, MAX_TRACKED_STALE_FILES, shouldMarkStale } from './indexStalenessUtils';
 
 // TxtInOut metadata interface
 interface TxtInOutMetadata {
@@ -208,6 +208,7 @@ export class SwatIndexer {
     private txtInOutPath: string | null = null;
     private tableToFileMap: Map<string, string> = new Map(); // table_name -> file_name
     private fileToTableMap: Map<string, string> = new Map(); // file_name -> table_name (lowercase)
+    private outputTableNames: Set<string> = new Set(); // schema tables that describe generated outputs
     private dynamicFileToTableMap: Map<string, string> = new Map(); // runtime file_name -> table_name
     private fkNullValues: string[] = ['null', '0', '']; // Default, can be overridden by metadata
     // file.cio data indexed by classification
@@ -223,6 +224,7 @@ export class SwatIndexer {
     private readonly outputChannel: vscode.OutputChannel;
     private indexStale = false;
     private staleFiles: Set<string> = new Set();
+    private indexBuildInProgress = false;
 
     constructor(private context: vscode.ExtensionContext) {
         this.outputChannel = vscode.window.createOutputChannel('SWAT+ Indexer');
@@ -255,12 +257,19 @@ export class SwatIndexer {
 
             const schemaContent = fs.readFileSync(schemaPath, 'utf-8');
             this.schema = JSON.parse(schemaContent);
+
+            this.tableToFileMap.clear();
+            this.fileToTableMap.clear();
+            this.outputTableNames.clear();
             
             // Build table name to file name mapping
             if (this.schema) {
                 for (const [fileName, tableInfo] of Object.entries(this.schema.tables)) {
                     this.tableToFileMap.set(tableInfo.table_name, fileName);
                     this.fileToTableMap.set(fileName.toLowerCase(), tableInfo.table_name);
+                    if (tableInfo.model_class?.startsWith('output.')) {
+                        this.outputTableNames.add(tableInfo.table_name);
+                    }
                 }
             }
         } catch (error) {
@@ -847,82 +856,94 @@ export class SwatIndexer {
      * Build index for the given dataset path
      */
     public async buildIndex(datasetPath: string): Promise<boolean> {
-        if (!this.schema) {
-            vscode.window.showErrorMessage('Schema not loaded');
-            return false;
-        }
-
-        if (!this.setDatasetPaths(datasetPath)) {
-            return false;
-        }
-
-        // Clear existing index
-        this.index.clear();
-        this.fkReferences = [];
-        this.reverseIndex.clear();
-        this.decisionTableIndex.clear();
-
-        // Show progress
-        return vscode.window.withProgress({
-            location: vscode.ProgressLocation.Notification,
-            title: 'Building SWAT+ Inputs Index',
-            cancellable: true
-        }, async (progress, token) => {
-            this.log(`Building index for ${datasetPath}`);
-
-            // Use pandas-backed indexing (required)
-            progress.report({ message: 'Reading input files…', increment: 10 });
-            const pandasDatasetPath = this.txtInOutPath || datasetPath;
-            const pandasResult = await this.buildIndexWithPandas(pandasDatasetPath, token);
-
-            if (pandasResult.cancelled || token.isCancellationRequested) {
-                this.log('Index build cancelled by user.');
-                vscode.window.showInformationMessage('SWAT+ index build cancelled.');
-                return false;
-            }
-
-            if (!pandasResult.success) {
-                const errorDetail = pandasResult.error || 'Unknown error';
-                this.log(`Index build failed: ${errorDetail}`);
-                void vscode.window
-                    .showErrorMessage(`Failed to build index: ${errorDetail}`, 'Show Details')
-                    .then(choice => {
-                        if (choice === 'Show Details') {
-                            this.showOutput();
-                        }
-                    });
-                return false;
-            }
-
-            // Parse file.cio after pandas indexing to add it to the index
-            // file.cio has a special classification-based format handled separately
-            progress.report({ message: 'Parsing file.cio…', increment: 60 });
-            this.parseFileCio();
-
-            progress.report({ message: 'Resolving foreign key references…', increment: 25 });
-            this.resolveFKReferences();
-
-            progress.report({ message: 'Saving index cache…', increment: 5 });
-            this.saveIndexCache(datasetPath);
-            this.clearIndexStale();
-
-            const unresolvedCount = this.fkReferences.filter(ref => !ref.resolved).length;
-            this.log(
-                `Index built: ${pandasResult.tableCount} tables, ${this.fkReferences.length} FK references, ` +
-                `${unresolvedCount} unresolved.`
+        if (this.indexBuildInProgress) {
+            vscode.window.showInformationMessage(
+                'A SWAT+ index build is already running. Wait for it to finish or cancel it before starting another.'
             );
+            return false;
+        }
 
-            // The success notification is raised by the caller so it can carry a
-            // follow-up action, rather than stacking two toasts for one build.
-            await this.context.workspaceState.update(`index:${datasetPath}`, {
-                built: true,
-                timestamp: new Date().toISOString(),
-                tableCount: pandasResult.tableCount,
-                fkCount: this.fkReferences.length
+        this.indexBuildInProgress = true;
+        try {
+            if (!this.schema) {
+                vscode.window.showErrorMessage('Schema not loaded');
+                return false;
+            }
+
+            if (!this.setDatasetPaths(datasetPath)) {
+                return false;
+            }
+
+            // Clear existing index
+            this.index.clear();
+            this.fkReferences = [];
+            this.reverseIndex.clear();
+            this.decisionTableIndex.clear();
+
+            // Show progress
+            return await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: 'Building SWAT+ Inputs Index',
+                cancellable: true
+            }, async (progress, token) => {
+                this.log(`Building index for ${datasetPath}`);
+
+                // Use pandas-backed indexing (required)
+                progress.report({ message: 'Reading input files…', increment: 10 });
+                const pandasDatasetPath = this.txtInOutPath || datasetPath;
+                const pandasResult = await this.buildIndexWithPandas(pandasDatasetPath, token);
+
+                if (pandasResult.cancelled || token.isCancellationRequested) {
+                    this.log('Index build cancelled by user.');
+                    vscode.window.showInformationMessage('SWAT+ index build cancelled.');
+                    return false;
+                }
+
+                if (!pandasResult.success) {
+                    const errorDetail = pandasResult.error || 'Unknown error';
+                    this.log(`Index build failed: ${errorDetail}`);
+                    void vscode.window
+                        .showErrorMessage(`Failed to build index: ${errorDetail}`, 'Show Details')
+                        .then(choice => {
+                            if (choice === 'Show Details') {
+                                this.showOutput();
+                            }
+                        });
+                    return false;
+                }
+
+                // Parse file.cio after pandas indexing to add it to the index
+                // file.cio has a special classification-based format handled separately
+                progress.report({ message: 'Parsing file.cio…', increment: 60 });
+                this.parseFileCio();
+
+                progress.report({ message: 'Resolving foreign key references…', increment: 25 });
+                this.resolveFKReferences();
+
+                progress.report({ message: 'Saving index cache…', increment: 5 });
+                this.saveIndexCache(datasetPath);
+                this.clearIndexStale();
+
+                const unresolvedCount = this.fkReferences.filter(ref => !ref.resolved).length;
+                this.log(
+                    `Index built: ${pandasResult.tableCount} tables, ${this.fkReferences.length} FK references, ` +
+                    `${unresolvedCount} unresolved.`
+                );
+
+                // The success notification is raised by the caller so it can carry a
+                // follow-up action, rather than stacking two toasts for one build.
+                await this.context.workspaceState.update(`index:${datasetPath}`, {
+                    built: true,
+                    timestamp: new Date().toISOString(),
+                    tableCount: pandasResult.tableCount,
+                    fkCount: this.fkReferences.length
+                });
+
+                return true;
             });
-
-            return true;
-        });
+        } finally {
+            this.indexBuildInProgress = false;
+        }
     }
 
     /**
@@ -1019,6 +1040,30 @@ export class SwatIndexer {
         return indexState !== undefined;
     }
 
+    /** True while the external indexer owns the mutable in-memory index state. */
+    public isBuildInProgress(): boolean {
+        return this.indexBuildInProgress;
+    }
+
+    /**
+     * Drop the active in-memory index when the UI switches to a dataset without a
+     * cache. Persisted caches are not removed.
+     */
+    public clearActiveIndex(): void {
+        if (this.indexBuildInProgress) {
+            return;
+        }
+        this.index.clear();
+        this.fkReferences = [];
+        this.reverseIndex.clear();
+        this.decisionTableIndex.clear();
+        this.dynamicFileToTableMap.clear();
+        this.fileCioData.clear();
+        this.datasetPath = null;
+        this.txtInOutPath = null;
+        this.clearIndexStale();
+    }
+
     /**
      * Get the on-disk cache path for a dataset index.
      */
@@ -1045,6 +1090,15 @@ export class SwatIndexer {
         datasetPath: string,
         options?: { notifyIfIncompatible?: boolean }
     ): Promise<boolean> {
+        if (this.indexBuildInProgress) {
+            if (options?.notifyIfIncompatible ?? true) {
+                vscode.window.showInformationMessage(
+                    'An index build is already running. Wait for it to finish or cancel it before loading another cache.'
+                );
+            }
+            return false;
+        }
+
         if (!this.schema) {
             vscode.window.showErrorMessage('Schema not loaded');
             return false;
@@ -1119,11 +1173,16 @@ export class SwatIndexer {
             }
 
             this.resolveFKReferences();
-            this.clearIndexStale();
+
+            const payloadCreatedAt = typeof payload.createdAt === 'string'
+                && !Number.isNaN(Date.parse(payload.createdAt))
+                ? payload.createdAt
+                : fs.statSync(cachePath).mtime.toISOString();
+            this.restoreStalenessFromCache(payloadCreatedAt);
 
             await this.context.workspaceState.update(`index:${datasetPath}`, {
                 built: true,
-                timestamp: new Date().toISOString(),
+                timestamp: payloadCreatedAt,
                 tableCount: this.index.size,
                 fkCount: this.fkReferences.length
             });
@@ -1137,6 +1196,51 @@ export class SwatIndexer {
             console.warn(`[Indexer] Failed to load cached index: ${errorMsg}`);
             vscode.window.showErrorMessage(`Failed to load cached index: ${errorMsg}`);
             return false;
+        }
+    }
+
+    /**
+     * Reconstruct the stale marker after loading a cache. File watcher events only
+     * cover the current extension session, so inputs changed while VS Code was closed
+     * must be detected from their modification times.
+     */
+    private restoreStalenessFromCache(cacheCreatedAt: string): void {
+        this.clearIndexStale();
+        const cacheTime = Date.parse(cacheCreatedAt);
+        if (Number.isNaN(cacheTime)) {
+            this.indexStale = true;
+            return;
+        }
+
+        const indexedInputFiles = new Set<string>();
+        for (const [tableName, rows] of this.index.entries()) {
+            if (this.outputTableNames.has(tableName)) {
+                continue;
+            }
+            for (const row of rows.values()) {
+                if (row.file) {
+                    indexedInputFiles.add(row.file);
+                }
+            }
+        }
+
+        for (const filePath of indexedInputFiles) {
+            let changed = false;
+            try {
+                const modifiedAt = fs.existsSync(filePath)
+                    ? fs.statSync(filePath).mtimeMs
+                    : undefined;
+                changed = isFileChangedSince(cacheCreatedAt, modifiedAt);
+            } catch {
+                changed = true;
+            }
+            if (!changed) {
+                continue;
+            }
+            this.indexStale = true;
+            if (this.staleFiles.size < MAX_TRACKED_STALE_FILES) {
+                this.staleFiles.add(path.basename(filePath));
+            }
         }
     }
 
@@ -1260,6 +1364,15 @@ export class SwatIndexer {
         return this.index.size > 0;
     }
 
+    /** True only when the in-memory index belongs to the requested dataset. */
+    public isIndexBuiltForDataset(datasetPath: string | undefined): boolean {
+        if (!datasetPath || !this.datasetPath || !this.isIndexBuilt()) {
+            return false;
+        }
+        return normalizePathForComparison(datasetPath)
+            === normalizePathForComparison(this.datasetPath);
+    }
+
     /** ISO timestamp of the last successful build/load for a dataset, if any. */
     public getIndexBuiltAt(datasetPath: string): string | undefined {
         const state = this.context.workspaceState.get<{ timestamp?: string }>(`index:${datasetPath}`);
@@ -1303,7 +1416,14 @@ export class SwatIndexer {
 
         const stale = shouldMarkStale(changedFile, {
             indexBuilt: this.isIndexBuilt(),
-            isIndexedFile: filePath => Boolean(this.getTableNameFromFile(filePath))
+            isIndexedFile: filePath => {
+                const tableName = this.getTableNameFromFile(filePath);
+                return Boolean(tableName && this.index.has(tableName));
+            },
+            isOutputFile: filePath => {
+                const tableName = this.getTableNameFromFile(filePath);
+                return Boolean(tableName && this.outputTableNames.has(tableName));
+            }
         });
         if (!stale) {
             return;

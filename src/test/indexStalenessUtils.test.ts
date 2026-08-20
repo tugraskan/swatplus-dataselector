@@ -3,15 +3,21 @@ import {
     baseName,
     formatRelativeAge,
     formatStaleSummary,
+    isFileChangedSince,
     isSelfWrittenFile,
     shouldMarkStale,
     MAX_TRACKED_STALE_FILES
 } from '../indexStalenessUtils';
 
 const indexedFiles = new Set(['hru.con', 'hru-data.hru', 'soils.sol']);
+const outputFiles = new Set(['mgt.out', 'flow-duration-curve.txt']);
 const context = (indexBuilt: boolean) => ({
     indexBuilt,
-    isIndexedFile: (filePath: string) => indexedFiles.has(baseName(filePath).toLowerCase())
+    isIndexedFile: (filePath: string) => {
+        const fileName = baseName(filePath).toLowerCase();
+        return indexedFiles.has(fileName) || outputFiles.has(fileName);
+    },
+    isOutputFile: (filePath: string) => outputFiles.has(baseName(filePath).toLowerCase())
 });
 
 suite('Index Staleness Utils', () => {
@@ -57,6 +63,10 @@ suite('Index Staleness Utils', () => {
             // output files and would otherwise leave the banner permanently lit.
             assert.strictEqual(shouldMarkStale('/d/TxtInOut/channel_sd_day.txt', context(true)), false);
             assert.strictEqual(shouldMarkStale('/d/TxtInOut/basin_wb_yr.csv', context(true)), false);
+            // These outputs are present in the default editor schema, so a plain
+            // schema lookup would otherwise mistake them for indexed inputs.
+            assert.strictEqual(shouldMarkStale('/d/TxtInOut/mgt.out', context(true)), false);
+            assert.strictEqual(shouldMarkStale('/d/TxtInOut/flow-duration-curve.txt', context(true)), false);
         });
 
         test('ignores the extension-written index cache', () => {
@@ -96,6 +106,25 @@ suite('Index Staleness Utils', () => {
                 formatStaleSummary(['a.con', 'b.sol', 'c.hru', 'd.lum', 'e.cli']),
                 'Changed: a.con, b.sol, c.hru and 2 more.'
             );
+        });
+    });
+
+    suite('isFileChangedSince', () => {
+        const cachedAt = '2026-08-20T12:00:00.000Z';
+        const cacheTime = Date.parse(cachedAt);
+
+        test('keeps files at or before the cache timestamp fresh', () => {
+            assert.strictEqual(isFileChangedSince(cachedAt, cacheTime), false);
+            assert.strictEqual(isFileChangedSince(cachedAt, cacheTime - 1), false);
+        });
+
+        test('marks files modified after the cache timestamp stale', () => {
+            assert.strictEqual(isFileChangedSince(cachedAt, cacheTime + 1), true);
+        });
+
+        test('marks deleted files and invalid cache timestamps stale', () => {
+            assert.strictEqual(isFileChangedSince(cachedAt, undefined), true);
+            assert.strictEqual(isFileChangedSince('not-a-date', cacheTime), true);
         });
     });
 

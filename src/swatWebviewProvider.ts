@@ -131,8 +131,10 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                             break;
                         case 'selectRecentDataset':
                             if (data.path && typeof data.path === 'string') {
-                                this.setSelectedDataset(data.path);
-                                vscode.window.showInformationMessage(`SWAT+ Dataset folder selected: ${data.path}`);
+                                await vscode.commands.executeCommand(
+                                    'swat-dataset-selector.selectRecentDataset',
+                                    data.path
+                                );
                             }
                             break;
                         case 'openFile':
@@ -275,8 +277,10 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                             break;
                         case 'selectWorkdataDataset':
                             if (data.path && typeof data.path === 'string') {
-                                this.setSelectedDataset(data.path);
-                                vscode.window.showInformationMessage(`SWAT+ Dataset selected: ${data.path}`);
+                                await vscode.commands.executeCommand(
+                                    'swat-dataset-selector.selectRecentDataset',
+                                    data.path
+                                );
                             }
                             break;
                         case 'refreshWorkdata':
@@ -534,7 +538,10 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             }
         }
 
-        this.setSelectedDataset(finalPath);
+        await vscode.commands.executeCommand(
+            'swat-dataset-selector.selectRecentDataset',
+            finalPath
+        );
         vscode.window.showInformationMessage(`Dataset added: ${path.basename(finalPath)}`);
     }
 
@@ -1266,12 +1273,14 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         // Dataset health strip: keeps index size and unresolved-reference count in
         // view, so data quality is ambient instead of hidden behind a command the user
         // has to remember to run.
+        const selectedDatasetForIndex = this.selectedDataset;
+        const hasActiveDatasetIndex = this.indexer.isIndexBuiltForDataset(selectedDatasetForIndex);
         const healthStripHtml = (() => {
-            if (!this.selectedDataset || !this.indexer.isIndexBuilt()) {
+            if (!selectedDatasetForIndex || !hasActiveDatasetIndex) {
                 return '';
             }
             const { tableCount, fkCount, unresolvedCount } = this.indexer.getIndexSummary();
-            const age = formatRelativeAge(this.indexer.getIndexBuiltAt(this.selectedDataset));
+            const age = formatRelativeAge(this.indexer.getIndexBuiltAt(selectedDatasetForIndex));
             const unresolvedClass = unresolvedCount > 0 ? ' health-warn' : ' health-ok';
             const unresolvedTitle = unresolvedCount > 0
                 ? `${unresolvedCount} foreign key reference(s) do not resolve. Click to run the data quality preflight.`
@@ -1295,7 +1304,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         // Stale-index banner: input files changed on disk after the index was built, so
         // FK navigation, hovers and diagnostics may point at rows that have moved.
-        const indexIsStale = this.indexer.isIndexStale();
+        const indexIsStale = hasActiveDatasetIndex && this.indexer.isIndexStale();
         const staleFiles = indexIsStale ? this.indexer.getStaleFiles() : [];
         const staleSummary = formatStaleSummary(staleFiles);
         const staleIndexBanner = indexIsStale
