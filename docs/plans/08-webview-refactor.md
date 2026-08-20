@@ -41,11 +41,40 @@ and logic.
 5. Migrate panels incrementally — start with the smallest (`dependencyGraphPanel`)
    to establish the pattern, then the table viewers.
 
+## Hard requirement — host-side sort and filter
+
+Discovered while attempting windowed rendering for large tables (Plan 09, open
+item 1), and binding on the design above:
+
+The table viewers currently sort and filter **in the webview, by reading the
+DOM**. `src/singleTableViewerPanel.ts:3499-3518` does
+`Array.from(table.tBodies[0].rows)`, sorts that array, and re-appends;
+`:3442` hides rows the same way. Both assume **every row is present in the
+DOM**.
+
+That assumption is why large tables are slow: a real watershed's `hru.con` runs
+to tens of thousands of rows, each materialised into the HTML string, and
+`retainContextWhenHidden: true` keeps every panel resident.
+
+It also means the obvious fix is unsafe. Rendering only a window of rows while
+leaving sort and filter in the webview makes sorting order *only the loaded
+rows* and filtering match *only those* — silently wrong results, which is worse
+than being slow. Users would have no signal that a filter missed matches.
+
+So the shared table component (design item 4) must own sort and filter on the
+**host** side, over the full row set, and hand the webview a window of the
+result via the typed protocol (design item 3). Windowing is then safe, and the
+performance problem goes away with it.
+
+Anyone tempted to do a quick virtualisation pass on the existing viewers should
+read this first: it is not separable from the refactor.
+
 ## Deliverables
 
 - `webview-ui/` sources + esbuild wiring; `dist/webview/` bundles.
 - `src/webview/protocol.ts` typed message contracts.
-- One shared table component; the three viewers reduced to thin hosts over it.
+- One shared table component; the three viewers reduced to thin hosts over it,
+  with sort/filter host-side and windowed rendering in the webview.
 - CSP applied uniformly.
 
 ## Acceptance
@@ -55,6 +84,9 @@ and logic.
   raw string interpolation of user/dataset values into HTML).
 - Net TypeScript LOC in the panel hosts drops substantially; the table viewers share
   one implementation.
+- A table with tens of thousands of rows opens without a multi-megabyte document,
+  and sorting or filtering it returns results computed over **all** rows, not just
+  the rendered window.
 
 ## Notes
 

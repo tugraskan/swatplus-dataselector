@@ -3,6 +3,25 @@
 **Theme:** reliability · **Effort:** M (async fix) + L (optional pure-TS parser) ·
 **Priority:** highest
 
+## Implementation status
+
+- **Part A — DONE** (PR #137). `buildIndexWithPandas` now runs the Python indexer
+  through async `spawn` via `runPythonIndexer` (`src/indexer.ts`), the
+  `CancellationToken` is wired to the child process (`SIGTERM`, then `SIGKILL`
+  after 2s), and the candidate loop awaits each attempt in sequence. The payload
+  still goes to the `--output` temp file, so buffer limits remain moot.
+  Additionally: a `SWAT+ Indexer` output channel was added — the previous failure
+  message told users to "check the Output panel" when no such channel existed —
+  and the failure notification now offers **Show Details**.
+- **Part B — OPEN.** The prerequisite *check* exists and gates the Build Index
+  button with a reason, but there is still no actionable modal and no
+  `swatplus.pythonPath` setting.
+- **Part C — OPEN.** No pure-TS parser; Python + pandas is still required.
+
+The `spawnSync` call in `getIndexingPrerequisiteStatus` (`src/indexer.ts`) was
+deliberately left synchronous: it has a 4s timeout, is cached, and is called from
+synchronous render paths in the webview provider.
+
 ## Problem
 
 Indexing is the extension's core operation and it currently has two reliability
