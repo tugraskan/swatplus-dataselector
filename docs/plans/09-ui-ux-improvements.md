@@ -48,6 +48,11 @@ Build failures previously said "Check the Output panel for details" — the
 indexer had no output channel at all. Added a `SWAT+ Indexer` channel and a
 `Show Details` action on the failure notification.
 
+Making the build async also made **concurrent builds possible** for the first
+time; `spawnSync` had made them structurally impossible. `buildIndex` therefore
+guards on an `indexBuildInProgress` flag and declines a second build rather than
+letting two runs clear and repopulate the index underneath each other.
+
 See Plan 01 for Parts B and C, which remain open.
 
 ## Part C — Staleness, search and discoverability (DONE)
@@ -55,16 +60,30 @@ See Plan 01 for Parts B and C, which remain open.
 - A `FileSystemWatcher` on the active dataset's TxtInOut folder refreshes the
   listing (debounced) and flags the index stale when an **indexed input** file
   changes, surfaced as an "Index out of date" banner with one-click rebuild.
-  Output files and the extension's own `index.json` are excluded — not by
-  extension, but by asking whether the file is in the index
-  (`shouldMarkStale` in `src/indexStalenessUtils.ts`). Without that, a finished
-  run writing hundreds of outputs would leave the banner permanently lit.
+  Without an output exclusion, a finished run writing hundreds of outputs would
+  leave the banner permanently lit.
+
+  The exclusion is **not** "is this file in the index?" — that was the original
+  approach and it was wrong. Output families such as `mgt.out` and
+  `flow-duration-curve.txt` are present in the editor schema, so they resolve to
+  a table name just like inputs do and would have marked the index stale. The
+  unit tests did not catch it because they stubbed `isIndexedFile` with a set of
+  three input names, encoding the assumption instead of exercising it.
+
+  `shouldMarkStale` (`src/indexStalenessUtils.ts`) now takes a separate
+  `isOutputFile` predicate, which the indexer backs with `outputTableNames` —
+  schema tables whose `model_class` starts with `output.`. The extension's own
+  `index.json` is excluded separately by `isSelfWrittenFile`.
 - Name filters on the Inputs and Outputs lists, combining with the category
   checkboxes. A dataset carries ~200 input files; 13 category checkboxes were
   the only filter.
 - `swatplus.hasDataset` / `swatplus.hasIndex` context keys gate the command
   palette, which was offering ~10 commands whose only effect was to warn that a
   dataset or index was missing. Common actions added to the view title bar.
+  `hasIndex` is computed by `isIndexBuiltForDataset(selected)`, not a bare
+  `isIndexBuilt()`: the latter only asks whether *some* index is loaded, so
+  after switching to a dataset with no cache the key stayed true and the palette
+  offered index commands belonging to the previous dataset.
 - Dataset health strip (tables · FKs · unresolved · index age); the unresolved
   count opens the data quality report.
 - Getting-started walkthrough (`resources/walkthrough/`).

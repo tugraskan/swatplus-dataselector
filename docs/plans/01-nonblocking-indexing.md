@@ -12,7 +12,9 @@
   still goes to the `--output` temp file, so buffer limits remain moot.
   Additionally: a `SWAT+ Indexer` output channel was added — the previous failure
   message told users to "check the Output panel" when no such channel existed —
-  and the failure notification now offers **Show Details**.
+  and the failure notification now offers **Show Details**. Because async builds
+  can overlap where `spawnSync` could not, `buildIndex` also guards on an
+  `indexBuildInProgress` flag and declines a concurrent build.
 - **Part B — OPEN.** The prerequisite *check* exists and gates the Build Index
   button with a reason, but there is still no actionable modal and no
   `swatplus.pythonPath` setting.
