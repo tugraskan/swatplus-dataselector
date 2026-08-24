@@ -6,6 +6,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-24
+
 ### Added
 - Name filter on the Inputs and Outputs lists, with a clear button and Escape to clear,
   combining with the category checkboxes
