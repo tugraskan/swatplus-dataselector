@@ -168,6 +168,93 @@
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "swat-dataset-selector.launchDebug",
+          "when": "swatplus.hasDataset"
+        },
+        {
+          "command": "swat-dataset-selector.buildIndex",
+          "when": "swatplus.hasDataset"
+        },
+        {
+          "command": "swat-dataset-selector.rebuildIndex",
+          "when": "swatplus.hasIndex"
+        },
+        {
+          "command": "swat-dataset-selector.loadIndex",
+          "when": "swatplus.hasDataset"
+        },
+        {
+          "command": "swat-dataset-selector.exportIndex",
+          "when": "swatplus.hasIndex"
+        },
+        {
+          "command": "swat-dataset-selector.showFKReferences",
+          "when": "swatplus.hasIndex"
+        },
+        {
+          "command": "swat-dataset-selector.showTableViewer",
+          "when": "swatplus.hasIndex"
+        },
+        {
+          "command": "swat-dataset-selector.showDependencyGraph",
+          "when": "swatplus.hasIndex"
+        },
+        {
+          "command": "swat-dataset-selector.runDataQualityPreflight",
+          "when": "swatplus.hasIndex"
+        },
+        {
+          "command": "swat-dataset-selector.checkInputFiles",
+          "when": "swatplus.hasIndex"
+        },
+        {
+          "command": "swat-dataset-selector.describeEntity",
+          "when": "swatplus.hasIndex"
+        },
+        {
+          "command": "swat-dataset-selector.searchDataset",
+          "when": "swatplus.hasIndex"
+        },
+        {
+          "command": "swat-dataset-selector.processHruSubset",
+          "when": "swatplus.hasDataset"
+        },
+        {
+          "command": "swat-dataset-selector.processHruSubsetAndRun",
+          "when": "swatplus.hasDataset"
+        },
+        {
+          "command": "swat-dataset-selector.generateOutputNotebooks",
+          "when": "swatplus.hasDataset"
+        },
+        {
+          "command": "swat-dataset-selector.revealWorkdataFolder",
+          "when": "swatplus.hasDataset"
+        },
+        {
+          "command": "swat-dataset-selector.useAsDataset",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "swat-dataset-selector.buildIndex",
+          "when": "view == swatDatasetView && swatplus.hasDataset",
+          "group": "navigation@1"
+        },
+        {
+          "command": "swat-dataset-selector.showTableViewer",
+          "when": "view == swatDatasetView && swatplus.hasIndex",
+          "group": "navigation@2"
+        },
+        {
+          "command": "swat-dataset-selector.switchDataset",
+          "when": "view == swatDatasetView",
+          "group": "navigation@3"
+        }
+      ],
       "explorer/context": [
         {
           "command": "swat-dataset-selector.openOutputAsDataFrame",
@@ -181,6 +268,63 @@
         }
       ]
     },
+    "walkthroughs": [
+      {
+        "id": "swatplusGettingStarted",
+        "title": "Get started with SWAT+",
+        "description": "Select a dataset, index it, and navigate your SWAT+ model like source code.",
+        "steps": [
+          {
+            "id": "selectDataset",
+            "title": "Select a dataset",
+            "description": "Choose the folder holding your SWAT+ inputs — the one containing file.cio.\n[Select Dataset Folder](command:swat-dataset-selector.selectDataset)",
+            "media": {
+              "markdown": "resources/walkthrough/select-dataset.md"
+            },
+            "completionEvents": [
+              "onCommand:swat-dataset-selector.selectDataset",
+              "onCommand:swat-dataset-selector.useAsDataset"
+            ]
+          },
+          {
+            "id": "buildIndex",
+            "title": "Build the inputs index",
+            "description": "Index the dataset so foreign keys, hovers, and validation work. Requires Python with pandas.\n[Build Inputs Index](command:swat-dataset-selector.buildIndex)",
+            "media": {
+              "markdown": "resources/walkthrough/build-index.md"
+            },
+            "completionEvents": [
+              "onCommand:swat-dataset-selector.buildIndex"
+            ]
+          },
+          {
+            "id": "navigate",
+            "title": "Navigate the model",
+            "description": "Ctrl+Click foreign keys to jump between files, hover for column documentation, and view the dependency graph.\n[View Tables](command:swat-dataset-selector.showTableViewer)",
+            "media": {
+              "markdown": "resources/walkthrough/navigate.md"
+            },
+            "completionEvents": [
+              "onCommand:swat-dataset-selector.showTableViewer",
+              "onCommand:swat-dataset-selector.showDependencyGraph",
+              "onCommand:swat-dataset-selector.showFKReferences"
+            ]
+          },
+          {
+            "id": "exploreOutputs",
+            "title": "Explore results",
+            "description": "Open output files as DataFrames, generate notebooks, or carve out an HRU subset to iterate faster.\n[Generate Output Notebooks](command:swat-dataset-selector.generateOutputNotebooks)",
+            "media": {
+              "markdown": "resources/walkthrough/explore-outputs.md"
+            },
+            "completionEvents": [
+              "onCommand:swat-dataset-selector.generateOutputNotebooks",
+              "onCommand:swat-dataset-selector.openOutputAsDataFrame"
+            ]
+          }
+        ]
+      }
+    ],
     "configuration": {
       "title": "SWAT+ Dataset Selector",
       "properties": {
@@ -196,17 +340,38 @@
           "type": "string",
           "default": "workdata",
           "description": "Directory (relative to the workspace root, or absolute) that contains SWAT+ dataset folders. It is shown in the Dataset Folder section beneath Recent Datasets. Defaults to 'workdata'."
+        },
+        "swatplus.debugLogging": {
+          "type": "boolean",
+          "default": false,
+          "description": "Log SWAT+ Dataset Selector activity to the developer console. Useful when diagnosing sidebar or navigation issues; off by default so the console stays quiet during normal use."
+        },
+        "swatplus.openTablesAfterIndex": {
+          "type": "string",
+          "enum": [
+            "prompt",
+            "always",
+            "never"
+          ],
+          "enumDescriptions": [
+            "Show a notification offering to open the table viewers.",
+            "Open the table viewer and file.cio automatically, as before.",
+            "Do not open any panels after indexing."
+          ],
+          "default": "prompt",
+          "description": "What to do with the table viewers after building or rebuilding the inputs index. 'always' reproduces the previous behaviour of taking over the editor area on every build."
         }
       }
     }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
-    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "compile": "npm run check-types && npm run lint && npm run check-webview && node esbuild.js",
+    "check-webview": "node scripts/check_webview_scripts.js",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "package": "npm run check-types && npm run lint && npm run check-webview && node esbuild.js --production",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",

@@ -25,6 +25,10 @@ jobs:
         run: npm run check-types
       - name: Lint
         run: npm run lint
+      - name: Check embedded webview scripts
+        # tsc and eslint do not parse the JavaScript inside webview HTML template
+        # literals, so a syntax error there ships as a silently broken panel.
+        run: npm run check-webview
       - name: Unit tests (vscode-free suites)
         run: npm run test:unit
 
