@@ -38,6 +38,12 @@ import {
     resolvePython,
     summarizeRun,
 } from './datasetRuntime';
+import {
+    buildExpectations,
+    checkCio,
+    describeCioCheck,
+    parseCioRows,
+} from './cioCheck';
 
 interface CliArgs {
     index?: string;
@@ -48,6 +54,8 @@ interface CliArgs {
     scripts?: string;
     /** Default SWAT+ executable for run_dataset. */
     exe?: string;
+    /** SWAT+ source tree, for check_dataset's expectations. */
+    source?: string;
 }
 
 function parseArgs(argv: string[]): CliArgs {
@@ -63,6 +71,7 @@ function parseArgs(argv: string[]): CliArgs {
             case '--metadata': args.metadata = next(); break;
             case '--scripts': args.scripts = next(); break;
             case '--exe': args.exe = next(); break;
+            case '--source': args.source = next(); break;
         }
     }
     return args;
@@ -310,6 +319,73 @@ function main(): void {
             + 'describe_entity, query_rows, find_references, find_orphans and '
             + 'run_dataset now work against this dataset.',
         );
+    });
+
+    server.registerTool('check_dataset', {
+        title: 'Check a SWAT+ dataset against the code that reads it',
+        description: 'Check the dataset\'s file.cio for rows that are short of values, '
+            + 'which is the failure worth catching before a run: list-directed input '
+            + 'spans records to fill its item list, so a short row silently consumes '
+            + 'the next line and every row after it is read shifted by one. The crash '
+            + 'then surfaces far away, typically as a subscript error in an unrelated '
+            + 'routine. Expectations come from the Fortran source, so an older branch '
+            + 'expects an older file.cio and a matching dataset passes. Run this before '
+            + 'run_dataset.',
+        inputSchema: {
+            dataset: z.string().optional()
+                .describe('Dataset directory; defaults to the active dataset'),
+            source: z.string().optional()
+                .describe('SWAT+ source tree to read expectations from; defaults to '
+                    + 'the server\'s --source'),
+        },
+    }, async ({ dataset, source }) => {
+        const datasetDir = dataset ?? state.datasetDir;
+        if (!datasetDir) {
+            return textResult(
+                'No dataset to check. Call select_dataset first, or pass `dataset`.',
+            );
+        }
+        const sourceDir = source ?? args.source;
+        if (!sourceDir) {
+            return textResult(
+                'No SWAT+ source tree to read expectations from. Pass `source`, or '
+                + 'start this server with --source <swatplus repo>. The check '
+                + 'compares file.cio against the types in src/input_file_module.f90, '
+                + 'so it needs the source that will read the dataset -- which is '
+                + 'also what makes it correct on an older branch.',
+            );
+        }
+
+        const cioPath = path.join(datasetDir, 'file.cio');
+        const readcioPath = path.join(sourceDir, 'src', 'readcio_read.f90');
+        const modulePath = path.join(sourceDir, 'src', 'input_file_module.f90');
+        for (const [label, needed] of [
+            ['dataset', cioPath],
+            ['source', readcioPath],
+            ['source', modulePath],
+        ] as const) {
+            if (!fs.existsSync(needed)) {
+                return textResult(`Cannot check: no ${needed} (${label} path wrong?).`);
+            }
+        }
+
+        const expectations = buildExpectations(
+            fs.readFileSync(readcioPath, 'utf-8'),
+            fs.readFileSync(modulePath, 'utf-8'),
+        );
+        if (expectations.length === 0) {
+            return textResult(
+                `Read no row expectations from ${sourceDir}. The check needs `
+                + 'readcio_read.f90 to read rows as `name, <derived type>`; if that '
+                + 'has changed shape, this needs updating rather than trusting.',
+            );
+        }
+
+        const findings = checkCio(
+            parseCioRows(fs.readFileSync(cioPath, 'utf-8')),
+            expectations,
+        );
+        return textResult(describeCioCheck(findings, { datasetDir, sourceDir }));
     });
 
     server.registerTool('run_dataset', {

@@ -7,6 +7,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 ## [Unreleased]
 
 ### Added
+- `check_dataset` MCP tool: validates `file.cio` row arity against the Fortran source that reads it, catching a row short of values before the run. A short row is not a read error -- list-directed input spans records to fill its item list, so it silently consumes the next line and every row after is read shifted by one, surfacing much later as a subscript error in an unrelated routine. Expectations come from `src/input_file_module.f90` rather than a reference dataset, so an older branch expects an older `file.cio` and a matching dataset passes
 - `select_dataset` MCP tool: point every dataset tool at a different dataset directory at runtime, instead of the dataset being fixed by the command line at server start
 - `run_dataset` MCP tool: run the SWAT+ executable with the active dataset as its working directory and report how it ended, leading with the `forrtl` error and traceback. A build compiled `/traceback` and linked `/INCREMENTAL:NO` names the failing routine and source line, so the crash text alone identifies it
 - "Select All" checkbox to quickly toggle all input category filters at once (with indeterminate state support)
