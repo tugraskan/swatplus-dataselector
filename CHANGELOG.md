@@ -7,6 +7,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 ## [Unreleased]
 
 ### Added
+- `select_dataset` MCP tool: point every dataset tool at a different dataset directory at runtime, instead of the dataset being fixed by the command line at server start
+- `run_dataset` MCP tool: run the SWAT+ executable with the active dataset as its working directory and report how it ended, leading with the `forrtl` error and traceback. A build compiled `/traceback` and linked `/INCREMENTAL:NO` names the failing routine and source line, so the crash text alone identifies it
 - "Select All" checkbox to quickly toggle all input category filters at once (with indeterminate state support)
 - Separate navigation state for Inputs and Outputs sections - navigating in one doesn't affect the other
 - Back button in Outputs section for subdirectory navigation
@@ -24,6 +26,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - Updated weather-wgn.cli schema to correctly reflect file structure (has_header_line: false)
 
 ### Fixed
+- Index building no longer assumes `python3` exists: on Windows it usually resolves to the Microsoft Store alias, which exits non-zero without running anything, so the failure looked like a broken indexer rather than a missing interpreter. `python3`, `python` and `py -3` are now tried in order
 - Improved filtering logic to use `includes()` instead of `indexOf()` for better performance
 - Navigation in outputs section no longer affects navigation in inputs section
 - Climate file columns (pcp, tmp, slr, hmd, wnd, wnd_dir, atmo_dep) in weather-sta.cli are no longer treated as FK references
