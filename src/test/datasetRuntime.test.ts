@@ -5,6 +5,7 @@ import {
     PYTHON_CANDIDATES,
     RUN_FRAME_LIMIT,
     RunOutcome,
+    countIndexedRows,
     describeDatasetProblem,
     parseRunFailure,
     resolvePython,
@@ -128,6 +129,28 @@ suite('Dataset runtime - validating a dataset directory', () => {
         const problem = describeDatasetProblem('  ', () => { touched = true; return true; }, isDir);
         assert.match(problem ?? '', /no dataset path/);
         assert.strictEqual(touched, false);
+    });
+});
+
+suite('Dataset runtime - counting indexed rows', () => {
+    test('counts the rows of every table', () => {
+        // The index shape: tables[name] IS the row array. Reaching for a
+        // `.rows` property on it yields undefined and reports a confident
+        // zero for a dataset that indexed perfectly well -- which is exactly
+        // what this shipped as, until a real dataset said "83 tables, 0 rows".
+        const rows = countIndexedRows({
+            'hru-data.hru': [{ pkValue: '1' }, { pkValue: '2' }],
+            'aquifer.aqu': [{ pkValue: '1' }],
+        });
+        assert.strictEqual(rows, 3);
+    });
+
+    test('an empty index counts zero rather than throwing', () => {
+        assert.strictEqual(countIndexedRows({}), 0);
+    });
+
+    test('a table that is not an array is skipped, not counted as one', () => {
+        assert.strictEqual(countIndexedRows({ bad: { rows: [1, 2, 3] } as unknown }), 0);
     });
 });
 

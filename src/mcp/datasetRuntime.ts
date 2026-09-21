@@ -93,6 +93,24 @@ export function describeDatasetProblem(
     return undefined;
 }
 
+/**
+ * Rows across every table of a pandas index.
+ *
+ * A helper rather than an inline reduce because the shape is easy to get
+ * wrong and the mistake is silent: `tables[name]` *is* the row array, not an
+ * object wrapping one, so reaching for `.rows` yields undefined and reports a
+ * confident zero for a dataset that indexed perfectly well.
+ */
+export function countIndexedRows(tables: { [table: string]: unknown }): number {
+    let total = 0;
+    for (const value of Object.values(tables ?? {})) {
+        if (Array.isArray(value)) {
+            total += value.length;
+        }
+    }
+    return total;
+}
+
 /** One row of a `forrtl` traceback table. */
 export interface TracebackFrame {
     image: string;

@@ -33,6 +33,7 @@ import { EnrichedSchemaIndex, OutputSchemaIndex } from '../enrichedSchemaCore';
 import { createEngineHost } from '../engineTools';
 import {
     RunOutcome,
+    countIndexedRows,
     describeDatasetProblem,
     resolvePython,
     summarizeRun,
@@ -302,10 +303,7 @@ function main(): void {
         state.indexPath = built;
 
         const tables = Object.keys(loaded.tables ?? {});
-        const rows = tables.reduce(
-            (total, name) => total + ((loaded.tables[name] as { rows?: unknown[] })?.rows?.length ?? 0),
-            0,
-        );
+        const rows = countIndexedRows(loaded.tables ?? {});
         return textResult(
             `Active dataset is now ${datasetDir}.\n`
             + `${tables.length} table(s), ${rows} row(s) indexed.\n`
