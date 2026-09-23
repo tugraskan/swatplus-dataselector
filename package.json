@@ -3,7 +3,7 @@
   "displayName": "SWAT+ Dataset Selector",
   "description": "Browse and select SWAT+ dataset folders for debugging",
   "version": "0.1.0",
-  "publisher": "taciugraskan",
+  "publisher": "Pbsandt",
   "repository": {
     "type": "git",
     "url": "https://github.com/tugraskan/swatplus-dataselector"
