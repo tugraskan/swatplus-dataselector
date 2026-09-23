@@ -18,7 +18,7 @@
   ],
   "extensionPack": [
     "taciugraskan.swat-dataset-selector",
-    "Pbsandt.vsc-ifx-debug"
+    "taciugraskan.vsc-ifx-debug"
   ],
   "devDependencies": {
     "@vscode/vsce": "^3.9.2"
