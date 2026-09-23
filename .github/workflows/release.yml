@@ -46,3 +46,9 @@ jobs:
             release-assets/swatplus-schema-enriched.json
             release-assets/swatplus-output-schema.json
             release-assets/*.vsix
+      - name: Publish to VS Code Marketplace
+        # Needs a VSCE_PAT repo secret (Marketplace: Manage, for the
+        # "taciugraskan" publisher). Until it's set, this step fails and the
+        # GitHub Release above -- with the vsix already attached -- still
+        # succeeds.
+        run: npx vsce publish -p ${{ secrets.VSCE_PAT }}
