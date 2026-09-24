@@ -26,12 +26,15 @@ import { detectEnvironment, isCmakeToolsInstalled } from './environmentUtils';
 import { generateOutputNotebooks } from './outputNotebookGenerator';
 import { inspectHruRange, runHruProcessor, validateHruIdInput } from './hruProcessor';
 import { isSelfWrittenFile } from './indexStalenessUtils';
+import { installInstructionPointers } from './instructionPointer';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
 	try {
 		console.log('SWAT+ Dataset Selector extension is now active!');
+
+	installInstructionPointers();
 
 	// Auto-open the SWAT+ Dataset sidebar panel when the extension activates
 	vscode.commands.executeCommand('workbench.view.extension.swat-dataset-selector');

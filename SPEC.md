@@ -7,7 +7,7 @@
 | **Name** | `swat-dataset-selector` |
 | **Display name** | SWAT+ Dataset Selector |
 | **Version** | 0.1.0 |
-| **Publisher** | taciugraskan |
+| **Publisher** | PbsandtDev |
 | **Category** | VS Code Extension (Other) |
 | **License** | MIT |
 | **Repository** | github.com/tugraskan/swatplus-dataselector |

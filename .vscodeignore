@@ -18,6 +18,9 @@ vsc-extension-quickstart.md
 # Packaged artifacts should never ship inside the package
 *.vsix
 
+# A separate extension (its own package.json/publisher), not part of this one
+extension-pack/**
+
 # Internal development notes and plans (not user-facing)
 PLAN.md
 docs/plans/**
