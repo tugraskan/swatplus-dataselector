@@ -39,6 +39,6 @@ jobs:
           files: extension-pack/*.vsix
       - name: Publish to VS Code Marketplace
         # Same VSCE_PAT secret as release.yml -- both publish under
-        # "Pbsandt". Until it's set, this step fails and the GitHub
+        # "PbsandtDev". Until it's set, this step fails and the GitHub
         # Release above -- with the vsix already attached -- still succeeds.
         run: npx vsce publish -p ${{ secrets.VSCE_PAT }}

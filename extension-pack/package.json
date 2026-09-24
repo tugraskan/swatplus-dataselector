@@ -3,7 +3,7 @@
   "displayName": "SWAT+ Tools",
   "description": "Installs SWAT+ Dataset Selector and Fortran ifx Debug together, so a new machine gets both with one click.",
   "version": "0.1.0",
-  "publisher": "Pbsandt",
+  "publisher": "PbsandtDev",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -17,8 +17,8 @@
     "Extension Packs"
   ],
   "extensionPack": [
-    "Pbsandt.swat-dataset-selector",
-    "Pbsandt.vsc-ifx-debug"
+    "PbsandtDev.swat-dataset-selector",
+    "PbsandtDev.vsc-ifx-debug"
   ],
   "devDependencies": {
     "@vscode/vsce": "^3.9.2"
