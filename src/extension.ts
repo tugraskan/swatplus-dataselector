@@ -1386,6 +1386,79 @@ export function activate(context: vscode.ExtensionContext) {
 
 }
 
+const DEFAULT_GDB_CONFIG_LABEL = 'Default (GDB via CMake)';
+
+function defaultGdbConfig(datasetFolder: string): vscode.DebugConfiguration {
+	return {
+		name: 'SWAT+ Debug with Dataset',
+		type: 'cppdbg',
+		request: 'launch',
+		program: '${command:cmake.launchTargetPath}',
+		args: [],
+		stopAtEntry: false,
+		cwd: datasetFolder,
+		environment: [
+			{
+				name: 'PATH',
+				value: '${env:PATH}:${command:cmake.getLaunchTargetDirectory}'
+			}
+		],
+		externalConsole: false,
+		MIMode: 'gdb',
+		setupCommands: [
+			{
+				description: 'Enable pretty-printing for gdb',
+				text: '-enable-pretty-printing',
+				ignoreFailures: true
+			}
+		]
+	};
+}
+
+/**
+ * Offers every configuration in .vscode/launch.json alongside the built-in
+ * GDB fallback, so a dataset debug run isn't locked to GDB when the workspace
+ * also has e.g. an Intel ifx (cppvsdbg) config from the Fortran ifx Debug
+ * extension. Whatever is picked gets `cwd` forced to the selected dataset
+ * folder -- that's the point of launching "with" a dataset.
+ */
+async function pickDebugConfiguration(
+	workspaceFolder: vscode.WorkspaceFolder,
+	datasetFolder: string
+): Promise<vscode.DebugConfiguration | undefined> {
+	const launchConfigs = vscode.workspace
+		.getConfiguration('launch', workspaceFolder.uri)
+		.get<vscode.DebugConfiguration[]>('configurations') ?? [];
+
+	if (launchConfigs.length === 0) {
+		return defaultGdbConfig(datasetFolder);
+	}
+
+	type ConfigPick = vscode.QuickPickItem & { config: vscode.DebugConfiguration };
+
+	const items: ConfigPick[] = [
+		{
+			label: DEFAULT_GDB_CONFIG_LABEL,
+			description: 'cppdbg / gdb',
+			detail: 'Built-in fallback -- runs the CMake launch target under GDB.',
+			config: defaultGdbConfig(datasetFolder)
+		},
+		...launchConfigs.map((config) => ({
+			label: config.name,
+			description: config.type,
+			config: { ...config, cwd: datasetFolder }
+		}))
+	];
+
+	const picked = await vscode.window.showQuickPick(items, {
+		title: 'SWAT+: Select Debug Configuration',
+		placeHolder: `Run with dataset: ${path.basename(datasetFolder)}`,
+		matchOnDescription: true
+	});
+
+	return picked?.config;
+}
+
 async function launchDebugSession(datasetFolder: string) {
 	const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 
@@ -1406,35 +1479,12 @@ async function launchDebugSession(datasetFolder: string) {
 		return;
 	}
 
-	// Start debugging with dynamic configuration
-	const success = await vscode.debug.startDebugging(workspaceFolder, {
-		name: 'SWAT+ Debug with Dataset',
-		type: 'cppdbg',
-		request: 'launch',
-		program: '${command:cmake.launchTargetPath}',
-		args: [],
-		stopAtEntry: false,
-		cwd: datasetFolder,
-		environment: [
-			{
-				name: 'PATH',
-				value: '${env:PATH}:${command:cmake.getLaunchTargetDirectory}'
-			},
-			{
-				name: 'OTHER_VALUE',
-				value: 'Something something'
-			}
-		],
-		externalConsole: false,
-		MIMode: 'gdb',
-		setupCommands: [
-			{
-				description: 'Enable pretty-printing for gdb',
-				text: '-enable-pretty-printing',
-				ignoreFailures: true
-			}
-		]
-	});
+	const config = await pickDebugConfiguration(workspaceFolder, datasetFolder);
+	if (!config) {
+		return;
+	}
+
+	const success = await vscode.debug.startDebugging(workspaceFolder, config);
 
 	if (success) {
 		vscode.window.showInformationMessage(`Debug session started with dataset: ${datasetFolder}`);
