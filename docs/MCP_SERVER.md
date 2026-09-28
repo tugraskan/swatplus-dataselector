@@ -23,6 +23,42 @@ the same enriched schemas the extension uses for hovers and diagnostics.
 > interactive editor use; use this MCP server for external agents (Claude Code,
 > Claude Desktop).
 
+## In VS Code's own chat: nothing to configure
+
+The extension registers this server with VS Code's own MCP registry
+(`vscode.lm.registerMcpServerDefinitionProvider`, declared in
+`package.json`'s `contributes.mcpServerDefinitionProviders`), the same way
+its debug-tool counterpart does. Opening this workspace and enabling the
+server once (VS Code's own one-time per-workspace trust prompt — `MCP: List
+Servers` → `SWAT+ Dataset` → `Start`, if it isn't offered automatically) is
+enough; no `.vscode/mcp.json` is written or needed for this path, and no
+`node` executable path has to be found or hardcoded. The extension spawns
+`dist/mcp-server.js` with `process.execPath` — the editor's own bundled
+Node.js — so this keeps working across container/Codespaces rebuilds that
+change where VS Code's bundled Node actually lives on disk.
+
+The arguments the server is spawned with come from whichever dataset is
+currently selected in the SWAT+ sidebar:
+
+- A dataset selected with an existing, version-compatible `index.json`
+  (written by the extension's own indexer) → `--index <dataset>/index.json`.
+- A dataset selected with no cached index yet → `--dataset <dataset>` (the
+  server builds one; requires `python3` + `pandas` on `PATH`, per Running
+  below).
+- No dataset selected → docs-only mode; `lookup_docs` still works.
+
+Switching the selected dataset (via the sidebar, the status bar item, or
+`swat-dataset-selector.switchDataset`) tells VS Code to re-request the
+definition, so the next chat turn's server spawn picks up the new dataset.
+An MCP session already in progress keeps talking to the process it started
+with until that session ends.
+
+This path is specific to VS Code's own chat (GitHub Copilot Chat's agent
+mode, or any other client reading VS Code's MCP registry). Claude Code,
+Claude Desktop, and any other external client keep their own MCP
+configuration and don't read VS Code's registry — see Configuring an MCP
+client below for those.
+
 ## Tools
 
 | Tool | Arguments | Returns |

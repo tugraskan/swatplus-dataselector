@@ -27,6 +27,53 @@ import { generateOutputNotebooks } from './outputNotebookGenerator';
 import { inspectHruRange, runHruProcessor, validateHruIdInput } from './hruProcessor';
 import { isSelfWrittenFile } from './indexStalenessUtils';
 import { installInstructionPointers } from './instructionPointer';
+import { resolveMcpServerDatasetArgs, resolveMcpServerDefinitionVersion } from './mcpServerDefinition';
+
+/**
+ * Registers this extension's standalone MCP server (`dist/mcp-server.js`) with
+ * VS Code's own MCP registry, so its dataset tools are offered automatically
+ * in chat for this workspace -- no hand-maintained `.vscode/mcp.json`, and no
+ * dependency on `node` being resolvable on `PATH`.
+ *
+ * `process.execPath` is the editor's own bundled Node.js binary; this is the
+ * documented way to spawn a Node-based MCP server (see
+ * `McpStdioServerDefinition.command` in VS Code's API), and unlike a path to
+ * an installed Node binary it needs no version-specific value that would go
+ * stale across a container or Codespaces rebuild.
+ *
+ * `changed` is fired by the caller whenever the selected dataset changes, so
+ * VS Code knows to re-request the definition (and therefore respawn the
+ * server with updated `--index`/`--dataset` arguments) rather than keep
+ * talking to a server pointed at the previous dataset.
+ */
+function registerSwatMcpServerProvider(
+	context: vscode.ExtensionContext,
+	swatProvider: SwatDatasetWebviewProvider,
+	changed: vscode.EventEmitter<void>
+): void {
+	const serverScript = path.join(context.extensionPath, 'dist', 'mcp-server.js');
+	const extensionVersion = context.extension.packageJSON.version as string;
+
+	const provider: vscode.McpServerDefinitionProvider = {
+		onDidChangeMcpServerDefinitions: changed.event,
+		provideMcpServerDefinitions: () => {
+			const datasetPath = swatProvider.getSelectedDataset();
+			return [
+				new vscode.McpStdioServerDefinition(
+					'SWAT+ Dataset',
+					process.execPath,
+					[serverScript, ...resolveMcpServerDatasetArgs(datasetPath)],
+					{},
+					resolveMcpServerDefinitionVersion(extensionVersion, datasetPath)
+				),
+			];
+		},
+	};
+
+	context.subscriptions.push(
+		vscode.lm.registerMcpServerDefinitionProvider('swatplus.mcpServer', provider)
+	);
+}
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -52,6 +99,11 @@ export function activate(context: vscode.ExtensionContext) {
 		SwatDatasetWebviewProvider.viewType,
 		swatProvider
 	);
+
+	// Offer the dataset MCP tools automatically for this workspace's chat.
+	const mcpDefinitionsChanged = new vscode.EventEmitter<void>();
+	context.subscriptions.push(mcpDefinitionsChanged);
+	registerSwatMcpServerProvider(context, swatProvider, mcpDefinitionsChanged);
 	const fkDefinitionProvider = new SwatFKDefinitionProvider(indexer);
 	const fkHoverProvider = new SwatFKHoverProvider(indexer, enrichedSchema);
 	const fkDiagnostics = new SwatFKDiagnosticsProvider(indexer, context);
@@ -1253,6 +1305,9 @@ export function activate(context: vscode.ExtensionContext) {
 		// Re-point the file watcher at the newly active dataset.
 		watchDataset(dataset);
 		void updateSwatContextKeys();
+		// Tell VS Code to re-request the MCP server definition, so the next
+		// chat spawns it pointed at the newly selected dataset.
+		mcpDefinitionsChanged.fire();
 	});
 	statusBarItem.show();
 
