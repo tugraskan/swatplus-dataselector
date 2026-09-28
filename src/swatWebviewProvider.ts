@@ -976,27 +976,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         return categorizeInputFile(fileName);
                     };
                     
-                    // Helper function to get categories contained in a directory
-                    const getDirCategories = (dirPath: string): string[] => {
-                        try {
-                            const dirEntries = fs.readdirSync(dirPath, { withFileTypes: true });
-                            const categories = new Set<string>();
-                            
-                            for (const entry of dirEntries) {
-                                if (!entry.isDirectory()) {
-                                    const cat = categorizeFile(entry.name);
-                                    if (cat !== 'output') {
-                                        categories.add(cat);
-                                    }
-                                }
-                            }
-                            
-                            return Array.from(categories);
-                        } catch (e) {
-                            return [];
-                        }
-                    };
-                    
                     // Get all subdirectories for inputs
                     const subdirsInputs = entriesInputs.filter(ent => ent.isDirectory());
                     
@@ -1045,13 +1024,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         const full = path.join(viewingDirectoryInputs || '', ent.name);
                         const icon = ent.isDirectory() ? svgs.folder : svgs.file;
                         const ext = path.extname(ent.name).toLowerCase();
-                        const category = ent.isDirectory() ? 'directory' : categorizeFile(ent.name);
-                        const dirCategories = ent.isDirectory() ? getDirCategories(full).join(',') : '';
                         const itemLabel = ent.isDirectory()
                             ? `Open folder ${ent.name}`
                             : `Open ${ent.name} as table`;
                         return `
-                            <div class="txt-item" role="button" tabindex="0" aria-label="${escapeHtml(itemLabel)}" data-name="${escapeHtml(ent.name.toLowerCase())}" data-path="${escapeHtml(full)}" data-ext="${escapeHtml(ext)}" data-category="${escapeHtml(category)}" data-isdir="${ent.isDirectory()}" data-dir-categories="${escapeHtml(dirCategories)}" data-section="inputs">
+                            <div class="txt-item" role="button" tabindex="0" aria-label="${escapeHtml(itemLabel)}" data-name="${escapeHtml(ent.name.toLowerCase())}" data-path="${escapeHtml(full)}" data-ext="${escapeHtml(ext)}" data-isdir="${ent.isDirectory()}" data-section="inputs">
                                 <button class="icon-button txt-close-btn" data-path="${escapeHtml(full)}" title="Close file" aria-label="Close ${escapeHtml(ent.name)}">
                                     ${svgs.close}
                                 </button>
@@ -1068,12 +1045,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         const full = path.join(viewingDirectoryOutputs || '', ent.name);
                         const icon = ent.isDirectory() ? svgs.folder : svgs.file;
                         const ext = path.extname(ent.name).toLowerCase();
-                        const category = ent.isDirectory() ? 'directory' : 'output';
                         const outputLabel = ent.isDirectory()
                             ? `Open folder ${ent.name}`
                             : `Open output file ${ent.name}`;
                         return `
-                            <div class="txt-item output-item" role="button" tabindex="0" aria-label="${escapeHtml(outputLabel)}" data-name="${escapeHtml(ent.name.toLowerCase())}" data-path="${escapeHtml(full)}" data-ext="${escapeHtml(ext)}" data-category="${escapeHtml(category)}" data-isdir="${ent.isDirectory()}" data-section="outputs">
+                            <div class="txt-item output-item" role="button" tabindex="0" aria-label="${escapeHtml(outputLabel)}" data-name="${escapeHtml(ent.name.toLowerCase())}" data-path="${escapeHtml(full)}" data-ext="${escapeHtml(ext)}" data-isdir="${ent.isDirectory()}" data-section="outputs">
                                 <button class="icon-button txt-close-btn" data-path="${escapeHtml(full)}" title="Close file" aria-label="Close ${escapeHtml(ent.name)}">
                                     ${svgs.close}
                                 </button>
@@ -1136,31 +1112,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                                 <div class="section-content" id="selected-files-content">
                                     ${backButtonHtmlInputs}
                                     ${inputsHtml}
-                                </div>
-                                <!-- Categories collapsible sub-section -->
-                                <div class="section-header collapsible" role="button" tabindex="0" aria-label="Toggle categories section" data-section="categories" style="margin:4px 0 0;border-radius:3px;">
-                                    <span class="collapse-icon">${svgs.chevronDown}</span>
-                                    <span class="section-title">🏷️ Categories</span>
-                                </div>
-                                <div class="section-content" id="categories-content">
-                                    <div class="filter-toolbar" id="selected-filter-toolbar">
-                                        <label style="width: 100%; margin-bottom: 8px; font-weight: 600; border-bottom: 1px solid var(--vscode-panel-border); padding-bottom: 6px;">
-                                            <input type="checkbox" id="select-all-checkbox" checked> Select All
-                                        </label>
-                                        <label><input type="checkbox" id="filter-simulation" class="filter-checkbox" data-cat="simulation" checked> ⚙️ Simulation Control</label>
-                                        <label><input type="checkbox" id="filter-climate" class="filter-checkbox" data-cat="climate" checked> 🌤️ Climate</label>
-                                        <label><input type="checkbox" id="filter-spatial" class="filter-checkbox" data-cat="spatial" checked> 🗺️ Spatial Objects</label>
-                                        <label><input type="checkbox" id="filter-land" class="filter-checkbox" data-cat="land" checked> 🏔️ Land Properties</label>
-                                        <label><input type="checkbox" id="filter-landuse" class="filter-checkbox" data-cat="landuse" checked> 🌾 Land Use & Management</label>
-                                        <label><input type="checkbox" id="filter-operations" class="filter-checkbox" data-cat="operations" checked> 🚜 Operations & Practices</label>
-                                        <label><input type="checkbox" id="filter-waterbodies" class="filter-checkbox" data-cat="waterbodies" checked> 🏞️ Water Bodies</label>
-                                        <label><input type="checkbox" id="filter-channels" class="filter-checkbox" data-cat="channels" checked> 〰️ Channels</label>
-                                        <label><input type="checkbox" id="filter-groundwater" class="filter-checkbox" data-cat="groundwater" checked> 💧 Groundwater</label>
-                                        <label><input type="checkbox" id="filter-connectivity" class="filter-checkbox" data-cat="connectivity" checked> 🔗 Connectivity</label>
-                                        <label><input type="checkbox" id="filter-initialization" class="filter-checkbox" data-cat="initialization" checked> 🔢 Initialization Files</label>
-                                        <label><input type="checkbox" id="filter-databases" class="filter-checkbox" data-cat="databases" checked> 📚 Databases</label>
-                                        <label><input type="checkbox" id="filter-other" class="filter-checkbox" data-cat="other" checked> Other Inputs</label>
-                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -2123,28 +2074,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             border-radius: 3px;
         }
 
-        /* Filter toolbar at the bottom of the selected-window */
-        .filter-toolbar {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            padding: 8px 10px;
-            border-top: 1px solid var(--vscode-panel-border);
-            background-color: var(--vscode-editor-background);
-            flex-wrap: wrap;
-            max-height: 32vh;
-            overflow-y: auto; /* Add scrollbar when content exceeds max-height */
-            overflow-x: hidden;
-        }
-
-        .filter-toolbar label {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 12px;
-            color: var(--vscode-foreground);
-        }
-
         .schema-version {
             display: flex;
             align-items: center;
@@ -2325,11 +2254,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         .toggle input:checked + .slider { background: var(--vscode-button-background); border-color: var(--vscode-button-hoverBackground); }
         .toggle input:checked + .slider:before { transform: translateX(22px); }
 
-        .filter-checkbox {
-            width: 14px;
-            height: 14px;
-        }
-
         /* Dataset sections for Inputs and Outputs */
         .dataset-section {
             margin-bottom: 12px;
@@ -2469,6 +2393,15 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         #recent-content {
             min-height: 40px;
+        }
+
+        /* Cap the Workspace Folder list so a directory with many datasets doesn't
+           push every other section off-screen; it scrolls internally instead. */
+        #workdata-content {
+            max-height: 28vh;
+            min-height: 40px;
+            overflow-y: auto;
+            overflow-x: hidden;
         }
 
         /* Workdata section */
@@ -2706,11 +2639,10 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     // The extension host rebuilds this view by reassigning webview.html,
                     // which reloads the document and would otherwise discard every bit of
                     // client-side state. setState/getState survives those reloads, so
-                    // collapsed sections, category filters, scroll offsets and a
+                    // collapsed sections, search filters, scroll offsets and a
                     // half-typed HRU list are restored instead of reset on each refresh.
                     const DEFAULT_UI_STATE = {
                         collapsedSections: [],
-                        hiddenCategories: [],
                         search: { inputs: '', outputs: '' },
                         scroll: {},
                         hru: { open: false, ids: '', keepRouting: false },
@@ -2730,7 +2662,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     }
 
                     // Scroll containers whose offset is worth preserving across refreshes.
-                    const SCROLL_KEYS = ['selected-files-content', 'output-files-content', 'recent-content', 'categories-content'];
+                    const SCROLL_KEYS = ['selected-files-content', 'output-files-content', 'recent-content', 'workdata-content'];
 
                     function restoreScrollPositions() {
                         const saved = uiState.scroll || {};
@@ -3417,28 +3349,10 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             setInitialMiddleHeights();
             window.addEventListener('resize', () => setInitialMiddleHeights());
 
-            // Filter behaviour: a free-text name filter per section, combined with the
-            // category checkboxes for the inputs list. A SWAT+ dataset carries ~200
-            // input files, so typing a name is the fast path; categories narrow by kind.
+            // Filter behaviour: a free-text name filter per section. A SWAT+ dataset
+            // carries ~200 input files, so typing a name is the fast path to narrow it.
             (function setupFileFilters() {
-                const checkboxes = Array.from(document.querySelectorAll('.filter-checkbox'));
-                const selectAllCheckbox = document.getElementById('select-all-checkbox');
-
-                // Restore previously unchecked categories before the first apply, so the
-                // list renders already filtered rather than flashing everything first.
-                const hiddenCats = new Set(uiState.hiddenCategories || []);
-                checkboxes.forEach(cb => {
-                    if (hiddenCats.has(cb.dataset.cat)) {
-                        cb.checked = false;
-                    }
-                });
-
                 const searchState = Object.assign({ inputs: '', outputs: '' }, uiState.search || {});
-
-                function persistCategories() {
-                    const nowHidden = checkboxes.filter(cb => !cb.checked).map(cb => cb.dataset.cat);
-                    saveUiState({ hiddenCategories: nowHidden });
-                }
 
                 function persistSearch() {
                     saveUiState({ search: Object.assign({}, searchState) });
@@ -3451,39 +3365,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 }
 
                 function applyInputsFilter() {
-                    const activeCats = checkboxes.filter(cb => cb.checked).map(cb => cb.dataset.cat);
                     const query = searchState.inputs;
-                    // With no category checkboxes rendered (e.g. no dataset), fall back to
-                    // name matching alone rather than hiding every row.
-                    const categoriesActive = checkboxes.length > 0;
                     let visibleCount = 0;
 
                     document.querySelectorAll('.txt-item:not(.output-item):not(.back-item)').forEach(item => {
-                        const category = item.dataset.category || '';
-                        const isDir = item.dataset.isdir === 'true';
-
-                        let categoryOk;
-                        if (!categoriesActive) {
-                            categoryOk = true;
-                        } else if (activeCats.length === 0) {
-                            // No categories selected - hide all files
-                            categoryOk = false;
-                        } else if (isDir) {
-                            // For directories, check if they contain files matching any active category
-                            const dirCats = (item.dataset.dirCategories || '').split(',').filter(c => c);
-                            if (dirCats.length === 0) {
-                                // Empty directory or no input files - show it anyway
-                                categoryOk = true;
-                            } else {
-                                // Show if directory contains files matching any active category
-                                categoryOk = dirCats.some(cat => activeCats.includes(cat));
-                            }
-                        } else {
-                            // For files - show if matches any active category
-                            categoryOk = activeCats.includes(category);
-                        }
-
-                        const shouldShow = categoryOk && matchesName(item, query);
+                        const shouldShow = matchesName(item, query);
                         item.style.display = shouldShow ? '' : 'none';
                         if (shouldShow) {
                             visibleCount++;
@@ -3578,40 +3464,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     }
                 });
 
-                function updateSelectAllCheckbox() {
-                    if (selectAllCheckbox) {
-                        const allChecked = checkboxes.every(cb => cb.checked);
-                        const noneChecked = checkboxes.every(cb => !cb.checked);
-
-                        selectAllCheckbox.checked = allChecked;
-                        selectAllCheckbox.indeterminate = !allChecked && !noneChecked;
-                    }
-                }
-
-                checkboxes.forEach(cb => {
-                    cb.addEventListener('change', () => {
-                        applyInputsFilter();
-                        updateSelectAllCheckbox();
-                        persistCategories();
-                    });
-                });
-
-                if (selectAllCheckbox) {
-                    selectAllCheckbox.addEventListener('change', () => {
-                        const shouldCheck = selectAllCheckbox.checked;
-
-                        // Set all checkboxes to match the select all checkbox
-                        checkboxes.forEach(cb => {
-                            cb.checked = shouldCheck;
-                        });
-
-                        applyInputsFilter();
-                        persistCategories();
-                    });
-                }
-
                 // ensure starting state
-                updateSelectAllCheckbox();
                 applyInputsFilter();
                 applyOutputsFilter();
             })();
