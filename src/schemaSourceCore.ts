@@ -20,6 +20,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { isEnrichedSchema } from './enrichedSchemaCore';
 
 export type LayoutTier = 'source' | 'tamandua' | 'shipped';
 
@@ -179,5 +180,5 @@ export function describeGeneratedSchema(origin: GeneratedSchemaOrigin | undefine
  * ordinary custom schema.)
  */
 export function isSelectableSchema(data: any): boolean {
-    return Boolean(data && data.schema_version && data.tables && !data.enrichment);
+    return Boolean(data && data.schema_version && data.tables) && !isEnrichedSchema(data);
 }

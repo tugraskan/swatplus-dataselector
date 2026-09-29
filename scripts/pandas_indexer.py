@@ -1099,9 +1099,10 @@ def build_index(
     file_cio_files = load_file_cio_filenames(dataset_path)
 
     for file_name, table in schema.get("tables", {}).items():
+        # A table without a table_name (an overlay-only entry in the enriched
+        # documentation schema, or an incomplete hand-edited one) has no layout
+        # to parse, so skip it rather than fail the whole build.
         if not table.get("table_name"):
-            # A documentation-only or hand-made table with no name cannot hold
-            # rows; skip it rather than fail the whole build on a KeyError.
             continue
         file_path = dataset_path / file_name
         if not file_path.exists():
@@ -1228,7 +1229,7 @@ def build_index(
     if include_output_tables:
         for extension, schema_file in WEATHER_DATA_SCHEMA_FILES.items():
             table = schema.get("tables", {}).get(schema_file)
-            if not table:
+            if not table or not table.get("table_name"):
                 continue
             for file_path in dataset_path.glob(f"*{extension}"):
                 if file_path.name.lower() in processed_files:

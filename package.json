@@ -404,7 +404,7 @@
     "lint": "eslint src",
     "test": "vscode-test",
     "test:unit": "npm run compile-tests && mocha",
-    "test:python": "python3 -m unittest scripts.test_merge_overlays scripts.test_merge_output_families scripts.test_generate_schema_from_layouts scripts.test_management_sch_links",
+    "test:python": "python3 -m unittest scripts.test_merge_overlays scripts.test_merge_output_families scripts.test_pandas_indexer scripts.test_generate_schema_from_layouts scripts.test_management_sch_links",
     "package:vsix": "npm run package && vsce package",
     "publish:pre-release": "npm run package && vsce publish --pre-release"
   },
