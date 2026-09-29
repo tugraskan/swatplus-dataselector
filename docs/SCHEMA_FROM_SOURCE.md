@@ -77,13 +77,14 @@ dropped, is written next to the built schema.
 
 ## Measured on Ames (SWAT+ 62.0.0 layouts)
 
-Indexing with the static editor schema and with the generated one:
+Indexing with the static editor schema and with the generated one, both with
+the current indexer (including the `management.sch` operation links):
 
 | | Editor schema | Generated |
 |---|---|---|
 | Files indexed | 35 | 39 (+ `carbon.bsn`, `manure_db.frt`, `manure_om.frt`, `soil_lyr_depths.sol`) |
 | Rows | 589 | 830 -- identical in every file both index |
-| File links found | 3,254 | 3,254, the same ones |
+| File links found | 3,786 | 3,786, the same ones |
 | Column-count warnings | 26 (12 on `hru.con`, 14 on `print.prt`, all spurious) | 0 |
 
 ## Regenerating the shipped files

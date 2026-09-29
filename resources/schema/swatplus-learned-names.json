@@ -71,33 +71,29 @@
   },
   "cal_parms.cal": {
    "columns": {
-    "mchg_par": "cal_parms.cal:"
+    "cal_parms%name": "name",
+    "cal_parms%ob_typ": "obj_typ",
+    "cal_parms%absmin": "abs_min",
+    "cal_parms%absmax": "abs_max",
+    "cal_parms%units": "units"
    },
-   "trailing": [
-    "written",
-    "by",
-    "SWAT+",
-    "editor",
-    "v2.2.0",
-    "on",
-    "2023-03-22",
-    "04:25",
-    "for",
-    "SWAT+",
-    "rev.60.5.4"
-   ]
+   "trailing": []
   },
   "calibration.cal": {
    "columns": {
-    "mcal": "hru-new.cal"
+    "cal_upd%name": "NAME",
+    "cal_upd%chg_typ": "CHG_TYP",
+    "cal_upd%val": "VAL",
+    "cal_upd%conds": "CONDS",
+    "cal_upd%lyr1": "LYR1",
+    "cal_upd%lyr2": "LYR2",
+    "cal_upd%year1": "YEAR1",
+    "cal_upd%year2": "YEAR2",
+    "cal_upd%day1": "DAY1",
+    "cal_upd%day2": "DAY2",
+    "cal_upd%num_tot": "OBJ_TOT"
    },
-   "trailing": [
-    "developed",
-    "from",
-    "soft",
-    "data",
-    "calibration"
-   ]
+   "trailing": []
   },
   "ch_sed_parms.sft": {
    "columns": {
@@ -293,6 +289,18 @@
    },
    "trailing": []
   },
+  "hmd.cli": {
+   "columns": {
+    "hmd%filename": "filename"
+   },
+   "trailing": []
+  },
+  "hmet_hru.ini": {
+   "columns": {
+    "hmet_soil_ini%name": "name"
+   },
+   "trailing": []
+  },
   "hru-data.hru": {
    "columns": {
     "k": "id",
@@ -467,21 +475,12 @@
   },
   "ls_unit.def": {
    "columns": {
-    "mlsu": "ls_unit.def:"
+    "k": "id",
+    "lsu_out%name": "name",
+    "lsu_out%area_ha": "area",
+    "nspu": "elem_tot"
    },
-   "trailing": [
-    "written",
-    "by",
-    "SWAT+",
-    "editor",
-    "v2.2.0",
-    "on",
-    "2023-03-22",
-    "04:25",
-    "for",
-    "SWAT+",
-    "rev.60.5.4"
-   ]
+   "trailing": []
   },
   "ls_unit.ele": {
    "columns": {
@@ -716,6 +715,18 @@
    },
    "trailing": []
   },
+  "pcp.cli": {
+   "columns": {
+    "pcp%filename": "FILENAME"
+   },
+   "trailing": []
+  },
+  "pest_hru.ini": {
+   "columns": {
+    "pest_soil_ini%name": "name"
+   },
+   "trailing": []
+  },
   "pesticide.pes": {
    "columns": {
     "pestdb%name": "name",
@@ -917,6 +928,12 @@
    },
    "trailing": []
   },
+  "salt_hru.ini": {
+   "columns": {
+    "salt_soil_ini%name": "name"
+   },
+   "trailing": []
+  },
   "sed_nut.cha": {
    "columns": {
     "sd_chd1%name": "name",
@@ -995,6 +1012,12 @@
     "sep%psorpmax": "p_sorp_max",
     "sep%solpslp": "solp_slp",
     "sep%solpintc": "solp_int"
+   },
+   "trailing": []
+  },
+  "slr.cli": {
+   "columns": {
+    "slr%filename": "filename"
    },
    "trailing": []
   },
@@ -1086,6 +1109,12 @@
    },
    "trailing": []
   },
+  "tmp.cli": {
+   "columns": {
+    "tmp%filename": "FILENAME"
+   },
+   "trailing": []
+  },
   "topography.hyd": {
    "columns": {
     "topo_db%name": "name",
@@ -1174,6 +1203,12 @@
    "trailing": [
     "WEIR"
    ]
+  },
+  "wnd.cli": {
+   "columns": {
+    "wnd%filename": "filename"
+   },
+   "trailing": []
   }
  }
 }

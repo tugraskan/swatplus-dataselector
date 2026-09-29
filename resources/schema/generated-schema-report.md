@@ -3,17 +3,17 @@
 - SWAT+: `62.0.0` (`de210d64db`), parser `110c2a24fd`
 - Header references: Ames_sub1, Osu_1hru
 
-- tables: **317**
-- tables from source: **185**
-- tables only in source: **79**
+- tables: **318**
+- tables from source: **191**
+- tables only in source: **80**
 - special tables kept: **5**
-- editor tables kept: **127**
-- columns named by header: **726**
-- columns named by aligned editor: **66**
+- editor tables kept: **122**
+- columns named by header: **720**
+- columns named by aligned editor: **70**
 - columns named by learned names: **0**
-- columns named by editor: **67**
-- columns named by fortran: **562**
-- columns not read by swat: **54**
+- columns named by editor: **74**
+- columns named by fortran: **729**
+- columns not read by swat: **27**
 
 ## Notes by file
 

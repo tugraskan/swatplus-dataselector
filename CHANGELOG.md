@@ -16,6 +16,11 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   the copy shipped with the extension (SWAT+ 62.0.0). A picked or edited schema
   still wins; "Automatic" in the Schema dropdown returns to the built one. See
   docs/SCHEMA_FROM_SOURCE.md
+- The shipped fallback (`swatplus-layouts.json`, `swatplus-generated-schema.json`)
+  is built with Tamandua's layout format 2, where a count line before a
+  record loop is read as the file's preamble rather than as its record
+  (`cal_parms.cal`, `calibration.cal`, `ls_unit.def` had taken their title
+  line for a header)
 - `SWAT+: Rebuild Schema from SWAT+ Source` command, and the
   `swatplus.schemaFromSource` / `swatplus.sourceDirectory` settings
 - Table viewer: column headers say which SWAT+ variable each column is read
