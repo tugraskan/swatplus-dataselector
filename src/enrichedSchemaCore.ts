@@ -50,6 +50,21 @@ export interface EnrichedSchemaFile {
 }
 
 /**
+ * Whether parsed schema JSON is the enriched documentation layer rather than a
+ * structural schema. It carries `schema_version` and `tables` like one, but its
+ * overlay-only tables have no `table_name` or layout, so the indexer cannot
+ * build from it. Keeps it out of the schema picker.
+ */
+export function isEnrichedSchema(data: unknown): boolean {
+    if (!data || typeof data !== 'object') {
+        return false;
+    }
+    const schema = data as EnrichedSchemaFile;
+    return schema.enrichment !== undefined
+        || Object.values(schema.tables || {}).some(table => table?.origin === 'overlay-only');
+}
+
+/**
  * Indexed, read-only view over an enriched schema document. Constructed from the
  * parsed JSON; all lookups are case-insensitive on file and column names.
  */

@@ -40,7 +40,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Merge-script tests (stdlib only)
+      - name: Install indexer dependencies
+        # The merge-script tests are stdlib only; the pandas indexer tests are not.
+        run: pip install -r scripts/requirements.txt
+      - name: Merge-script and indexer tests
         run: npm run test:python
 
   package:

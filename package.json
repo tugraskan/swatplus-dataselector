@@ -390,7 +390,7 @@
     "lint": "eslint src",
     "test": "vscode-test",
     "test:unit": "npm run compile-tests && mocha",
-    "test:python": "python3 -m unittest scripts.test_merge_overlays scripts.test_merge_output_families",
+    "test:python": "python3 -m unittest scripts.test_merge_overlays scripts.test_merge_output_families scripts.test_pandas_indexer",
     "package:vsix": "npm run package && vsce package",
     "publish:pre-release": "npm run package && vsce publish --pre-release"
   },

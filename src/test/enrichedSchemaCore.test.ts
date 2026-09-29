@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
     EnrichedSchemaIndex,
+    isEnrichedSchema,
     renderColumnDocLines,
     columnDocTooltip,
     OutputSchemaIndex,
@@ -115,6 +116,40 @@ suite('Enriched schema core', () => {
         // the id column must never carry a non-id doc (regression guard)
         const codesId = idx.getColumnDoc('codes.bsn', 'id');
         assert.strictEqual(codesId, undefined);
+    });
+
+    test('isEnrichedSchema flags the documentation layer, not structural schemas', () => {
+        const structural = {
+            schema_version: '1.0.0',
+            tables: { 'aquifer.aqu': { file_name: 'aquifer.aqu', table_name: 'aquifer_aqu', columns: [] } },
+        };
+        assert.strictEqual(isEnrichedSchema(structural), false);
+        // Either marker is enough: the top-level enrichment block...
+        assert.strictEqual(isEnrichedSchema({ ...structural, enrichment: {} }), true);
+        // ...or a table that exists only to carry docs.
+        assert.strictEqual(isEnrichedSchema({
+            schema_version: '1.0.0',
+            tables: { 'aqu_catunit.def': { file_name: 'aqu_catunit.def', origin: 'overlay-only', columns: [] } },
+        }), true);
+        assert.strictEqual(isEnrichedSchema(null), false);
+        assert.strictEqual(isEnrichedSchema('not a schema'), false);
+    });
+
+    test('the schema picker filter keeps shipped structural schemas and drops the enriched one', () => {
+        const schemaDir = path.join(__dirname, '..', '..', 'resources', 'schema');
+        const load = (name: string) => {
+            const file = path.join(schemaDir, name);
+            return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf-8')) : undefined;
+        };
+        const enriched = load('swatplus-schema-enriched.json');
+        const editor = load('swatplus-editor-schema.json');
+        if (!enriched || !editor) {
+            return; // shipped schemas not present in this build; skip
+        }
+        // Both pass the picker's schema_version/tables check; only one can index.
+        assert.ok(enriched.schema_version && enriched.tables);
+        assert.strictEqual(isEnrichedSchema(enriched), true);
+        assert.strictEqual(isEnrichedSchema(editor), false);
     });
 });
 
