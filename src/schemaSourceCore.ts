@@ -58,7 +58,8 @@ export function findSourceDirectory(
     const explicit = (configured || '').trim();
     if (explicit) {
         const resolved = workspace ? explicit.replace(/\$\{workspaceFolder\}/g, workspace) : explicit;
-        const absolute = path.isAbsolute(resolved) || !workspace ? resolved : path.join(workspace, resolved);
+        const absolute = path.normalize(
+            path.isAbsolute(resolved) || !workspace ? resolved : path.join(workspace, resolved));
         return looksLikeSwatplusSource(absolute) ? absolute : undefined;
     }
     return workspaceFolders.find(folder => looksLikeSwatplusSource(folder));
