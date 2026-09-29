@@ -1,5 +1,13 @@
 # SWAT+ Editor Schema Source
 
+> **Historical.** The schema the extension indexes with is now built from the
+> SWAT+ Fortran source -- see [SCHEMA_FROM_SOURCE.md](SCHEMA_FROM_SOURCE.md).
+> The editor schema described here still supplies file links and the tables the
+> source does not cover. The 13-table "MVP" and `schema_version` 1.0.0 below
+> are out of date: `swatplus-editor-schema.json` is `schema_version` 2.0.0 with
+> 238 tables from `scripts/extract_all_models.py`, plus the `.con` tables added
+> by `scripts/add_con_files_to_schema.py`.
+
 This document explains how the SWAT+ input file schema was derived from the swatplus-editor project.
 
 ## Schema Source

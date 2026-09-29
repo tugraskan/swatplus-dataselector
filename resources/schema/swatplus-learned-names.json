@@ -1,0 +1,1214 @@
+{
+ "names_format": "1",
+ "files": {
+  "aqu_catunit.ele": {
+   "columns": {
+    "k": "id",
+    "acu_elem%name": "name",
+    "acu_elem%obtyp": "obj_typ",
+    "acu_elem%obtypno": "obj_typ_no",
+    "acu_elem%bsn_frac": "bsn_frac",
+    "acu_elem%ru_frac": "sub_frac",
+    "acu_elem%reg_frac": "reg_frac"
+   },
+   "trailing": []
+  },
+  "aquifer.aqu": {
+   "columns": {
+    "k": "id",
+    "aqudb%aqunm": "name",
+    "aqudb%aqu_ini": "init",
+    "aqudb%flo": "gw_flo",
+    "aqudb%dep_bot": "dep_bot",
+    "aqudb%dep_wt": "dep_wt",
+    "aqudb%no3": "no3_n",
+    "aqudb%minp": "sol_p",
+    "aqudb%cbn": "carbon",
+    "aqudb%flo_dist": "flo_dist",
+    "aqudb%bf_max": "bf_max",
+    "aqudb%alpha": "alpha_bf",
+    "aqudb%revap_co": "revap",
+    "aqudb%seep": "rchg_dp",
+    "aqudb%spyld": "spec_yld",
+    "aqudb%hlife_n": "hl_no3n",
+    "aqudb%flo_min": "flo_min",
+    "aqudb%revap_min": "revap_min"
+   },
+   "trailing": []
+  },
+  "aquifer.con": {
+   "columns": {
+    "ob%num": "id",
+    "ob%name": "name",
+    "ob%gis_id": "gis_id",
+    "ob%area_ha": "area",
+    "ob%lat": "lat",
+    "ob%long": "lon",
+    "ob%elev": "elev",
+    "ob%props": "aqu",
+    "ob%wst_c": "wst",
+    "ob%constit": "cst",
+    "ob%props2": "ovfl",
+    "ob%ruleset": "rule",
+    "ob%src_tot": "out_tot"
+   },
+   "trailing": []
+  },
+  "bmpuser.str": {
+   "columns": {
+    "bmpuser_db%name": "name",
+    "bmpuser_db%bmp_flag": "flag",
+    "bmpuser_db%bmp_sed": "sed_eff",
+    "bmpuser_db%bmp_pp": "ptlp_eff",
+    "bmpuser_db%bmp_sp": "solp_eff",
+    "bmpuser_db%bmp_pn": "ptln_eff",
+    "bmpuser_db%bmp_sn": "soln_eff",
+    "bmpuser_db%bmp_bac": "bact_eff"
+   },
+   "trailing": [
+    "description"
+   ]
+  },
+  "cal_parms.cal": {
+   "columns": {
+    "cal_parms%name": "name",
+    "cal_parms%ob_typ": "obj_typ",
+    "cal_parms%absmin": "abs_min",
+    "cal_parms%absmax": "abs_max",
+    "cal_parms%units": "units"
+   },
+   "trailing": []
+  },
+  "calibration.cal": {
+   "columns": {
+    "cal_upd%name": "NAME",
+    "cal_upd%chg_typ": "CHG_TYP",
+    "cal_upd%val": "VAL",
+    "cal_upd%conds": "CONDS",
+    "cal_upd%lyr1": "LYR1",
+    "cal_upd%lyr2": "LYR2",
+    "cal_upd%year1": "YEAR1",
+    "cal_upd%year2": "YEAR2",
+    "cal_upd%day1": "DAY1",
+    "cal_upd%day2": "DAY2",
+    "cal_upd%num_tot": "OBJ_TOT"
+   },
+   "trailing": []
+  },
+  "ch_sed_parms.sft": {
+   "columns": {
+    "ch_prms%name": "name",
+    "ch_prms%chg_typ": "chg_typ",
+    "ch_prms%neg": "neg",
+    "ch_prms%pos": "pos",
+    "ch_prms%lo": "lo",
+    "ch_prms%up": "up"
+   },
+   "trailing": []
+  },
+  "chandeg.con": {
+   "columns": {
+    "ob%num": "id",
+    "ob%name": "name",
+    "ob%gis_id": "gis_id",
+    "ob%area_ha": "area",
+    "ob%lat": "lat",
+    "ob%long": "lon",
+    "ob%elev": "elev",
+    "ob%props": "lcha",
+    "ob%wst_c": "wst",
+    "ob%constit": "cst",
+    "ob%props2": "ovfl",
+    "ob%ruleset": "rule",
+    "ob%src_tot": "out_tot"
+   },
+   "trailing": []
+  },
+  "channel-lte.cha": {
+   "columns": {
+    "k": "id",
+    "sd_dat%name": "name",
+    "sd_dat%initc": "cha_ini",
+    "sd_dat%hydc": "cha_hyd",
+    "sd_dat%sedc": "cha_sed",
+    "sd_dat%nutc": "cha_nut"
+   },
+   "trailing": []
+  },
+  "chem_app.ops": {
+   "columns": {
+    "chemapp_db%name": "name",
+    "chemapp_db%form": "chem_form",
+    "chemapp_db%op_typ": "app_typ",
+    "chemapp_db%app_eff": "app_eff",
+    "chemapp_db%foliar_eff": "foliar_eff",
+    "chemapp_db%inject_dep": "inject_dp",
+    "chemapp_db%surf_frac": "surf_frac",
+    "chemapp_db%drift_pot": "drift_pot",
+    "chemapp_db%aerial_unif": "aerial_unif"
+   },
+   "trailing": [
+    "description"
+   ]
+  },
+  "cntable.lum": {
+   "columns": {
+    "cn%name": "name",
+    "cn%cn(1)": "cn_a",
+    "cn%cn(2)": "cn_b",
+    "cn%cn(3)": "cn_c",
+    "cn%cn(4)": "cn_d"
+   },
+   "trailing": [
+    "description",
+    "treat",
+    "cond_cov"
+   ]
+  },
+  "codes.bsn": {
+   "columns": {
+    "bsn_cc%petfile": "pet_file",
+    "bsn_cc%wwqfile": "wq_file",
+    "bsn_cc%pet": "pet",
+    "bsn_cc%nam1": "event",
+    "bsn_cc%crk": "crack",
+    "bsn_cc%swift_out": "swift_out",
+    "bsn_cc%sed_det": "sed_det",
+    "bsn_cc%rte": "rte_cha",
+    "bsn_cc%deg": "deg_cha",
+    "bsn_cc%wq": "wq_cha",
+    "bsn_cc%nostress": "nostress",
+    "bsn_cc%cn": "cn",
+    "bsn_cc%cfac": "c_fact",
+    "bsn_cc%cswat": "carbon",
+    "bsn_cc%lapse": "lapse",
+    "bsn_cc%uhyd": "uhyd",
+    "bsn_cc%sed_ch": "sed_cha",
+    "bsn_cc%tdrn": "tiledrain",
+    "bsn_cc%wtdn": "wtable",
+    "bsn_cc%sol_p_model": "soil_p",
+    "bsn_cc%gampt": "gampt",
+    "bsn_cc%atmo": "atmo_dep",
+    "bsn_cc%smax": "stor_max",
+    "bsn_cc%qual2e": "i_fpwet",
+    "bsn_cc%gwflow": "gw_flow",
+    "bsn_cc%idc_till": "idc_till"
+   },
+   "trailing": []
+  },
+  "cons_practice.lum": {
+   "columns": {
+    "cons_prac%name": "name",
+    "cons_prac%pfac": "usle_p",
+    "cons_prac%sl_len_mx": "slp_len_max"
+   },
+   "trailing": [
+    "description"
+   ]
+  },
+  "fertilizer.frt": {
+   "columns": {
+    "fertdb%fertnm": "name",
+    "fertdb%fminn": "min_n",
+    "fertdb%fminp": "min_p",
+    "fertdb%forgn": "org_n",
+    "fertdb%forgp": "org_p",
+    "fertdb%fnh3n": "nh3_n"
+   },
+   "trailing": [
+    "pathogens",
+    "description"
+   ]
+  },
+  "field.fld": {
+   "columns": {
+    "field_db%name": "name",
+    "field_db%length": "len",
+    "field_db%wid": "wd",
+    "field_db%ang": "ang"
+   },
+   "trailing": []
+  },
+  "filterstrip.str": {
+   "columns": {
+    "filtstrip_db%name": "name",
+    "filtstrip_db%vfsi": "flag",
+    "filtstrip_db%vfsratio": "fld_vfs",
+    "filtstrip_db%vfscon": "con_vfs",
+    "filtstrip_db%vfsch": "cha_q"
+   },
+   "trailing": [
+    "description"
+   ]
+  },
+  "fire.ops": {
+   "columns": {
+    "fire_db%name": "name",
+    "fire_db%cn2_upd": "chg_cn2",
+    "fire_db%fr_burn": "frac_burn"
+   },
+   "trailing": [
+    "description"
+   ]
+  },
+  "grassedww.str": {
+   "columns": {
+    "grwaterway_db%name": "name",
+    "grwaterway_db%grwat_i": "flag",
+    "grwaterway_db%grwat_n": "mann",
+    "grwaterway_db%grwat_spcon": "sed_co",
+    "grwaterway_db%grwat_d": "dp",
+    "grwaterway_db%grwat_w": "wd",
+    "grwaterway_db%grwat_l": "len",
+    "grwaterway_db%grwat_s": "slp"
+   },
+   "trailing": [
+    "description"
+   ]
+  },
+  "graze.ops": {
+   "columns": {
+    "grazeop_db%name": "name",
+    "grazeop_db%fertnm": "fert",
+    "grazeop_db%eat": "bm_eat",
+    "grazeop_db%tramp": "bm_tramp",
+    "grazeop_db%manure": "man_amt",
+    "grazeop_db%biomin": "grz_bm_min"
+   },
+   "trailing": [
+    "description"
+   ]
+  },
+  "harv.ops": {
+   "columns": {
+    "harvop_db%name": "NAME",
+    "harvop_db%typ": "HARV_TYP",
+    "harvop_db%hi_ovr": "HARV_IDX",
+    "harvop_db%eff": "HARV_EFF",
+    "harvop_db%bm_min": "HARV_BM_MIN"
+   },
+   "trailing": []
+  },
+  "hmd.cli": {
+   "columns": {
+    "hmd%filename": "filename"
+   },
+   "trailing": []
+  },
+  "hmet_hru.ini": {
+   "columns": {
+    "hmet_soil_ini%name": "name"
+   },
+   "trailing": []
+  },
+  "hru-data.hru": {
+   "columns": {
+    "k": "id",
+    "hru_db%dbsc%name": "name",
+    "hru_db%dbsc%topo": "topo",
+    "hru_db%dbsc%hyd": "hydro",
+    "hru_db%dbsc%soil": "soil",
+    "hru_db%dbsc%land_use_mgt": "lu_mgt",
+    "hru_db%dbsc%soil_plant_init": "soil_plant_init",
+    "hru_db%dbsc%surf_stor": "surf_stor",
+    "hru_db%dbsc%snow": "snow",
+    "hru_db%dbsc%field": "field"
+   },
+   "trailing": []
+  },
+  "hru.con": {
+   "columns": {
+    "ob%num": "id",
+    "ob%name": "name",
+    "ob%gis_id": "gis_id",
+    "ob%area_ha": "area",
+    "ob%lat": "lat",
+    "ob%long": "lon",
+    "ob%elev": "elev",
+    "ob%props": "hru",
+    "ob%wst_c": "wst",
+    "ob%constit": "cst",
+    "ob%props2": "ovfl",
+    "ob%ruleset": "rule",
+    "ob%src_tot": "out_tot"
+   },
+   "trailing": []
+  },
+  "hyd-sed-lte.cha": {
+   "columns": {
+    "sd_chd%name": "name",
+    "sd_chd%order": "order",
+    "sd_chd%chw": "wd",
+    "sd_chd%chd": "dp",
+    "sd_chd%chs": "slp",
+    "sd_chd%chl": "len",
+    "sd_chd%chn": "mann",
+    "sd_chd%chk": "k",
+    "sd_chd%bank_exp": "erod_fact",
+    "sd_chd%cov": "cov_fact",
+    "sd_chd%sinu": "wd_rto",
+    "sd_chd%vcr_coef": "eq_slp",
+    "sd_chd%d50": "d50",
+    "sd_chd%ch_clay": "clay",
+    "sd_chd%carbon": "carbon",
+    "sd_chd%ch_bd": "dry_bd",
+    "sd_chd%chss": "side_slp",
+    "sd_chd%bankfull_flo": "bed_load",
+    "sd_chd%fps": "fps",
+    "sd_chd%fpn": "fpn",
+    "sd_chd%n_conc": "n_conc",
+    "sd_chd%p_conc": "p_conc",
+    "sd_chd%p_bio": "p_bio"
+   },
+   "trailing": [
+    "description"
+   ]
+  },
+  "hydrology.hyd": {
+   "columns": {
+    "hyd_db%name": "name",
+    "hyd_db%lat_ttime": "lat_ttime",
+    "hyd_db%lat_sed": "lat_sed",
+    "hyd_db%canmx": "can_max",
+    "hyd_db%esco": "esco",
+    "hyd_db%epco": "epco",
+    "hyd_db%erorgn": "orgn_enrich",
+    "hyd_db%erorgp": "orgp_enrich",
+    "hyd_db%cn3_swf": "cn3_swf",
+    "hyd_db%biomix": "bio_mix",
+    "hyd_db%perco": "perco",
+    "hyd_db%lat_orgn": "lat_orgn",
+    "hyd_db%lat_orgp": "lat_orgp",
+    "hyd_db%pet_co": "pet_co",
+    "hyd_db%latq_co": "latq_co"
+   },
+   "trailing": []
+  },
+  "hydrology.wet": {
+   "columns": {
+    "wet_hyddb%name": "name",
+    "wet_hyddb%psa": "hru_ps",
+    "wet_hyddb%pdep": "dp_ps",
+    "wet_hyddb%esa": "hru_es",
+    "wet_hyddb%edep": "dp_es",
+    "wet_hyddb%k": "k",
+    "wet_hyddb%evrsv": "evap",
+    "wet_hyddb%acoef": "vol_area_co",
+    "wet_hyddb%bcoef": "vol_dp_a",
+    "wet_hyddb%ccoef": "vol_dp_b",
+    "wet_hyddb%frac": "hru_frac"
+   },
+   "trailing": []
+  },
+  "initial.aqu": {
+   "columns": {
+    "aqu_init_dat_c%name": "name",
+    "aqu_init_dat_c%org_min": "org_min",
+    "aqu_init_dat_c%pest": "pest",
+    "aqu_init_dat_c%path": "path",
+    "aqu_init_dat_c%hmet": "hmet",
+    "aqu_init_dat_c%salt": "salt"
+   },
+   "trailing": [
+    "description"
+   ]
+  },
+  "initial.cha": {
+   "columns": {
+    "ch_init%name": "name",
+    "ch_init%org_min": "org_min",
+    "ch_init%pest": "pest",
+    "ch_init%path": "path",
+    "ch_init%hmet": "hmet",
+    "ch_init%salt": "salt"
+   },
+   "trailing": [
+    "description"
+   ]
+  },
+  "initial.res": {
+   "columns": {
+    "res_init_dat_c%init": "name",
+    "res_init_dat_c%org_min": "org_min",
+    "res_init_dat_c%pest": "pest",
+    "res_init_dat_c%path": "path",
+    "res_init_dat_c%hmet": "hmet",
+    "res_init_dat_c%salt": "salt"
+   },
+   "trailing": [
+    "description"
+   ]
+  },
+  "irr.ops": {
+   "columns": {
+    "irrop_db%name": "name",
+    "irrop_db%amt_mm": "amt_mm",
+    "irrop_db%eff": "eff_frac",
+    "irrop_db%surq": "sumq_frac",
+    "irrop_db%dep_mm": "dep_sub",
+    "irrop_db%salt": "salt_ppm",
+    "irrop_db%no3": "no3_ppm",
+    "irrop_db%po4": "po4_ppm"
+   },
+   "trailing": [
+    "description"
+   ]
+  },
+  "landuse.lum": {
+   "columns": {
+    "lum%name": "name",
+    "lum%cal_group": "cal_group",
+    "lum%plant_cov": "plnt_com",
+    "lum%mgt_ops": "mgt",
+    "lum%cn_lu": "cn2",
+    "lum%cons_prac": "cons_prac",
+    "lum%urb_lu": "urban",
+    "lum%urb_ro": "urb_ro",
+    "lum%ovn": "ov_mann",
+    "lum%tiledrain": "tile",
+    "lum%septic": "sep",
+    "lum%fstrip": "vfs",
+    "lum%grassww": "grww",
+    "lum%bmpuser": "bmp"
+   },
+   "trailing": []
+  },
+  "ls_unit.def": {
+   "columns": {
+    "k": "id",
+    "lsu_out%name": "name",
+    "lsu_out%area_ha": "area",
+    "nspu": "elem_tot"
+   },
+   "trailing": []
+  },
+  "ls_unit.ele": {
+   "columns": {
+    "k": "ID",
+    "lsu_elem%name": "NAME",
+    "lsu_elem%obtyp": "OBJ_TYP",
+    "lsu_elem%obtypno": "OBJ_TYP_NO",
+    "lsu_elem%bsn_frac": "BSN_FRAC",
+    "lsu_elem%ru_frac": "RU_FRAC"
+   },
+   "trailing": []
+  },
+  "manure_db.frt": {
+   "columns": {
+    "manure_db%name": "name",
+    "manure_db%org_min": "org_min",
+    "manure_db%pests": "pests",
+    "manure_db%paths": "paths",
+    "manure_db%hmets": "hmets",
+    "manure_db%salts": "salts",
+    "manure_db%constit": "constit",
+    "manure_db%descrip": "description"
+   },
+   "trailing": []
+  },
+  "manure_om.frt": {
+   "columns": {
+    "manure_om%name": "name",
+    "manure_om%frac_water": "frac_water",
+    "manure_om%fcbn": "fcbn",
+    "manure_om%fminn": "fminn",
+    "manure_om%fminp": "fminp",
+    "manure_om%forgn": "forgn",
+    "manure_om%forgp": "forgp",
+    "manure_om%fnh3n": "fnh3n",
+    "manure_om%description": "description"
+   },
+   "trailing": []
+  },
+  "nutrients.cha": {
+   "columns": {
+    "ch_nut%name": "name",
+    "ch_nut%onco": "plt_n",
+    "ch_nut%opco": "ptl_p",
+    "ch_nut%rs1": "alg_stl",
+    "ch_nut%rs2": "ben_disp",
+    "ch_nut%rs3": "ben_nh3n",
+    "ch_nut%rs4": "ptln_stl",
+    "ch_nut%rs5": "ptlp_stl",
+    "ch_nut%rs6": "cst_stl",
+    "ch_nut%rs7": "ben_cst",
+    "ch_nut%rk1": "cbn_bod_co",
+    "ch_nut%rk2": "air_rt",
+    "ch_nut%rk3": "cbn_bod_stl",
+    "ch_nut%rk4": "ben_bod",
+    "ch_nut%rk5": "bact_die",
+    "ch_nut%rk6": "cst_decay",
+    "ch_nut%bc1": "nh3n_no2n",
+    "ch_nut%bc2": "no2n_no3n",
+    "ch_nut%bc3": "ptln_nh3n",
+    "ch_nut%bc4": "ptlp_solp",
+    "ch_nut%lao": "q2e_lt",
+    "ch_nut%igropt": "q2e_alg",
+    "ch_nut%ai0": "chla_alg",
+    "ch_nut%ai1": "alg_n",
+    "ch_nut%ai2": "alg_p",
+    "ch_nut%ai3": "alg_o2_prod",
+    "ch_nut%ai4": "alg_o2_resp",
+    "ch_nut%ai5": "o2_nh3n",
+    "ch_nut%ai6": "o2_no2n",
+    "ch_nut%mumax": "alg_grow",
+    "ch_nut%rhoq": "alg_resp",
+    "ch_nut%tfact": "slr_act",
+    "ch_nut%k_l": "lt_co",
+    "ch_nut%k_n": "const_n",
+    "ch_nut%k_p": "const_p",
+    "ch_nut%lambda0": "lt_nonalg",
+    "ch_nut%lambda1": "alg_shd_l",
+    "ch_nut%lambda2": "alg_shd_nl",
+    "ch_nut%p_n": "nh3_pref"
+   },
+   "trailing": [
+    "description"
+   ]
+  },
+  "nutrients.res": {
+   "columns": {
+    "res_nut%name": "name",
+    "res_nut%ires1": "mid_start",
+    "res_nut%ires2": "mid_end",
+    "res_nut%nsetlr1": "mid_n_stl",
+    "res_nut%nsetlr2": "n_stl",
+    "res_nut%psetlr1": "mid_p_stl",
+    "res_nut%psetlr2": "p_stl",
+    "res_nut%nsolr": "chla_co",
+    "res_nut%psolr": "secchi_co",
+    "res_nut%theta_n": "theta_n",
+    "res_nut%theta_p": "theta_p",
+    "res_nut%conc_nmin": "n_min_stl",
+    "res_nut%conc_pmin": "p_min_stl"
+   },
+   "trailing": []
+  },
+  "nutrients.sol": {
+   "columns": {
+    "solt_db%name": "name",
+    "solt_db%exp_co": "exp_co",
+    "solt_db%lab_p": "lab_p",
+    "solt_db%nitrate": "nitrate",
+    "solt_db%fr_hum_act": "fr_hum_act",
+    "solt_db%hum_c_n": "hum_c_n",
+    "solt_db%hum_c_p": "hum_c_p",
+    "solt_db%inorgp": "inorgp",
+    "solt_db%watersol_p": "watersol_p",
+    "solt_db%h3a_p": "h3a_p",
+    "solt_db%mehlich_p": "mehlich_p",
+    "solt_db%bray_strong_p": "bray_strong_p"
+   },
+   "trailing": [
+    "description"
+   ]
+  },
+  "object.cnt": {
+   "columns": {
+    "bsn%name": "name",
+    "bsn%area_ls_ha": "ls_area",
+    "bsn%area_tot_ha": "tot_area",
+    "sp_ob%objs": "obj",
+    "sp_ob%hru": "hru",
+    "sp_ob%hru_lte": "lhru",
+    "sp_ob%ru": "rtu",
+    "sp_ob%gwflow": "mfl",
+    "sp_ob%aqu": "aqu",
+    "sp_ob%chan": "cha",
+    "sp_ob%res": "res",
+    "sp_ob%recall": "rec",
+    "sp_ob%exco": "exco",
+    "sp_ob%dr": "dlr",
+    "sp_ob%canal": "can",
+    "sp_ob%pump": "pmp",
+    "sp_ob%outlet": "out",
+    "sp_ob%chandeg": "lcha",
+    "sp_ob%aqu2d": "aqu2d",
+    "sp_ob%herd": "hrd",
+    "sp_ob%wro": "wro"
+   },
+   "trailing": []
+  },
+  "om_water.ini": {
+   "columns": {
+    "om_init_name": "name",
+    "om_init_water%flo": "flo",
+    "om_init_water%sed": "sed",
+    "om_init_water%orgn": "orgn",
+    "om_init_water%sedp": "sedp",
+    "om_init_water%no3": "no3",
+    "om_init_water%solp": "solp",
+    "om_init_water%chla": "chl_a",
+    "om_init_water%nh3": "nh3",
+    "om_init_water%no2": "no2",
+    "om_init_water%cbod": "cbn_bod",
+    "om_init_water%dox": "dis_ox",
+    "om_init_water%san": "san",
+    "om_init_water%sil": "sil",
+    "om_init_water%cla": "cla",
+    "om_init_water%sag": "sag",
+    "om_init_water%lag": "lag",
+    "om_init_water%grv": "grv",
+    "om_init_water%temp": "tmp"
+   },
+   "trailing": [
+    "c"
+   ]
+  },
+  "ovn_table.lum": {
+   "columns": {
+    "overland_n%name": "name",
+    "overland_n%ovn": "ovn_mean",
+    "overland_n%ovn_min": "ovn_min",
+    "overland_n%ovn_max": "ovn_max"
+   },
+   "trailing": [
+    "description"
+   ]
+  },
+  "parameters.bsn": {
+   "columns": {
+    "bsn_prm%evlai": "lai_noevap",
+    "bsn_prm%ffcb": "sw_init",
+    "bsn_prm%surlag": "surq_lag",
+    "bsn_prm%adj_pkr": "adj_pkrt",
+    "bsn_prm%prf": "adj_pkrt_sed",
+    "bsn_prm%spcon": "lin_sed",
+    "bsn_prm%spexp": "exp_sed",
+    "bsn_prm%cmn": "orgn_min",
+    "bsn_prm%n_updis": "n_uptake",
+    "bsn_prm%p_updis": "p_uptake",
+    "bsn_prm%nperco": "n_perc",
+    "bsn_prm%pperco": "p_perc",
+    "bsn_prm%phoskd": "p_soil",
+    "bsn_prm%psp": "p_avail",
+    "bsn_prm%rsdco": "rsd_decomp",
+    "bsn_prm%percop": "pest_perc",
+    "bsn_prm%msk_co1": "msk_co1",
+    "bsn_prm%msk_co2": "msk_co2",
+    "bsn_prm%msk_x": "msk_x",
+    "bsn_prm%nperco_lchtile": "nperco_lchtile",
+    "bsn_prm%evrch": "evap_adj",
+    "bsn_prm%scoef": "scoef",
+    "bsn_prm%cdn": "denit_exp",
+    "bsn_prm%sdnco": "denit_frac",
+    "bsn_prm%bact_swf": "man_bact",
+    "bsn_prm%tb_adj": "adj_uhyd",
+    "bsn_prm%cn_froz": "cn_froz",
+    "bsn_prm%dorm_hr": "dorm_hr",
+    "bsn_prm%plaps": "plaps",
+    "bsn_prm%tlaps": "tlaps",
+    "bsn_prm%nfixmx": "n_fix_max",
+    "bsn_prm%decr_min": "rsd_decay",
+    "bsn_prm%rsd_covco": "rsd_cover",
+    "bsn_prm%urb_init_abst": "urb_init_abst",
+    "bsn_prm%petco_pmpt": "petco_pmpt",
+    "bsn_prm%uhalpha": "uhyd_alpha",
+    "bsn_prm%eros_spl": "splash",
+    "bsn_prm%rill_mult": "rill",
+    "bsn_prm%eros_expo": "surq_exp",
+    "bsn_prm%c_factor": "cov_mgt",
+    "bsn_prm%ch_d50": "cha_d50",
+    "bsn_prm%co2": "co2",
+    "bsn_prm%day_lag_mx": "day_lag_max",
+    "bsn_prm%igen": "igen"
+   },
+   "trailing": []
+  },
+  "pcp.cli": {
+   "columns": {
+    "pcp%filename": "FILENAME"
+   },
+   "trailing": []
+  },
+  "pest_hru.ini": {
+   "columns": {
+    "pest_soil_ini%name": "name"
+   },
+   "trailing": []
+  },
+  "pesticide.pes": {
+   "columns": {
+    "pestdb%name": "name",
+    "pestdb%koc": "soil_ads",
+    "pestdb%washoff": "frac_wash",
+    "pestdb%foliar_hlife": "hl_foliage",
+    "pestdb%soil_hlife": "hl_soil",
+    "pestdb%solub": "solub",
+    "pestdb%aq_hlife": "aq_hlife",
+    "pestdb%aq_volat": "aq_volat",
+    "pestdb%mol_wt": "mol_wt",
+    "pestdb%aq_resus": "aq_resus",
+    "pestdb%aq_settle": "aq_settle",
+    "pestdb%ben_act_dep": "ben_act_dep",
+    "pestdb%ben_bury": "ben_bury",
+    "pestdb%ben_hlife": "ben_hlife",
+    "pestdb%pl_uptake": "description"
+   },
+   "trailing": []
+  },
+  "plants.plt": {
+   "columns": {
+    "pldb%plantnm": "name",
+    "pldb%typ": "plnt_typ",
+    "pldb%trig": "gro_trig",
+    "pldb%nfix_co": "nfix_co",
+    "pldb%days_mat": "days_mat",
+    "pldb%bio_e": "bm_e",
+    "pldb%hvsti": "harv_idx",
+    "pldb%blai": "lai_pot",
+    "pldb%frgrw1": "frac_hu1",
+    "pldb%laimx1": "lai_max1",
+    "pldb%frgrw2": "frac_hu2",
+    "pldb%laimx2": "lai_max2",
+    "pldb%dlai": "hu_lai_decl",
+    "pldb%dlai_rate": "dlai_rate",
+    "pldb%chtmx": "can_ht_max",
+    "pldb%rdmx": "rt_dp_max",
+    "pldb%t_opt": "tmp_opt",
+    "pldb%t_base": "tmp_base",
+    "pldb%cnyld": "frac_n_yld",
+    "pldb%cpyld": "frac_p_yld",
+    "pldb%pltnfr1": "frac_n_em",
+    "pldb%pltnfr2": "frac_n_50",
+    "pldb%pltnfr3": "frac_n_mat",
+    "pldb%pltpfr1": "frac_p_em",
+    "pldb%pltpfr2": "frac_p_50",
+    "pldb%pltpfr3": "frac_p_mat",
+    "pldb%wsyf": "harv_idx_ws",
+    "pldb%usle_c": "usle_c_min",
+    "pldb%gsi": "stcon_max",
+    "pldb%vpdfr": "vpd",
+    "pldb%gmaxfr": "frac_stcon",
+    "pldb%wavp": "ru_vpd",
+    "pldb%co2hi": "co2_hi",
+    "pldb%bioehi": "bm_e_hi",
+    "pldb%rsdco_pl": "plnt_decomp",
+    "pldb%alai_min": "lai_min",
+    "pldb%laixco_tree": "bm_tree_acc",
+    "pldb%mat_yrs": "yrs_mat",
+    "pldb%bmx_peren": "bm_tree_max",
+    "pldb%ext_coef": "ext_co",
+    "pldb%leaf_tov_min": "leaf_tov_mn",
+    "pldb%leaf_tov_max": "leaf_tov_mx",
+    "pldb%bm_dieoff": "bm_dieoff",
+    "pldb%rsr1": "rt_st_beg",
+    "pldb%rsr2": "rt_st_end",
+    "pldb%pop1": "plnt_pop1",
+    "pldb%frlai1": "frac_lai1",
+    "pldb%pop2": "plnt_pop2",
+    "pldb%frlai2": "frac_lai2",
+    "pldb%frsw_gro": "frac_sw_gro",
+    "pldb%aeration": "aeration",
+    "pldb%rsd_pctcov": "rsd_pctcov",
+    "pldb%rsd_covfac": "rsd_covfac",
+    "pldb%res_part_fracs%meta_frac": "avg_lig_frac",
+    "pldb%res_part_fracs%str_frac": "ab_lig_frac",
+    "pldb%res_part_fracs%lig_frac": "bg_lig_frac",
+    "pl_class": "description"
+   },
+   "trailing": []
+  },
+  "print.prt": {
+   "columns": {
+    "pco%nyskip": "nyskip",
+    "pco%day_start": "day_start",
+    "pco%yrc_start": "yrc_start",
+    "pco%day_end": "day_end",
+    "pco%yrc_end": "yrc_end",
+    "pco%int_day": "interval"
+   },
+   "trailing": []
+  },
+  "puddle.ops": {
+   "columns": {
+    "pudl_db%name": "name",
+    "pudl_db%wet_hc": "hydcon_mm/h",
+    "pudl_db%sed": "sed_ppm",
+    "pudl_db%orgn": "orgn_ppm",
+    "pudl_db%sedp": "sedp_ppm",
+    "pudl_db%no3": "no3_ppm",
+    "pudl_db%solp": "solp_ppm",
+    "pudl_db%nh3": "nh3_ppm",
+    "pudl_db%no2": "no2_ppm"
+   },
+   "trailing": []
+  },
+  "recall.con": {
+   "columns": {
+    "ob%num": "NUMB",
+    "ob%name": "NAME",
+    "ob%gis_id": "GIS_ID",
+    "ob%area_ha": "AREA_HA",
+    "ob%lat": "LAT",
+    "ob%long": "LONG",
+    "ob%elev": "ELEV",
+    "ob%props": "RECALL",
+    "ob%wst_c": "WST",
+    "ob%constit": "CONSTIT",
+    "ob%props2": "OVERFLOW",
+    "ob%ruleset": "RULESET",
+    "ob%src_tot": "OUT_TOT"
+   },
+   "trailing": []
+  },
+  "reservoir.res": {
+   "columns": {
+    "k": "id",
+    "res_dat_c%name": "name",
+    "res_dat_c%init": "init",
+    "res_dat_c%hyd": "hyd",
+    "res_dat_c%release": "rel",
+    "res_dat_c%sed": "sed",
+    "res_dat_c%nut": "nut"
+   },
+   "trailing": [
+    "description"
+   ]
+  },
+  "rout_unit.con": {
+   "columns": {
+    "ob%num": "id",
+    "ob%name": "name",
+    "ob%gis_id": "gis_id",
+    "ob%area_ha": "area",
+    "ob%lat": "lat",
+    "ob%long": "lon",
+    "ob%elev": "elev",
+    "ob%props": "rtu",
+    "ob%wst_c": "wst",
+    "ob%constit": "cst",
+    "ob%props2": "ovfl",
+    "ob%ruleset": "rule",
+    "ob%src_tot": "out_tot"
+   },
+   "trailing": []
+  },
+  "rout_unit.def": {
+   "columns": {
+    "numb": "id",
+    "ru_def%name": "name",
+    "nspu": "elem_tot"
+   },
+   "trailing": []
+  },
+  "rout_unit.ele": {
+   "columns": {
+    "k": "id",
+    "ru_elem%name": "name",
+    "ru_elem%obtyp": "obj_typ",
+    "ru_elem%obtypno": "obj_id",
+    "ru_elem%frac": "frac",
+    "ru_elem%dr_name": "dlr"
+   },
+   "trailing": []
+  },
+  "rout_unit.rtu": {
+   "columns": {
+    "k": "id",
+    "ru%name": "name",
+    "ru%dbsc%elem_def": "define",
+    "ru%dbsc%elem_dr": "dlr",
+    "ru%dbsc%toposub_db": "topo",
+    "ru%dbsc%field_db": "field"
+   },
+   "trailing": []
+  },
+  "salt_fertilizer.frt": {
+   "columns": {
+    "fert_salt%fertnm": "name",
+    "fert_salt%so4": "so4",
+    "fert_salt%ca": "ca",
+    "fert_salt%mg": "mg",
+    "fert_salt%na": "na",
+    "fert_salt%k": "k",
+    "fert_salt%cl": "cl",
+    "fert_salt%co3": "co3",
+    "fert_salt%hco3": "hco3"
+   },
+   "trailing": []
+  },
+  "salt_hru.ini": {
+   "columns": {
+    "salt_soil_ini%name": "name"
+   },
+   "trailing": []
+  },
+  "sed_nut.cha": {
+   "columns": {
+    "sd_chd1%name": "name",
+    "sd_chd1%order": "order",
+    "sd_chd1%pk_rto": "pk_rto",
+    "sd_chd1%fp_inun_days": "fp_inun_days",
+    "sd_chd1%n_setl": "n_setl",
+    "sd_chd1%p_setl": "p_setl",
+    "sd_chd1%n_sol_part": "n_sol_part",
+    "sd_chd1%p_sol_part": "p_sol_part",
+    "sd_chd1%n_dep_enr": "n_dep_enr",
+    "sd_chd1%p_dep_enr": "p_dep_enr",
+    "sd_chd1%arc_len_fr": "arc_len_fr",
+    "sd_chd1%bed_exp": "part_size",
+    "sd_chd1%wash_bed_fr": "wash_bed_fr"
+   },
+   "trailing": []
+  },
+  "sediment.res": {
+   "columns": {
+    "res_sed%name": "name",
+    "res_sed%nsed": "sed_amt",
+    "res_sed%d50": "d50",
+    "res_sed%carbon": "carbon",
+    "res_sed%bd": "bd",
+    "res_sed%sed_stlr": "sed_stl",
+    "res_sed%velsetlr": "stl_vel"
+   },
+   "trailing": []
+  },
+  "septic.sep": {
+   "columns": {
+    "sepdb%sepnm": "name",
+    "sepdb%qs": "q_rate",
+    "sepdb%bodconcs": "bod",
+    "sepdb%tssconcs": "tss",
+    "sepdb%nh4concs": "nh4_n",
+    "sepdb%no3concs": "no3_n",
+    "sepdb%no2concs": "no2_n",
+    "sepdb%orgnconcs": "org_n",
+    "sepdb%minps": "min_p",
+    "sepdb%orgps": "org_p",
+    "sepdb%fcolis": "fcoli"
+   },
+   "trailing": [
+    "description"
+   ]
+  },
+  "septic.str": {
+   "columns": {
+    "sep%name": "name",
+    "sep%typ": "typ",
+    "sep%yr": "yr",
+    "sep%opt": "operation",
+    "sep%cap": "residents",
+    "sep%area": "area",
+    "sep%tfail": "t_fail",
+    "sep%z": "dp_bioz",
+    "sep%thk": "thk_bioz",
+    "sep%strm_dist": "cha_dist",
+    "sep%density": "sep_dens",
+    "sep%bd": "bm_dens",
+    "sep%bod_dc": "bod_decay",
+    "sep%bod_conv": "bod_conv",
+    "sep%fc1": "fc_lin",
+    "sep%fc2": "fc_exp",
+    "sep%fecal": "fecal_decay",
+    "sep%plq": "tds_conv",
+    "sep%mrt": "mort",
+    "sep%rsp": "resp",
+    "sep%slg1": "slough1",
+    "sep%slg2": "slough2",
+    "sep%nitr": "nit",
+    "sep%denitr": "denit",
+    "sep%pdistrb": "p_sorp",
+    "sep%psorpmax": "p_sorp_max",
+    "sep%solpslp": "solp_slp",
+    "sep%solpintc": "solp_int"
+   },
+   "trailing": []
+  },
+  "slr.cli": {
+   "columns": {
+    "slr%filename": "filename"
+   },
+   "trailing": []
+  },
+  "snow.sno": {
+   "columns": {
+    "snodb%name": "name",
+    "snodb%falltmp": "fall_tmp",
+    "snodb%melttmp": "melt_tmp",
+    "snodb%meltmx": "melt_max",
+    "snodb%meltmn": "melt_min",
+    "snodb%timp": "tmp_lag",
+    "snodb%covmx": "snow_h2o",
+    "snodb%cov50": "cov50",
+    "snodb%init_mm": "snow_init"
+   },
+   "trailing": []
+  },
+  "soil_lyr_depths.sol": {
+   "columns": {
+    "csld": "mm"
+   },
+   "trailing": []
+  },
+  "soil_plant.ini": {
+   "columns": {
+    "sol_plt_ini%name": "NAME",
+    "sol_plt_ini%sw_frac": "SW_FRAC",
+    "sol_plt_ini%nutc": "NUT",
+    "sol_plt_ini%pestc": "PEST",
+    "sol_plt_ini%pathc": "PATH",
+    "sol_plt_ini%saltc": "SALT",
+    "sol_plt_ini%hmetc": "HMET"
+   },
+   "trailing": []
+  },
+  "soils_lte.sol": {
+   "columns": {
+    "soil_lte%texture": "name",
+    "soil_lte%awc": "awc",
+    "soil_lte%por": "por",
+    "soil_lte%scon": "scon"
+   },
+   "trailing": []
+  },
+  "sweep.ops": {
+   "columns": {
+    "sweepop_db%name": "name",
+    "sweepop_db%eff": "swp_eff",
+    "sweepop_db%fr_curb": "frac_curb"
+   },
+   "trailing": [
+    "description"
+   ]
+  },
+  "tiledrain.str": {
+   "columns": {
+    "sdr%name": "name",
+    "sdr%depth": "dp",
+    "sdr%time": "t_fc",
+    "sdr%lag": "lag",
+    "sdr%radius": "rad",
+    "sdr%dist": "dist",
+    "sdr%drain_co": "drain",
+    "sdr%pumpcap": "pump",
+    "sdr%latksat": "lat_ksat"
+   },
+   "trailing": []
+  },
+  "tillage.til": {
+   "columns": {
+    "tilldb%tillnm": "name",
+    "tilldb%effmix": "mix_eff",
+    "tilldb%deptil": "mix_dp",
+    "tilldb%ranrns": "rough",
+    "tilldb%ridge_ht": "ridge_ht",
+    "tilldb%ridge_sp": "ridge_sp"
+   },
+   "trailing": [
+    "description"
+   ]
+  },
+  "time.sim": {
+   "columns": {
+    "time%day_start": "day_start",
+    "time%yrc_start": "yrc_start",
+    "time%day_end": "day_end",
+    "time%yrc_end": "yrc_end",
+    "time%step": "step"
+   },
+   "trailing": []
+  },
+  "tmp.cli": {
+   "columns": {
+    "tmp%filename": "FILENAME"
+   },
+   "trailing": []
+  },
+  "topography.hyd": {
+   "columns": {
+    "topo_db%name": "name",
+    "topo_db%slope": "slp",
+    "topo_db%slope_len": "slp_len",
+    "topo_db%lat_len": "lat_len",
+    "topo_db%dis_stream": "dist_cha",
+    "topo_db%dep_co": "depos"
+   },
+   "trailing": []
+  },
+  "transplant.plt": {
+   "columns": {
+    "transpl%name": "NAME",
+    "transpl%lai": "LAI_INI",
+    "transpl%bioms": "BM_INI",
+    "transpl%phuacc": "PHU_ACC_INI",
+    "transpl%fr_yrmat": "FR_YRMAT",
+    "transpl%pop": "POP"
+   },
+   "trailing": []
+  },
+  "urban.urb": {
+   "columns": {
+    "urbdb%urbnm": "name",
+    "urbdb%fimp": "frac_imp",
+    "urbdb%fcimp": "frac_dc_imp",
+    "urbdb%curbden": "curb_den",
+    "urbdb%urbcoef": "urb_wash",
+    "urbdb%dirtmx": "dirt_max",
+    "urbdb%thalf": "t_halfmax",
+    "urbdb%tnconc": "conc_totn",
+    "urbdb%tpconc": "conc_totp",
+    "urbdb%tno3conc": "conc_no3n",
+    "urbdb%urbcn2": "urb_cn"
+   },
+   "trailing": [
+    "description"
+   ]
+  },
+  "wb_parms.sft": {
+   "columns": {
+    "ls_prms%name": "name",
+    "ls_prms%chg_typ": "chg_typ",
+    "ls_prms%neg": "neg",
+    "ls_prms%pos": "pos",
+    "ls_prms%lo": "lo",
+    "ls_prms%up": "up"
+   },
+   "trailing": []
+  },
+  "weather-sta.cli": {
+   "columns": {
+    "wst%name": "name",
+    "wst%wco_c%wgn": "wgn",
+    "wst%wco_c%pgage": "pcp",
+    "wst%wco_c%tgage": "tmp",
+    "wst%wco_c%sgage": "slr",
+    "wst%wco_c%hgage": "hmd",
+    "wst%wco_c%wgage": "wnd",
+    "wst%wco_c%petgage": "wnd_dir",
+    "wst%wco_c%atmodep": "atmo_dep"
+   },
+   "trailing": []
+  },
+  "weir.res": {
+   "columns": {
+    "res_weir%name": "NAME",
+    "res_weir%c": "Linear_C",
+    "res_weir%k": "Exp_K",
+    "res_weir%w": "Width(m)",
+    "res_weir%h": "Depth(m)"
+   },
+   "trailing": []
+  },
+  "wetland.wet": {
+   "columns": {
+    "k": "id",
+    "wet_dat_c%name": "name",
+    "wet_dat_c%init": "init",
+    "wet_dat_c%hyd": "hyd",
+    "wet_dat_c%release": "rel",
+    "wet_dat_c%sed": "sed",
+    "wet_dat_c%nut": "nut"
+   },
+   "trailing": [
+    "WEIR"
+   ]
+  },
+  "wnd.cli": {
+   "columns": {
+    "wnd%filename": "filename"
+   },
+   "trailing": []
+  }
+ }
+}

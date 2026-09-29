@@ -88,14 +88,41 @@ async function detectPythonCommand(): Promise<CommandDescriptor | undefined> {
     return undefined;
 }
 
+const TAMANDUA_PACKAGE = 'git+https://github.com/tugraskan/Tamandua.git';
+// Tamandua's parser, which building from a SWAT+ checkout needs (serving does
+// not). Keep this commit in step with Tamandua's docs/pins.toml.
+const TAMANDUA_PARSER_PACKAGE =
+    'git+https://github.com/tugraskan/swatplus-reference-corpus.git@110c2a24fd584b181e15cec8e3eeb9233c0945ad';
+
 async function isTamanduaOnPath(): Promise<boolean> {
     const result = await runCommand({ command: 'swatplus-mcp', args: [] }, ['--help']);
     return !result.error && result.status === 0;
 }
 
+/** `swatplus-layouts` arrived after `swatplus-mcp`; the schema needs it. */
+async function hasTamanduaLayouts(): Promise<boolean> {
+    const result = await runCommand({ command: 'swatplus-layouts', args: [] }, ['--help']);
+    return !result.error && result.status === 0;
+}
+
 async function installTamandua(): Promise<SetupStepResult> {
     if (await isTamanduaOnPath()) {
-        return { label: 'Tamandua', status: 'ok', detail: 'already installed (swatplus-mcp is on PATH).' };
+        if (await hasTamanduaLayouts()) {
+            return { label: 'Tamandua', status: 'ok', detail: 'already installed (swatplus-mcp is on PATH).' };
+        }
+        const python = await detectPythonCommand();
+        if (python) {
+            const upgrade = await runCommand(python, ['-m', 'pip', 'install', '--upgrade', TAMANDUA_PACKAGE]);
+            if (!upgrade.error && upgrade.status === 0 && await hasTamanduaLayouts()) {
+                return { label: 'Tamandua', status: 'ok', detail: 'upgraded via pip (adds swatplus-layouts).' };
+            }
+        }
+        return {
+            label: 'Tamandua',
+            status: 'ok',
+            detail: 'installed, but this version has no swatplus-layouts, so the schema uses the copy '
+                + 'shipped with the extension. Upgrade Tamandua to build it from your source.'
+        };
     }
 
     const python = await detectPythonCommand();
@@ -107,7 +134,7 @@ async function installTamandua(): Promise<SetupStepResult> {
         };
     }
 
-    const install = await runCommand(python, ['-m', 'pip', 'install', 'git+https://github.com/tugraskan/Tamandua.git']);
+    const install = await runCommand(python, ['-m', 'pip', 'install', TAMANDUA_PACKAGE]);
     if (install.error || install.status !== 0) {
         const reason = install.error
             ? install.error.message
@@ -124,6 +151,34 @@ async function installTamandua(): Promise<SetupStepResult> {
             : 'installed via pip, but swatplus-mcp is not resolvable on PATH in this VS Code session yet -- ' +
               'reload the window before using it.'
     };
+}
+
+/**
+ * Install Tamandua's parser, so the schema can be built from the SWAT+ source
+ * in this workspace rather than from a snapshot. Only worth it in a SWAT+
+ * source workspace; elsewhere there is no source to build from.
+ */
+async function installTamanduaParser(isSourceWorkspace: boolean): Promise<SetupStepResult> {
+    const label = 'Tamandua parser';
+    if (!isSourceWorkspace) {
+        return { label, status: 'skipped', detail: 'not a SWAT+ source workspace, so there is no source to build the schema from.' };
+    }
+    const python = await detectPythonCommand();
+    if (!python) {
+        return { label, status: 'skipped', detail: 'no Python interpreter found on PATH.' };
+    }
+    const present = await runCommand(python, ['-c', 'import swatplus_reference']);
+    if (!present.error && present.status === 0) {
+        return { label, status: 'ok', detail: 'already installed.' };
+    }
+    const install = await runCommand(python, ['-m', 'pip', 'install', TAMANDUA_PARSER_PACKAGE]);
+    if (install.error || install.status !== 0) {
+        const reason = install.error
+            ? install.error.message
+            : install.stderr.trim().split('\n').slice(-5).join('\n') || `pip exited ${install.status}`;
+        return { label, status: 'failed', detail: `pip install failed: ${reason}` };
+    }
+    return { label, status: 'ok', detail: 'installed via pip; the schema now follows this checkout.' };
 }
 
 async function readJsonObject(uri: vscode.Uri): Promise<Record<string, unknown>> {
@@ -247,6 +302,9 @@ export async function setupWorkspace(options: WorkspaceSetupOptions): Promise<Se
 
     const tamanduaResult = await installTamandua();
     results.push(tamanduaResult);
+    if (tamanduaResult.status === 'ok') {
+        results.push(await installTamanduaParser(options.isSwatplusSourceWorkspace));
+    }
 
     if (tamanduaResult.status === 'ok') {
         const args = ['--compact', ...(options.isSwatplusSourceWorkspace ? ['--source', folder.uri.fsPath] : [])];

@@ -431,6 +431,7 @@ export class SwatTableViewerPanel {
                         <div><strong>Title line:</strong> ${schemaTable.has_metadata_line ? 'Yes' : 'No'}</div>
                         <div><strong>Header line:</strong> ${schemaTable.has_header_line ? 'Yes' : 'No'}</div>
                         <div><strong>Data starts after line:</strong> ${schemaTable.data_starts_after}</div>
+                        ${(schemaTable as any).swat_layout ? `<div><strong>Read by SWAT+:</strong> ${this._escapeHtml((schemaTable as any).swat_layout.read_at)} (${(schemaTable as any).swat_layout.values_read} values per record)</div>` : ''}
                         <div><strong>Table name:</strong> ${this._escapeHtml(schemaTable.table_name)}</div>
                         <div><strong>Relationships:</strong> ${fkColumns.size} FK column(s), ${pointerColumns.length} file pointer column(s)</div>
                     ` : ''}
@@ -467,9 +468,16 @@ export class SwatTableViewerPanel {
             }
             const notes = noteParts.join(' — ');
             const notesTitle = columnDoc?.source_ref ? ` title="Source: ${this._escapeHtml(columnDoc.source_ref)}"` : '';
+            // Built from SWAT+ source: the variable the column is read into.
+            const swatCell = (schemaTable as any)?.origin !== 'tamandua'
+                ? ''
+                : col.read_by_swat === false
+                    ? '<em>not read by SWAT+</em>'
+                    : `<span title="${this._escapeHtml(`${col.swat?.path ?? ''} — ${col.swat?.read_at ?? ''}`)}"><code>${this._escapeHtml(col.swat?.name ?? '')}</code></span>`;
             return `
                 <tr>
                     <td>${this._escapeHtml(col.name)}</td>
+                    <td>${swatCell}</td>
                     <td>${this._escapeHtml(col.type)}</td>
                     <td>${col.is_primary_key ? 'Key' : (fkInfo ? `FK → ${this._escapeHtml(fkInfo.references.table)}.${this._escapeHtml(fkInfo.references.column)}` : '')}</td>
                     <td>${fkInfo ? this._escapeHtml(fkInfo.references.table) : ''}</td>
@@ -486,6 +494,7 @@ export class SwatTableViewerPanel {
                     <thead>
                         <tr>
                             <th>Column</th>
+                            <th title="The SWAT+ variable each column is read into, from the Fortran source">SWAT+ name</th>
                             <th>Type</th>
                             <th>Key / References</th>
                             <th>FK Target</th>
@@ -494,7 +503,7 @@ export class SwatTableViewerPanel {
                         </tr>
                     </thead>
                     <tbody>
-                        ${columnRows || '<tr><td colspan="6">No schema information available.</td></tr>'}
+                        ${columnRows || '<tr><td colspan="7">No schema information available.</td></tr>'}
                     </tbody>
                 </table>
             </div>

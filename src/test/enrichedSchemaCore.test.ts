@@ -77,6 +77,17 @@ suite('Enriched schema core', () => {
         assert.ok(lines[2].startsWith('_Source:'));
     });
 
+    test('renderColumnDocLines says where SWAT+ reads a column built from source', () => {
+        const lines = renderColumnDocLines({
+            description: 'land use and management',
+            fortran_target: 'hru_db%dbsc%land_use_mgt',
+            source_ref: 'hru_module.f90:164',
+            read_at: 'hru_read.f90:67',
+        });
+        assert.strictEqual(lines[lines.length - 1],
+            '_SWAT+ reads it into `hru_db%dbsc%land_use_mgt` at hru_read.f90:67_');
+    });
+
     test('renderColumnDocLines is empty for undefined or contentless docs', () => {
         assert.deepStrictEqual(renderColumnDocLines(undefined), []);
         assert.deepStrictEqual(renderColumnDocLines({ match: 'exact' }), []);

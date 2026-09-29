@@ -8,6 +8,8 @@
 
 export interface ColumnDoc {
     description?: string;
+    /** Where SWAT+ reads the column, when built from source: `hru_read.f90:67`. */
+    read_at?: string;
     source_meaning?: string;
     units?: string;
     fortran_type?: string;
@@ -46,6 +48,10 @@ export interface EnrichedSchemaFile {
         overlays_repo?: string;
         files_enriched?: number;
     };
+    /** Set on a schema built from SWAT+ source (generate_schema_from_layouts.py). */
+    generated_from?: {
+        swatplus?: { describe?: string | null; commit?: string | null };
+    };
     tables?: { [fileName: string]: EnrichedTable };
 }
 
@@ -79,7 +85,9 @@ export class EnrichedSchemaIndex {
         if (!data) {
             return;
         }
-        this.version = data.enrichment?.swatplus_version;
+        this.version = data.enrichment?.swatplus_version
+            ?? data.generated_from?.swatplus?.describe
+            ?? undefined;
         for (const [fileName, table] of Object.entries(data.tables || {})) {
             const columns = new Map<string, ColumnDoc>();
             for (const col of table.columns || []) {
@@ -143,6 +151,10 @@ export function renderColumnDocLines(doc: ColumnDoc | undefined): string[] {
     }
     if (doc.source_ref) {
         lines.push(`_Source: ${doc.source_ref}_`);
+    }
+    // Set on a schema built from SWAT+ source: where the value lands.
+    if (doc.fortran_target && doc.read_at) {
+        lines.push(`_SWAT+ reads it into \`${doc.fortran_target}\` at ${doc.read_at}_`);
     }
     return lines;
 }

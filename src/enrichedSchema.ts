@@ -1,13 +1,17 @@
 /**
- * Enriched SWAT+ schema loader (vscode wrapper).
+ * Column-documentation loader (vscode wrapper).
  *
- * Resolves and reads `swatplus-schema-enriched.json` (structure from the editor
- * schema plus source-backed semantics merged from swatplus-doc-builder), then
- * delegates all parsing and lookups to the vscode-free {@link EnrichedSchemaIndex}.
+ * Input-file docs come from the schema built from SWAT+ source
+ * (`swatplus-generated-schema.json`): Tamandua's facts -- each column's
+ * type, units and inline description, citing its declaration -- and nothing
+ * written by a model. The build for this workspace replaces the shipped copy
+ * via {@link EnrichedSchemaProvider.useInputSchema}. Output-file docs still come
+ * from `swatplus-output-schema.json`, since Tamandua does not yet derive
+ * output columns.
  *
- * This is a read-only documentation layer, kept separate from the indexer's own
- * schema loading (which drives FK resolution). If the enriched file is absent,
- * accessors return `undefined` and callers fall back to their existing behavior.
+ * All parsing and lookups are delegated to the vscode-free
+ * {@link EnrichedSchemaIndex}. If a file is absent, accessors return
+ * `undefined` and callers fall back to their existing behavior.
  */
 
 import * as vscode from 'vscode';
@@ -30,7 +34,7 @@ export {
     columnDocTooltip, outputColumnDocTooltip,
 } from './enrichedSchemaCore';
 
-const ENRICHED_FILENAME = 'swatplus-schema-enriched.json';
+const INPUT_DOCS_FILENAME = 'swatplus-generated-schema.json';
 const OUTPUT_FILENAME = 'swatplus-output-schema.json';
 
 export class EnrichedSchemaProvider {
@@ -39,7 +43,7 @@ export class EnrichedSchemaProvider {
 
     constructor(private context: vscode.ExtensionContext) {
         this.index = new EnrichedSchemaIndex(
-            this.loadData(ENRICHED_FILENAME, 'enriched schema'));
+            this.loadData(INPUT_DOCS_FILENAME, 'input-file docs'));
         this.outputIndex = new OutputSchemaIndex(
             this.loadData(OUTPUT_FILENAME, 'output schema'));
     }
@@ -73,6 +77,15 @@ export class EnrichedSchemaProvider {
         } catch (error) {
             console.log(`Failed to load SWAT+ ${label}: ${error}`);
             return null;
+        }
+    }
+
+    /** Take input-file docs from a schema just built for this workspace. */
+    public useInputSchema(schemaPath: string): void {
+        try {
+            this.index = new EnrichedSchemaIndex(JSON.parse(fs.readFileSync(schemaPath, 'utf-8')));
+        } catch (error) {
+            console.log(`Failed to load input-file docs from ${schemaPath}: ${error}`);
         }
     }
 

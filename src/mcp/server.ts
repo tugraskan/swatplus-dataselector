@@ -9,7 +9,7 @@
  *
  * Usage:
  *   node dist/mcp-server.js                            # docs-only (lookup_docs)
- *   node dist/mcp-server.js --index <pandas-index.json> [--schema <enriched.json>]
+ *   node dist/mcp-server.js --index <pandas-index.json> [--schema <generated.json>]
  *                           [--output-schema <output.json>]
  *   node dist/mcp-server.js --dataset <TxtInOut-dir>   # builds the index first
  *
@@ -78,7 +78,7 @@ function loadJson<T>(filePath: string): T {
 function buildIndex(datasetDir: string, args: CliArgs): string {
     const scriptsDir = args.scripts ?? path.join(__dirname, '..', 'scripts');
     const script = path.join(scriptsDir, 'pandas_indexer.py');
-    const schema = args.schema ?? defaultSchemaPath('swatplus-editor-schema.json');
+    const schema = args.schema ?? defaultSchemaPath('swatplus-generated-schema.json');
     const metadata = args.metadata ?? defaultSchemaPath('txtinout-metadata.json');
     const outPath = path.join(os.tmpdir(), `swat-index-${Date.now()}.json`);
     const result = spawnSync('python3', [
@@ -102,9 +102,13 @@ function main(): void {
     if (!indexPath && args.dataset) {
         indexPath = buildIndex(args.dataset, args);
     }
-    const schemaPath = args.schema && args.schema.includes('enriched')
+    // Column docs and link edges come from the schema built from SWAT+ source
+    // (Tamandua facts, each citing its declaration). An explicitly passed
+    // schema is used when it carries docs -- a generated one, or an enriched
+    // one someone still points at deliberately.
+    const schemaPath = args.schema && /generated|enriched/.test(path.basename(args.schema))
         ? args.schema
-        : defaultSchemaPath('swatplus-schema-enriched.json');
+        : defaultSchemaPath('swatplus-generated-schema.json');
     const outputSchemaPath = args.outputSchema ?? defaultSchemaPath('swatplus-output-schema.json');
 
     // A dataset is optional: without --index/--dataset the server still serves
