@@ -27,12 +27,36 @@ import pandas as pd
 # Constants
 NUMERIC_VALUE_PATTERN = re.compile(r'^\d+(\.\d+)?$')
 MAX_CHILD_LINES = 1000  # Sanity check limit to prevent excessive line skipping
-# Position of op_data1 in a management.sch operation line. read_mgtops.f90
-# reads op, mon, day, husc, op_char, op_plant, op3 in that order, so op_char
-# (the tillage/fertilizer/plant name op_data1 holds) is the fifth value. At 6 the
-# index read op3, a number such as 181.400, as a link: 3,240 of Ames's 3,254
-# references never resolved.
-MANAGEMENT_SCH_OP_DATA1_INDEX = 4
+# Positions of the names on a management.sch operation line. read_mgtops.f90
+# reads op, mon, day, husc, op_char, op_plant, op3 in that order, so op_char is
+# op_data1 (the fifth value) and op_plant is op_data2 (the sixth). At 6 the
+# index once read op3, a number such as 181.400, as a link: 3,240 of Ames's
+# 3,254 references never resolved.
+MANAGEMENT_SCH_OP_DATA_INDEX = {"op_data1": 4, "op_data2": 5}
+# Operation type -> {column: table}, one entry per name read_mgtops.f90 (SWAT+
+# 62.0.x) looks up, with the array it searches. Operations it does not look up
+# (kill, skip, ...) have no links, and neither does op_data1 of harv/hvkl:
+# mgt_sched.f90 compares that plant name at run time with the HRU's plant
+# community, or "all". src/managementSchOps.ts holds the same table.
+MANAGEMENT_SCH_OP_LINKS = {
+    "pcom": {"op_data1": "plant_ini"},        # pcomdb%name
+    "plnt": {"op_data1": "plants_plt",        # pldb%plantnm
+             "op_data2": "transplant_plt"},   # transpl%name (transplant.ops from 62.0.1)
+    "harv": {"op_data2": "harv_ops"},         # harvop_db%name
+    "hvkl": {"op_data2": "harv_ops"},         # harvop_db%name
+    "till": {"op_data1": "tillage_til"},      # tilldb%tillnm
+    "irrm": {"op_data1": "irr_ops"},          # irrop_db%name
+    "irrp": {"op_data1": "irr_ops"},          # irrop_db%name
+    "fert": {"op_data1": "fertilizer_frt",    # fertdb%fertnm
+             "op_data2": "chem_app_ops"},     # chemapp_db%name
+    "manu": {"op_data1": "manure_db_frt",     # manure_db%name, read from manure_db.frt
+             "op_data2": "chem_app_ops"},     # chemapp_db%name
+    "pest": {"op_data1": "pesticide_pes",     # pestdb%name
+             "op_data2": "chem_app_ops"},     # chemapp_db%name
+    "graz": {"op_data1": "graze_ops"},        # grazeop_db%name
+    "burn": {"op_data1": "fire_ops"},         # fire_db%name
+    "swep": {"op_data1": "sweep_ops"},        # sweepop_db%name
+}
 DTL_ACTION_FP_INDEX = 7  # Position of fp field in decision table action lines
 WEATHER_DATA_SCHEMA_FILES = {
     ".pcp": "weather-pcp.pcp",
@@ -552,24 +576,7 @@ def process_management_sch_child_lines(
     """Process child lines for management.sch and extract FK references."""
     references: List[dict] = []
     null_set = {val.lower() for val in fk_null_values}
-    
-    # Operation type to target table mapping
-    op_type_to_table = {
-        'plnt': 'plant_ini',
-        'harv': 'harv_ops',
-        'hvkl': 'plant_ini',
-        'kill': 'plant_ini',
-        'till': 'tillage_til',
-        'irrm': 'irr_ops',
-        'irra': 'irr_ops',
-        'fert': 'fertilizer_frt',
-        'frta': 'fertilizer_frt',
-        'frtc': 'fertilizer_frt',
-        'pest': 'pesticide_pes',
-        'pstc': 'pesticide_pes',
-        'graz': 'graze_ops'
-    }
-    
+
     current_line = start_line
     
     # Process first numb_auto lines (decision table references)
@@ -602,18 +609,19 @@ def process_management_sch_child_lines(
             values = line.split()
             if values:
                 op_type = values[0]
-                # op_data1: see MANAGEMENT_SCH_OP_DATA1_INDEX
-                op_data1 = values[MANAGEMENT_SCH_OP_DATA1_INDEX] if len(values) > MANAGEMENT_SCH_OP_DATA1_INDEX else None
-                
-                if op_type and op_data1 and op_type in op_type_to_table and op_data1.lower() not in null_set:
+                for column, target_table in MANAGEMENT_SCH_OP_LINKS.get(op_type, {}).items():
+                    index = MANAGEMENT_SCH_OP_DATA_INDEX[column]
+                    fk_value = values[index] if len(values) > index else None
+                    if not fk_value or fk_value.lower() in null_set:
+                        continue
                     references.append({
                         "sourceFile": str(file_path),
                         "sourceTable": table["table_name"],
                         "sourceLine": current_line + 1,
-                        "sourceColumn": f"op_data1({op_type})",
-                        "fkValue": op_data1,
-                        "fkValueLower": op_data1.lower(),
-                        "targetTable": op_type_to_table[op_type],
+                        "sourceColumn": f"{column}({op_type})",
+                        "fkValue": fk_value,
+                        "fkValueLower": fk_value.lower(),
+                        "targetTable": target_table,
                         "targetColumn": "name",
                         "resolved": False
                     })

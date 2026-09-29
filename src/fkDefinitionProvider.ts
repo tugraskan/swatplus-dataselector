@@ -10,6 +10,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { SwatIndexer } from './indexer';
 import { pathStartsWith } from './pathUtils';
+import { managementSchOpTarget } from './managementSchOps';
 
 // file.cio format: classification_name  file1  file2  file3  ...
 // Column 0 is classification name, columns 1+ are filenames
@@ -326,38 +327,19 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
                         // This is an explicit operation
                         this.outputChannel.appendLine(`[FK Definition] Explicit operation line`);
                         
-                        // Operation type is in first column (columnIndex 0). op_data1 is
-                        // the 5th value (columnIndex 4): read_mgtops.f90 reads op, mon,
-                        // day, husc, op_char, op_plant, op3.
+                        // Operation type is in first column (columnIndex 0); which of
+                        // op_data1/op_data2 SWAT+ looks up, and where, depends on it.
                         const opType = values[0];
-                        const opData1 = values.length > 4 ? values[4] : null;
-                        
-                        // Map operation type to target table
-                        const opTypeToTable: { [opType: string]: string } = {
-                            'plnt': 'plant_ini',
-                            'harv': 'harv_ops',
-                            'hvkl': 'plant_ini',
-                            'kill': 'plant_ini',
-                            'till': 'tillage_til',
-                            'irrm': 'irr_ops',
-                            'irra': 'irr_ops',
-                            'fert': 'fertilizer_frt',
-                            'frta': 'fertilizer_frt',
-                            'frtc': 'fertilizer_frt',
-                            'pest': 'pesticide_pes',
-                            'pstc': 'pesticide_pes',
-                            'graz': 'graze_ops'
-                        };
-                        
-                        if (opType && opTypeToTable[opType] && opData1 && columnIndex === 4) {
-                            // Cursor is on op_data1 column
-                            const targetTable = opTypeToTable[opType];
-                            this.outputChannel.appendLine(`[FK Definition] Operation ${opType} references ${targetTable}, value: ${opData1}`);
-                            
-                            const targetRow = this.indexer.resolveFKTarget(targetTable, opData1);
-                            
+                        const targetTable = opType ? managementSchOpTarget(opType, columnIndex) : undefined;
+                        const opValue = values[columnIndex];
+
+                        if (targetTable && opValue) {
+                            this.outputChannel.appendLine(`[FK Definition] Operation ${opType} references ${targetTable}, value: ${opValue}`);
+
+                            const targetRow = this.indexer.resolveFKTarget(targetTable, opValue);
+
                             if (!targetRow) {
-                                this.outputChannel.appendLine(`[FK Definition] Operation target not found: table=${targetTable}, value=${opData1}`);
+                                this.outputChannel.appendLine(`[FK Definition] Operation target not found: table=${targetTable}, value=${opValue}`);
                                 this.outputChannel.show(true);
                                 return undefined;
                             }
