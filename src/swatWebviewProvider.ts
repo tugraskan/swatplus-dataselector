@@ -6,6 +6,7 @@ import { SwatIndexer } from './indexer';
 import { resolveFileCioPath, wslPathToWindows } from './pathUtils';
 import { detectEnvironment, hasWorkspace, isCmakeToolsInstalled, isSwatPlusWorkspace, resolvePathForEnvironment, EnvironmentInfo } from './environmentUtils';
 import { formatRelativeAge, formatStaleSummary } from './indexStalenessUtils';
+import { isEnrichedSchema } from './enrichedSchemaCore';
 
 /**
  * Escapes HTML special characters to prevent XSS attacks
@@ -621,7 +622,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 try {
                     const content = fs.readFileSync(filePath, 'utf-8');
                     const data = JSON.parse(content);
-                    if (!data || !data.schema_version || !data.tables) {
+                    if (!data || !data.schema_version || !data.tables || isEnrichedSchema(data)) {
                         continue;
                     }
                     const version = String(data.schema_version);
