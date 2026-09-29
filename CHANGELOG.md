@@ -87,6 +87,9 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - `npm run check-webview`, which syntax-checks the JavaScript embedded in webview HTML
   template literals — neither tsc nor eslint parses it, so errors there previously
   shipped as silently broken panels
+- `check_dataset` MCP tool: validates `file.cio` row arity against the Fortran source that reads it, catching a row short of values before the run. A short row is not a read error -- list-directed input spans records to fill its item list, so it silently consumes the next line and every row after is read shifted by one, surfacing much later as a subscript error in an unrelated routine. Expectations come from `src/input_file_module.f90` rather than a reference dataset, so an older branch expects an older `file.cio` and a matching dataset passes
+- `select_dataset` MCP tool: point every dataset tool at a different dataset directory at runtime, instead of the dataset being fixed by the command line at server start
+- `run_dataset` MCP tool: run the SWAT+ executable with the active dataset as its working directory and report how it ended, leading with the `forrtl` error and traceback. A build compiled `/traceback` and linked `/INCREMENTAL:NO` names the failing routine and source line, so the crash text alone identifies it. It runs only the server's `--exe`: the caller cannot supply an executable or arguments, so a tool call cannot start an arbitrary program
 - "Select All" checkbox to quickly toggle all input category filters at once (with indeterminate state support)
 - Separate navigation state for Inputs and Outputs sections - navigating in one doesn't affect the other
 - Back button in Outputs section for subdirectory navigation
@@ -122,6 +125,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - Index build failures no longer point at an output channel that did not exist
 - List rows are keyboard focusable and activatable, hover-only icon buttons become visible
   on focus, and the context menu supports arrow-key navigation and Escape
+- Index building no longer assumes `python3` exists: on Windows it usually resolves to the Microsoft Store alias, which exits non-zero without running anything, so the failure looked like a broken indexer rather than a missing interpreter. `python3`, `python` and `py -3` are now tried in order
 - Improved filtering logic to use `includes()` instead of `indexOf()` for better performance
 - Navigation in outputs section no longer affects navigation in inputs section
 - Climate file columns (pcp, tmp, slr, hmd, wnd, wnd_dir, atmo_dep) in weather-sta.cli are no longer treated as FK references
