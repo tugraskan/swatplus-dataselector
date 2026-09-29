@@ -4,7 +4,7 @@ All notable changes to the "swatplus-vscode-dataset-selector" extension will be 
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
-## [Unreleased]
+## [0.4.0] - 2026-09-29
 
 ### Added
 - The schema is built from the SWAT+ Fortran source by Tamandua
