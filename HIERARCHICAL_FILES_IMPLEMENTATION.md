@@ -198,23 +198,29 @@ for (const field of fields) {
 ```
 
 **Operation Type to File Mappings (management.sch):**
-```typescript
-const opTypeToTable = {
-    'plnt': 'plant_ini',    // Plant community reference
-    'harv': 'harv_ops',     // Harvest operation
-    'hvkl': 'plant_ini',    // Harvest and kill
-    'kill': 'plant_ini',    // Kill plant
-    'till': 'tillage_til',  // Tillage operation
-    'irrm': 'irr_ops',      // Irrigation (moisture-based)
-    'irra': 'irr_ops',      // Irrigation (auto)
-    'fert': 'fertilizer_frt', // Fertilizer application
-    'frta': 'fertilizer_frt', // Fertilizer (auto)
-    'frtc': 'fertilizer_frt', // Fertilizer (continuous)
-    'pest': 'pesticide_pes',  // Pesticide application
-    'pstc': 'pesticide_pes',  // Pesticide (continuous)
-    'graz': 'graze_ops'       // Grazing operation
-};
-```
+
+An operation line is `op mon day husc op_data1 op_data2 op_data3`. What each
+operation type's `op_data1`/`op_data2` names is the lookup `read_mgtops.f90`
+does, kept in `src/managementSchOps.ts` and `MANAGEMENT_SCH_OP_LINKS` in
+`scripts/pandas_indexer.py` (SWAT+ 62.0.x):
+
+| op | op_data1 → | op_data2 → |
+|----|------------|------------|
+| `pcom` | `plant.ini` | |
+| `plnt` | `plants.plt` | `transplant.plt` |
+| `harv`, `hvkl` | | `harv.ops` |
+| `till` | `tillage.til` | |
+| `irrm`, `irrp` | `irr.ops` | |
+| `fert` | `fertilizer.frt` | `chem_app.ops` |
+| `manu` | `manure_db.frt` | `chem_app.ops` |
+| `pest` | `pesticide.pes` | `chem_app.ops` |
+| `graz` | `graze.ops` | |
+| `burn` | `fire.ops` | |
+| `swep` | `sweep.ops` | |
+
+`op_data1` of `harv`/`hvkl`/`kill` is a plant name that `mgt_sched.f90`
+compares at run time with the HRU's plant community (or `all`), so it is not a
+link. `op_data3` is a number and never a link.
 
 **Modified `indexTable()` Loop**
 ```typescript

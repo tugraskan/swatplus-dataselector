@@ -40,6 +40,14 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   `op_data1`: `read_mgtops.f90` reads op, mon, day, husc, op_char, op_plant, op3.
   On Ames, resolved links rose from 14 to 725; go-to-definition on the column
   had the same off-by-two
+- `management.sch` operation links go where `read_mgtops.f90` looks each name
+  up: `plnt` to `plants.plt` (not `plant.ini`), `harv`/`hvkl` from `op_data2`
+  to `harv.ops`, `op_data2` of `plnt`/`fert`/`manu`/`pest` to the transplant
+  and `chem_app.ops` databases, and new `pcom`, `irrp`, `manu`, `burn` and
+  `swep` links. `kill` and harvest plant names are no longer links (SWAT+
+  matches them at run time). On Ames, resolved links rose from 725 to 1,789;
+  the rest are names SWAT+ cannot find either (fertilizer names in `op_data2`,
+  and a `residue` harvest `harv.ops` does not have)
 - Switching schemas dropped the metadata's table-to-file names until reload
 - A schema table without `table_name` no longer fails the whole index build
 - `SWAT+: Set Up This Workspace` command (and a "Set Up" sidebar button):
