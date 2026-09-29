@@ -12,6 +12,16 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   bundled one into both `.vscode/mcp.json` and `.mcp.json`, and hands off to
   the Fortran ifx/GNU Debug extension for a debug launch config and its MCP
   entry when that extension is installed
+- Registered the dataset MCP server (`dist/mcp-server.js`) with VS Code's own
+  MCP registry, so its tools (`describe_entity`, `find_references`, etc.) are
+  offered automatically in this workspace's chat, no `.vscode/mcp.json`
+  required. The server is spawned with the editor's own bundled Node.js
+  (`process.execPath`), not a `node` on `PATH` or a version-specific
+  installed-Node path, and re-spawns pointed at the newly selected dataset
+  whenever it changes. VS Code's own one-time per-workspace trust prompt
+  still applies (see docs/MCP_SERVER.md); external clients such as Claude
+  Code or Claude Desktop, which don't read VS Code's registry, still need
+  their own MCP configuration.
 - Name filter on the Inputs and Outputs lists, with a clear button and Escape to clear,
   combining with the category checkboxes
 - "Index out of date" banner with one-click rebuild when indexed input files change on

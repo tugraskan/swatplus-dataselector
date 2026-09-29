@@ -1,11 +1,15 @@
-// One-click onboarding: installs Tamandua, wires up both its MCP server and
-// this extension's own bundled one for both VS Code's native MCP discovery
-// (.vscode/mcp.json) and Claude Code's (.mcp.json), and -- when the Fortran
-// ifx/GNU Debug extension is present -- hands off to its own debug-config and
-// MCP-config commands rather than duplicating that logic here.
+// One-click onboarding: installs Tamandua and wires up its MCP server for
+// both VS Code's native MCP discovery (.vscode/mcp.json) and Claude Code's
+// (.mcp.json), then mirrors this extension's own bundled server -- already
+// registered natively via registerSwatMcpServerProvider in extension.ts --
+// into .mcp.json too, since that native path only reaches VS Code's own
+// chat, not external clients. When the Fortran ifx/GNU Debug extension is
+// present, hands off to its own debug-config and MCP-config commands rather
+// than duplicating that logic here.
 
 import * as vscode from 'vscode';
 import { spawn } from 'child_process';
+import { resolveMcpServerDatasetArgs } from './mcpServerDefinition';
 
 interface CommandDescriptor {
     command: string;
@@ -263,16 +267,25 @@ export async function setupWorkspace(options: WorkspaceSetupOptions): Promise<Se
         });
     }
 
+    // VS Code's own chat already gets this extension's dataset server via
+    // registerSwatMcpServerProvider (extension.ts) -- no .vscode/mcp.json
+    // entry needed there. Claude Code and other external clients don't read
+    // that registry, so they still need this entry in .mcp.json, built the
+    // same way (process.execPath, the same --index/--dataset resolution).
     const serverJsPath = vscode.Uri.joinPath(options.extensionUri, 'dist', 'mcp-server.js').fsPath;
-    const datasetArgs = options.selectedDatasetPath ? ['--dataset', options.selectedDatasetPath] : [];
-    await mergeMcpServer(vscodeMcpUri, 'servers', 'swatplus-dataset', { command: 'node', args: [serverJsPath, ...datasetArgs] });
-    await mergeMcpServer(claudeMcpUri, 'mcpServers', 'swatplus-dataset', { command: 'node', args: [serverJsPath, ...datasetArgs] });
+    const datasetArgs = resolveMcpServerDatasetArgs(options.selectedDatasetPath);
+    await mergeMcpServer(claudeMcpUri, 'mcpServers', 'swatplus-dataset', {
+        command: process.execPath,
+        args: [serverJsPath, ...datasetArgs]
+    });
     results.push({
         label: 'Dataset MCP config',
         status: 'ok',
         detail: options.selectedDatasetPath
-            ? `added, pointed at ${options.selectedDatasetPath}.`
-            : 'added in docs-only mode (no dataset selected yet -- select one and re-run to wire it in).'
+            ? `added to .mcp.json, pointed at ${options.selectedDatasetPath} (VS Code's own chat already has this ` +
+              'server registered automatically).'
+            : 'added to .mcp.json in docs-only mode (no dataset selected yet -- select one and re-run to wire it ' +
+              "in). VS Code's own chat already has this server registered automatically."
     });
 
     results.push(...(await setUpIfxDebug(claudeMcpUri, vscodeMcpUri)));

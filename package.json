@@ -367,7 +367,13 @@
           "description": "What to do with the table viewers after building or rebuilding the inputs index. 'always' reproduces the previous behaviour of taking over the editor area on every build."
         }
       }
-    }
+    },
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "swatplus.mcpServer",
+        "label": "SWAT+ Dataset"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
