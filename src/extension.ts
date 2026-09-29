@@ -22,7 +22,8 @@ import { SchemaEditorPanel } from './schemaEditorPanel';
 import { SwatDependencyGraphPanel } from './dependencyGraphPanel';
 import { SwatOutputDataFramePanel } from './outputDataFramePanel';
 import { normalizePathForComparison, pathStartsWith, resolveFileCioPath } from './pathUtils';
-import { detectEnvironment, isCmakeToolsInstalled } from './environmentUtils';
+import { detectEnvironment, isCmakeToolsInstalled, isSwatPlusWorkspace } from './environmentUtils';
+import { setupWorkspace, SetupStepResult } from './workspaceSetup';
 import { generateOutputNotebooks } from './outputNotebookGenerator';
 import { inspectHruRange, runHruProcessor, validateHruIdInput } from './hruProcessor';
 import { isSelfWrittenFile } from './indexStalenessUtils';
@@ -46,6 +47,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const datasetEngine = new SwatDatasetEngine(indexer, enrichedSchema);
 	registerSwatChatParticipant(context, indexer, datasetEngine);
 	const hruProcessorOutput = vscode.window.createOutputChannel('SWAT+ HRU Processor');
+	const workspaceSetupOutput = vscode.window.createOutputChannel('SWAT+ Workspace Setup');
 	// Create and register the webview view provider
 	const swatProvider = new SwatDatasetWebviewProvider(context, indexer);
 	const webviewViewProvider = vscode.window.registerWebviewViewProvider(
@@ -221,6 +223,38 @@ export function activate(context: vscode.ExtensionContext) {
 	// Variable resolver for launch.json
 	const datasetFolderProvider = vscode.commands.registerCommand('swat-dataset-selector.getDatasetFolder', () => {
 		return swatProvider.getSelectedDataset() || undefined;
+	});
+
+	// One-click onboarding: installs Tamandua, wires up its MCP server and this
+	// extension's own bundled one, and -- when present -- hands off to the
+	// Fortran ifx/GNU Debug extension for a debug config and its MCP entry.
+	const setupWorkspaceCmd = vscode.commands.registerCommand('swat-dataset-selector.setupWorkspace', async () => {
+		const steps = await vscode.window.withProgress(
+			{ location: vscode.ProgressLocation.Notification, title: 'Setting up SWAT+ workspace...' },
+			() => setupWorkspace({
+				extensionUri: context.extensionUri,
+				selectedDatasetPath: swatProvider.getSelectedDataset() || undefined,
+				isSwatplusSourceWorkspace: isSwatPlusWorkspace()
+			})
+		);
+
+		workspaceSetupOutput.clear();
+		for (const step of steps) {
+			const marker = step.status === 'ok' ? 'OK' : step.status === 'skipped' ? 'SKIPPED' : 'FAILED';
+			workspaceSetupOutput.appendLine(`[${marker}] ${step.label}: ${step.detail}`);
+		}
+
+		const failed = steps.filter((s: SetupStepResult) => s.status === 'failed');
+		const skipped = steps.filter((s: SetupStepResult) => s.status === 'skipped');
+		const summary = `Workspace setup: ${steps.length - failed.length - skipped.length} done, ` +
+			`${skipped.length} skipped, ${failed.length} failed.`;
+
+		const action = await (failed.length > 0
+			? vscode.window.showWarningMessage(summary, 'Show Details')
+			: vscode.window.showInformationMessage(summary, 'Show Details'));
+		if (action === 'Show Details') {
+			workspaceSetupOutput.show();
+		}
 	});
 
 	// Command to select a recent dataset
@@ -1347,6 +1381,7 @@ export function activate(context: vscode.ExtensionContext) {
 		selectAndDebug,
 		launchWithSelected,
 		datasetFolderProvider,
+		setupWorkspaceCmd,
 		selectRecentDataset,
 		showDatasetInfo,
 		openFile,

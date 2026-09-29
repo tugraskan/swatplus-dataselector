@@ -63,13 +63,26 @@ schema. It is a two-layer project:
 1. Install the extension from the marketplace or build it from source.
 2. Reload VS Code with `Developer: Reload Window`.
 3. Open a SWAT+ project.
-4. Select a dataset from the SWAT+ Dataset sidebar or run `SWAT+: Select Dataset Folder`.
-5. Run `SWAT+: Build Inputs Index`.
-6. Ctrl+Click foreign keys or filenames to navigate.
+4. Click **Set Up This Workspace** in the sidebar (or run the command of the same
+   name) to install [Tamandua](https://github.com/tugraskan/Tamandua) and wire
+   up both its MCP server and this extension's own into `.vscode/mcp.json` and
+   `.mcp.json`, plus a debug launch config if the
+   [Fortran ifx/GNU Debug](https://github.com/tugraskan/vsc_ifx_debug)
+   extension is installed. Optional — everything below still works without it.
+5. Select a dataset from the SWAT+ Dataset sidebar or run `SWAT+: Select Dataset Folder`.
+6. Run `SWAT+: Build Inputs Index`.
+7. Ctrl+Click foreign keys or filenames to navigate.
 
 After pulling updates, reload VS Code so the latest extension bundle is active.
 
 ## Commands
+
+**Setup**
+
+- `SWAT+: Set Up This Workspace` - Installs Tamandua via pip, wires up its MCP
+  server and this extension's own bundled one (`.vscode/mcp.json` and
+  `.mcp.json`), and hands off to the Fortran ifx/GNU Debug extension for a
+  debug launch config and its MCP entry if that extension is installed.
 
 **Dataset**
 

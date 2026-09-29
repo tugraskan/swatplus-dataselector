@@ -129,6 +129,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         case 'launchDebug':
                             vscode.commands.executeCommand('swat-dataset-selector.launchDebug');
                             break;
+                        case 'setupWorkspace':
+                            vscode.commands.executeCommand('swat-dataset-selector.setupWorkspace');
+                            break;
                         case 'selectRecentDataset':
                             if (data.path && typeof data.path === 'string') {
                                 await vscode.commands.executeCommand(
@@ -667,6 +670,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             close: `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 2l8 8M10 2L2 10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`,
             debugPlay: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 3v18l15-9L5 3z" fill="currentColor"/></svg>`,
             debugAlt: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2v20M2 12h20" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`,
+            rocket: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2c3 2 5 6 5 10 0 2-1 4-2 5l-3 3-3-3c-1-1-2-3-2-5 0-4 2-8 5-10z" stroke="currentColor" stroke-width="1.3" fill="none"/><circle cx="12" cy="10" r="1.6" fill="currentColor"/><path d="M9 17l-2 4M15 17l2 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`,
             folderOpened: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 5h4l2 2h6v6H2z" fill="currentColor"/></svg>`,
             database: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="12" cy="5" rx="9" ry="3" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>`,
             file: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="currentColor" stroke-width="1" fill="none"/></svg>`,
@@ -1448,6 +1452,20 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
 
         .button-row .action-button {
             flex: 1;
+        }
+
+        .setup-row {
+            margin-top: 6px;
+        }
+
+        .action-button.small {
+            font-size: 0.85em;
+            padding: 4px 8px;
+            opacity: 0.85;
+        }
+
+        .action-button.small:hover {
+            opacity: 1;
         }
 
         /* Restyle specific buttons: Select Folder (blue), Debug (green), Index (purple).
@@ -2493,6 +2511,12 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     Debug
                 </button>` : ''}
             </div>
+            <div class="button-row setup-row">
+                <button class="action-button secondary small" id="setupWorkspaceBtn" title="Install Tamandua and wire up both MCP servers, plus a debug config if the Fortran ifx/GNU Debug extension is installed">
+                    ${svgs.rocket}
+                    Set Up This Workspace
+                </button>
+            </div>
         </div>
 
         <div class="divider"></div>
@@ -3211,6 +3235,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     if (closest && closest('#launchDebugBtn')) {
                         swatLog('SWAT webview: delegated launchDebug click');
                         swatHost.postMessage({ type: 'launchDebug' });
+                        return;
+                    }
+                    if (closest && closest('#setupWorkspaceBtn')) {
+                        swatLog('SWAT webview: delegated setupWorkspace click');
+                        swatHost.postMessage({ type: 'setupWorkspace' });
                         return;
                     }
                     if (closest && closest('#buildIndexBtn')) {

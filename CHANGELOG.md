@@ -7,6 +7,11 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 ## [Unreleased]
 
 ### Added
+- `SWAT+: Set Up This Workspace` command (and a "Set Up" sidebar button):
+  installs Tamandua via pip, wires up its MCP server and this extension's own
+  bundled one into both `.vscode/mcp.json` and `.mcp.json`, and hands off to
+  the Fortran ifx/GNU Debug extension for a debug launch config and its MCP
+  entry when that extension is installed
 - Name filter on the Inputs and Outputs lists, with a clear button and Escape to clear,
   combining with the category checkboxes
 - "Index out of date" banner with one-click rebuild when indexed input files change on
