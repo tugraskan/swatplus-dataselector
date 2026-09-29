@@ -27,7 +27,12 @@ import pandas as pd
 # Constants
 NUMERIC_VALUE_PATTERN = re.compile(r'^\d+(\.\d+)?$')
 MAX_CHILD_LINES = 1000  # Sanity check limit to prevent excessive line skipping
-MANAGEMENT_SCH_OP_DATA1_INDEX = 6  # Position of op_data1 field in management schedule operation lines
+# Position of op_data1 in a management.sch operation line. read_mgtops.f90
+# reads op, mon, day, husc, op_char, op_plant, op3 in that order, so op_char
+# (the tillage/fertilizer/plant name op_data1 holds) is the fifth value. At 6 the
+# index read op3, a number such as 181.400, as a link: 3,240 of Ames's 3,254
+# references never resolved.
+MANAGEMENT_SCH_OP_DATA1_INDEX = 4
 DTL_ACTION_FP_INDEX = 7  # Position of fp field in decision table action lines
 WEATHER_DATA_SCHEMA_FILES = {
     ".pcp": "weather-pcp.pcp",
@@ -597,7 +602,7 @@ def process_management_sch_child_lines(
             values = line.split()
             if values:
                 op_type = values[0]
-                # op_data1 is typically at index 6 in management schedule operation lines
+                # op_data1: see MANAGEMENT_SCH_OP_DATA1_INDEX
                 op_data1 = values[MANAGEMENT_SCH_OP_DATA1_INDEX] if len(values) > MANAGEMENT_SCH_OP_DATA1_INDEX else None
                 
                 if op_type and op_data1 and op_type in op_type_to_table and op_data1.lower() not in null_set:
@@ -1086,6 +1091,10 @@ def build_index(
     file_cio_files = load_file_cio_filenames(dataset_path)
 
     for file_name, table in schema.get("tables", {}).items():
+        if not table.get("table_name"):
+            # A documentation-only or hand-made table with no name cannot hold
+            # rows; skip it rather than fail the whole build on a KeyError.
+            continue
         file_path = dataset_path / file_name
         if not file_path.exists():
             mapped_name = table_name_to_file.get(table.get("table_name"))

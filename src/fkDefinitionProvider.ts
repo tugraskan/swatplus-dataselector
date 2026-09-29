@@ -326,10 +326,11 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
                         // This is an explicit operation
                         this.outputChannel.appendLine(`[FK Definition] Explicit operation line`);
                         
-                        // Operation type is in first column (columnIndex 0)
-                        // op_data1 is in 7th column (columnIndex 6) for most operations
+                        // Operation type is in first column (columnIndex 0). op_data1 is
+                        // the 5th value (columnIndex 4): read_mgtops.f90 reads op, mon,
+                        // day, husc, op_char, op_plant, op3.
                         const opType = values[0];
-                        const opData1 = values.length > 6 ? values[6] : null;
+                        const opData1 = values.length > 4 ? values[4] : null;
                         
                         // Map operation type to target table
                         const opTypeToTable: { [opType: string]: string } = {
@@ -348,7 +349,7 @@ export class SwatFKDefinitionProvider implements vscode.DefinitionProvider {
                             'graz': 'graze_ops'
                         };
                         
-                        if (opType && opTypeToTable[opType] && opData1 && columnIndex === 6) {
+                        if (opType && opTypeToTable[opType] && opData1 && columnIndex === 4) {
                             // Cursor is on op_data1 column
                             const targetTable = opTypeToTable[opType];
                             this.outputChannel.appendLine(`[FK Definition] Operation ${opType} references ${targetTable}, value: ${opData1}`);
