@@ -127,6 +127,10 @@
         "icon": "$(edit)"
       },
       {
+        "command": "swat-dataset-selector.rebuildSchemaFromSource",
+        "title": "SWAT+: Rebuild Schema from SWAT+ Source"
+      },
+      {
         "command": "swat-dataset-selector.showDependencyGraph",
         "title": "SWAT+: Show Dependency Graph",
         "icon": "$(graph)"
@@ -341,6 +345,16 @@
           },
           "description": "Additional directories to scan for SWAT+ schema JSON files. Supports ${workspaceFolder}."
         },
+        "swatplus.schemaFromSource": {
+          "type": "boolean",
+          "default": true,
+          "description": "Build the schema from the SWAT+ source with Tamandua, so it follows your code and branch: which columns SWAT+ reads, in order, named from your files' own headers. When off, or when Tamandua is unavailable, the schema shipped with the extension (built from SWAT+ 62.0.0) is used. A schema you pick in the sidebar always wins."
+        },
+        "swatplus.sourceDirectory": {
+          "type": "string",
+          "default": "",
+          "description": "SWAT+ source checkout (or its src/ folder) to build the schema from. Empty: the first workspace folder that contains SWAT+ Fortran. Supports ${workspaceFolder}. Building from source needs Tamandua and its parser; \"SWAT+: Set Up This Workspace\" installs both."
+        },
         "swatplus.datasetDirectory": {
           "type": "string",
           "default": "workdata",
@@ -390,7 +404,7 @@
     "lint": "eslint src",
     "test": "vscode-test",
     "test:unit": "npm run compile-tests && mocha",
-    "test:python": "python3 -m unittest scripts.test_merge_overlays scripts.test_merge_output_families",
+    "test:python": "python3 -m unittest scripts.test_merge_overlays scripts.test_merge_output_families scripts.test_generate_schema_from_layouts",
     "package:vsix": "npm run package && vsce package",
     "publish:pre-release": "npm run package && vsce publish --pre-release"
   },

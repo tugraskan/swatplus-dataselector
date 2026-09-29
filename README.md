@@ -22,8 +22,10 @@ schema. It is a two-layer project:
   [`swatplus-editor`](https://github.com/swat-model/swatplus-editor) project, pandas-based
   indexing, HRU-subset processing, and output→DataFrame conversion. These are invoked by
   the extension and can also be run standalone.
-- **Generated schema (`resources/schema/`)** — the machine-readable schema for all 213
-  SWAT+ input tables that the extension indexes and validates against.
+- **Schema (`resources/schema/`)** — the machine-readable schema the extension indexes
+  and validates against, built from the SWAT+ Fortran source by
+  [Tamandua](https://github.com/tugraskan/Tamandua) and rebuilt from your own checkout
+  when one is in the workspace ([how](docs/SCHEMA_FROM_SOURCE.md)).
 - **Documentation (`docs/`)** — deep-dive guides on indexing, schema, and file/FK
   relationships.
 
@@ -38,18 +40,20 @@ schema. It is a two-layer project:
 - **Data Quality**: Run a preflight report of unresolved references and orphan rows, plus an input-file checker for headers, column counts, data types, and **required (non-nullable) values left empty or `null`** — with each warning annotated by the column's documented meaning and units.
 - **Seamless Integration**: Works with CMake Tools and gdb debugger configurations.
 - **Ask your dataset**: Chat with `@swat` in the VS Code chat panel ("describe HRU 81", "which HRUs use this soil?"), run `SWAT+: Describe Entity` / `SWAT+: Search Dataset` in the editor, or expose the dataset to an external agent (Claude Code/Desktop) via a bundled [MCP server](docs/MCP_SERVER.md) — all backed by the same engine.
-- **Comprehensive Schema**: Auto-generated schema for all 213 SWAT+ input tables from swatplus-editor.
+- **Schema from SWAT+ source**: which columns SWAT+ reads from each input file, in order, derived from the Fortran by Tamandua — so it follows your code and branch — with column names from your files' own headers and file links from the swatplus-editor schema. See [Schema built from SWAT+ source](docs/SCHEMA_FROM_SOURCE.md).
 - **Enhanced Indexing**: Pandas-backed indexing system with FK navigation, hover info, and validation.
   - Handles hierarchical files (`soils.sol`, `plant.ini`, `management.sch`)
   - Parses decision tables (`*.dtl`)
   - Supports Go to Definition for foreign keys
   - Shows hover tooltips with file purpose and FK targets
-  - Shows source-backed column documentation on hover — meaning, units, type, default, and the SWAT+ source line — merged from swatplus-doc-builder (SWAT+ 62.0.0)
+  - Shows column documentation on hover — meaning, units, type, the declaring source line, and the SWAT+ variable and statement that read it — straight from the Fortran via Tamandua
+  - "Show SWAT+ names" in the table viewer shows the Fortran name under each column, and marks columns SWAT+ never reads
   - Warns on unresolved references
   - Builds a reverse index for incoming references
 
 ## Documentation
 
+- **[Schema Built from SWAT+ Source](docs/SCHEMA_FROM_SOURCE.md)** - How the schema follows your SWAT+ code, and what it checks
 - **[Enhanced Indexing Guide](docs/ENHANCED_INDEXING.md)** - Complete guide to the indexing system
 - **[Schema Enhancement](docs/SCHEMA_ENHANCEMENT.md)** - How markdown documentation enhances FK and pointer detection
 - **[Extension File Schema](docs/EXTENSION_FILE_SCHEMA.md)** - Detailed schema for SWAT+ files
@@ -105,6 +109,7 @@ After pulling updates, reload VS Code so the latest extension bundle is active.
 - `SWAT+: Show FK References` - List incoming references to the current row.
 - `SWAT+: View Tables` - Open the multi-table viewer.
 - `SWAT+: Edit / Create Schema` - Open the schema editor.
+- `SWAT+: Rebuild Schema from SWAT+ Source` - Rebuild the schema from the SWAT+ checkout now, and show what it was built from.
 - `SWAT+: Show Dependency Graph` - Open a graph of table-to-table dependencies.
 - `SWAT+: Describe Entity` - Describe an entity (e.g. `hru 81`) — its columns, connections, and references.
 - `SWAT+: Search Dataset` - Find rows by column predicate (e.g. `slope > 0.1`) or list unreferenced (orphan) rows.
@@ -175,7 +180,7 @@ src/                 TypeScript extension source (~30 files)
   output*              Output DataFrame explorer and notebook generation
   test/                Mocha test suites
 scripts/             Python tooling (schema extraction, pandas indexing, HRU, outputs)
-resources/schema/    Generated SWAT+ schema JSON (213 input tables)
+resources/schema/    SWAT+ schema JSON: built from source (generated), editor, metadata
 docs/                Deep-dive guides on indexing, schema, and FK relationships
 esbuild.js           Bundler config (produces dist/extension.js)
 ```
@@ -193,7 +198,9 @@ This avoids manually editing `launch.json` whenever you want to debug against a 
 
 ## SWAT+ Schema Extraction
 
-This extension includes a schema extraction workflow that discovers model classes from the swatplus-editor repository.
+The schema is built from SWAT+ source (see [docs/SCHEMA_FROM_SOURCE.md](docs/SCHEMA_FROM_SOURCE.md)).
+The swatplus-editor extraction below still supplies its file links and the tables the
+source does not cover; it discovers model classes from the swatplus-editor repository.
 
 ### Quick Start
 
@@ -232,6 +239,10 @@ python3 scripts/extract_all_models.py
 
 - `swatplus.datasetDirectory`: Parent directory that contains SWAT+ dataset folders. Defaults to `workdata`.
 - `swatplus.schemaDirectories`: Additional directories to scan for SWAT+ schema JSON files.
+- `swatplus.schemaFromSource`: Build the schema from the SWAT+ source with Tamandua (default on).
+  Off, or without Tamandua, the schema shipped with the extension (SWAT+ 62.0.0) is used.
+- `swatplus.sourceDirectory`: SWAT+ checkout to build the schema from. Empty: the first
+  workspace folder containing SWAT+ Fortran.
 - `swatplus.openTablesAfterIndex`: What to do with the table viewers after an index build —
   `prompt` (default, offers to open them), `always` (opens them automatically), or `never`.
 - `swatplus.debugLogging`: Log extension and sidebar activity to the developer console.

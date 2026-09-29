@@ -19,6 +19,8 @@ import { SwatFKReferencesPanel } from './fkReferencesPanel';
 import { SwatTableViewerPanel } from './tableViewerPanel';
 import { SwatSingleTableViewerPanel } from './singleTableViewerPanel';
 import { SchemaEditorPanel } from './schemaEditorPanel';
+import { GeneratedSchemaBuilder } from './schemaBuilder';
+import { describeGeneratedSchema, looksLikeSwatplusSource } from './schemaSourceCore';
 import { SwatDependencyGraphPanel } from './dependencyGraphPanel';
 import { SwatOutputDataFramePanel } from './outputDataFramePanel';
 import { normalizePathForComparison, pathStartsWith, resolveFileCioPath } from './pathUtils';
@@ -155,12 +157,53 @@ export function activate(context: vscode.ExtensionContext) {
 		} else {
 			docsVersionStatus.text = `$(book) SWAT+ docs ${version}`;
 			docsVersionStatus.tooltip =
-				`Column documentation sourced from SWAT+ ${version} (swatplus-doc-builder). ` +
-				`Hover a column to see its meaning, units, and source.`;
+				`Column documentation from SWAT+ ${version}, read from the Fortran source by ` +
+				`Tamandua. Hover a column to see its meaning, units, and source line.`;
 			docsVersionStatus.backgroundColor = undefined;
 		}
 		docsVersionStatus.show();
 	};
+
+	// The schema follows the SWAT+ source in this workspace (see schemaBuilder.ts):
+	// rebuilt before each index build, when the Fortran changes, and on demand.
+	const schemaBuilder = new GeneratedSchemaBuilder(context);
+	context.subscriptions.push(schemaBuilder.onDidBuild(result => {
+		indexer.setGeneratedSchemaPath(result.path);
+		enrichedSchema.useInputSchema(result.path);
+		swatProvider.setGeneratedSchemaInfo(result);
+		showDocsVersion();
+	}));
+	indexer.setSchemaPreparer(async txtInOutPath => (await schemaBuilder.build(txtInOutPath)).path);
+	{
+		const selected = swatProvider.getSelectedDataset();
+		const fileCio = selected ? resolveFileCioPath(selected) : undefined;
+		void schemaBuilder.build(fileCio ? path.dirname(fileCio) : undefined);
+	}
+
+	const rebuildSchemaFromSource = vscode.commands.registerCommand(
+		'swat-dataset-selector.rebuildSchemaFromSource', async () => {
+			const selected = swatProvider.getSelectedDataset();
+			const fileCio = selected ? resolveFileCioPath(selected) : undefined;
+			const result = await vscode.window.withProgress({
+				location: vscode.ProgressLocation.Notification,
+				title: 'Building SWAT+ schema from source…',
+			}, () => schemaBuilder.build(fileCio ? path.dirname(fileCio) : undefined));
+			const label = describeGeneratedSchema(result.origin);
+			const choice = await vscode.window.showInformationMessage(
+				[`SWAT+ schema: ${label}.`, ...result.notes].join(' '),
+				'Show Report', 'Show Log');
+			if (choice === 'Show Report' && fs.existsSync(schemaBuilder.reportPath)) {
+				await vscode.window.showTextDocument(vscode.Uri.file(schemaBuilder.reportPath));
+			} else if (choice === 'Show Log') {
+				schemaBuilder.showOutput();
+			}
+			if (indexer.getSchemaOverride()) {
+				vscode.window.showInformationMessage(
+					'A custom schema is selected, so indexing keeps using it. Choose "Automatic" in the '
+					+ 'Schema dropdown to use the one built from source.');
+			}
+		});
+	context.subscriptions.push(rebuildSchemaFromSource);
 
 	const tryAutoLoadIndex = async (datasetPath: string): Promise<void> => {
 		if (!indexer.hasIndexCache(datasetPath)) {
@@ -286,9 +329,14 @@ export function activate(context: vscode.ExtensionContext) {
 			() => setupWorkspace({
 				extensionUri: context.extensionUri,
 				selectedDatasetPath: swatProvider.getSelectedDataset() || undefined,
+				// SWAT+ Fortran in the workspace root is what Tamandua reads;
+				// CMake Tools (which isSwatPlusWorkspace also wants) is not needed.
 				isSwatplusSourceWorkspace: isSwatPlusWorkspace()
+					|| looksLikeSwatplusSource(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath)
 			})
 		);
+		// A freshly installed Tamandua or parser can build a better schema now.
+		void schemaBuilder.build();
 
 		workspaceSetupOutput.clear();
 		for (const step of steps) {

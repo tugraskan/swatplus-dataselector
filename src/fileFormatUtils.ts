@@ -332,3 +332,75 @@ export function isAcceptedBooleanLiteral(rawValue: string, nullValues: Iterable<
 
     return nullSet.has(lowered) || VALID_BOOLEAN_LITERALS.has(lowered);
 }
+
+/**
+ * What SWAT+ reads from a file, for a table built from SWAT+ source
+ * (`origin: "tamandua"`, see scripts/generate_schema_from_layouts.py).
+ * `undefined` for any other table, which keeps the generic checks.
+ */
+export interface SwatReadLayout {
+    /** The statement that reads each record: `hru_read.f90:67`. */
+    readAt: string;
+    /** Columns SWAT+ reads, in order, up to any run-time-sized group. */
+    fixedColumns: string[];
+    /** Values per record SWAT+ accepts: the main read and any alternative. */
+    widths: number[];
+    /** Lines SWAT+ skips before data, and the statements that skip them. */
+    skippedLines: number;
+    skippedAt: string[];
+    /**
+     * `records`: every data line is a record; `single`: only the first data
+     * line is read as one; `sections`: lines of different kinds, so a per-line
+     * value count does not apply.
+     */
+    rows: 'records' | 'single' | 'sections';
+}
+
+export function swatReadLayout(table: SchemaTable): SwatReadLayout | undefined {
+    const layout = (table as SchemaTable & { origin?: string; swat_layout?: any }).swat_layout;
+    if ((table as { origin?: string }).origin !== 'tamandua' || !layout) {
+        return undefined;
+    }
+    const fixedColumns: string[] = [];
+    for (const column of table.columns as Array<SchemaColumn & { read_by_swat?: boolean; swat?: { repeat?: string } }>) {
+        if (column.read_by_swat === false || column.swat?.repeat) {
+            break;
+        }
+        fixedColumns.push(column.name);
+    }
+    const widths: number[] = Array.isArray(layout.record_widths) && layout.record_widths.length > 0
+        ? [...layout.record_widths].sort((a: number, b: number) => a - b)
+        : [fixedColumns.length];
+    return {
+        readAt: String(layout.read_at ?? ''),
+        fixedColumns,
+        widths,
+        skippedLines: table.data_starts_after,
+        skippedAt: Array.isArray(layout.preamble) ? layout.preamble.map((line: { at: string }) => line.at) : [],
+        rows: layout.rows === 'single' || layout.rows === 'sections' ? layout.rows : 'records',
+    };
+}
+
+/**
+ * The values SWAT+ reads that a row of `valueCount` values lacks, or
+ * `undefined` when SWAT+ can read the row. A list-directed read that runs out
+ * of values on a line carries on onto the next one, so a short row shifts
+ * every record after it. Any accepted width will do: `soil_plant.ini` is read
+ * with 7 or 8 values depending on `codes.bsn`.
+ */
+export function missingSwatValues(valueCount: number, layout: SwatReadLayout): string[] | undefined {
+    const needed = Math.min(...layout.widths, layout.fixedColumns.length || Infinity);
+    if (!Number.isFinite(needed) || valueCount >= needed) {
+        return undefined;
+    }
+    return layout.fixedColumns.slice(valueCount, needed);
+}
+
+/** "reads 8 values per record (soil_plant_init.f90:50), or 7 on another branch" */
+export function describeSwatRead(layout: SwatReadLayout): string {
+    const [first, ...others] = layout.widths;
+    const main = layout.fixedColumns.length;
+    const alternatives = [first, ...others].filter(width => width !== main);
+    return `reads ${main} value${main === 1 ? '' : 's'} per record (${layout.readAt})`
+        + (alternatives.length ? `, or ${alternatives.join(' or ')} on another branch` : '');
+}

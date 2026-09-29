@@ -6,6 +6,8 @@ import { SwatIndexer } from './indexer';
 import { resolveFileCioPath, wslPathToWindows } from './pathUtils';
 import { detectEnvironment, hasWorkspace, isCmakeToolsInstalled, isSwatPlusWorkspace, resolvePathForEnvironment, EnvironmentInfo } from './environmentUtils';
 import { formatRelativeAge, formatStaleSummary } from './indexStalenessUtils';
+import { describeGeneratedSchema, isSelectableSchema } from './schemaSourceCore';
+import type { GeneratedSchemaResult } from './schemaBuilder';
 
 /**
  * Escapes HTML special characters to prevent XSS attacks
@@ -42,6 +44,8 @@ interface SchemaOption {
 
 export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'swatDatasetView';
+    // What the automatic (built-from-source) schema was last built from.
+    private generatedSchema: GeneratedSchemaResult | undefined;
 
     private _view?: vscode.WebviewView;
     private selectedDataset: string | undefined;
@@ -241,7 +245,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         case 'schemaSelectionChanged':
                             if (typeof data.path === 'string') {
                                 this.indexer.setSchemaPath(data.path || null);
-                                vscode.window.showInformationMessage(`SWAT+ schema set to: ${data.path || 'default'}`);
+                                vscode.window.showInformationMessage(data.path
+                                    ? `SWAT+ schema set to: ${data.path}`
+                                    : 'SWAT+ schema set to automatic: built from SWAT+ source. Rebuild the index to apply it.');
                                 this._updateWebview();
                             }
                             break;
@@ -266,9 +272,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                             })();
                             break;
                         case 'viewEditSchema':
+                            // The automatic option opens the schema in effect; the
+                            // editor makes it a copy on save, which then stays put.
                             vscode.commands.executeCommand(
                                 'swat-dataset-selector.editSchema',
-                                typeof data.path === 'string' && data.path ? data.path : undefined
+                                typeof data.path === 'string' && data.path ? data.path : this.indexer.getSchemaPath()
                             );
                             break;
                         case 'dropDataset':
@@ -588,6 +596,12 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         return Array.from(unique);
     }
 
+    /** Record the latest schema built from source and show it in the dropdown. */
+    public setGeneratedSchemaInfo(result: GeneratedSchemaResult): void {
+        this.generatedSchema = result;
+        this._updateWebview();
+    }
+
     private getAvailableSchemas(): SchemaOption[] {
         const schemaOptions: SchemaOption[] = [];
         const seen = new Set<string>();
@@ -618,10 +632,14 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 if (seen.has(filePath)) {
                     continue;
                 }
+                // The generated schemas are the automatic option, listed once.
+                if (entry === 'swatplus-generated-schema.json' || filePath === this.generatedSchema?.path) {
+                    continue;
+                }
                 try {
                     const content = fs.readFileSync(filePath, 'utf-8');
                     const data = JSON.parse(content);
-                    if (!data || !data.schema_version || !data.tables) {
+                    if (!isSelectableSchema(data)) {
                         continue;
                     }
                     const version = String(data.schema_version);
@@ -680,7 +698,8 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             search: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" fill="none"/><path d="M20 20l-4.5-4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`
         };
         const availableSchemas = this.getAvailableSchemas();
-        const selectedSchemaPath = this.indexer.getSchemaPath();
+        // "" is the automatic option: the schema built from SWAT+ source.
+        const selectedSchemaPath = this.indexer.getSchemaOverride() ?? '';
         if (selectedSchemaPath) {
             const listed = new Set(availableSchemas.map(option => option.path));
             if (!listed.has(selectedSchemaPath) && fs.existsSync(selectedSchemaPath)) {
@@ -690,6 +709,10 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 });
             }
         }
+        availableSchemas.unshift({
+            path: '',
+            label: `Automatic: ${describeGeneratedSchema(this.generatedSchema?.origin)}`
+        });
         const schemaOptionsHtml = availableSchemas.length > 0
             ? availableSchemas.map(option => `
                 <option value="${escapeHtml(option.path)}"${option.path === selectedSchemaPath ? ' selected' : ''}>

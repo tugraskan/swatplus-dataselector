@@ -7,6 +7,41 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 ## [Unreleased]
 
 ### Added
+- The schema is built from the SWAT+ Fortran source by Tamandua
+  (`swatplus-layouts`), so it follows the code and branch in the workspace:
+  which columns SWAT+ reads from each input file, in order, with types, units
+  and descriptions from the declarations, named from the dataset's own header
+  lines, with file links from the editor schema. Rebuilt before every index
+  build and when the Fortran changes; falls back to Tamandua's snapshot, then to
+  the copy shipped with the extension (SWAT+ 62.0.0). A picked or edited schema
+  still wins; "Automatic" in the Schema dropdown returns to the built one. See
+  docs/SCHEMA_FROM_SOURCE.md
+- `SWAT+: Rebuild Schema from SWAT+ Source` command, and the
+  `swatplus.schemaFromSource` / `swatplus.sourceDirectory` settings
+- Table viewer: column headers say which SWAT+ variable each column is read
+  into and where; "Show SWAT+ names" adds a row with the Fortran names and marks
+  columns SWAT+ never reads. The schema browser gains a "SWAT+ name" column
+- Format checks from what SWAT+ reads: a short row is flagged with its missing
+  columns and the read statement; unread columns are optional; both forms of a
+  file read two ways are accepted; a data row where SWAT+ expects its header is
+  flagged as a record SWAT+ will skip
+- `SWAT+: Set Up This Workspace` also installs Tamandua's parser in a SWAT+
+  source workspace, and upgrades a Tamandua without `swatplus-layouts`
+
+### Changed
+- Input-file column docs (hovers, tooltips, the MCP server's `lookup_docs`)
+  come from Tamandua's facts only, each citing its declaration; the
+  swatplus-doc-builder enrichment is no longer used for them
+- The Schema dropdown no longer offers documentation-only files; picking the
+  enriched schema there made index builds fail with `KeyError: 'table_name'`
+
+### Fixed
+- `management.sch` operation links read `op_data3` (a number) instead of
+  `op_data1`: `read_mgtops.f90` reads op, mon, day, husc, op_char, op_plant, op3.
+  On Ames, resolved links rose from 14 to 725; go-to-definition on the column
+  had the same off-by-two
+- Switching schemas dropped the metadata's table-to-file names until reload
+- A schema table without `table_name` no longer fails the whole index build
 - `SWAT+: Set Up This Workspace` command (and a "Set Up" sidebar button):
   installs Tamandua via pip, wires up its MCP server and this extension's own
   bundled one into both `.vscode/mcp.json` and `.mcp.json`, and hands off to

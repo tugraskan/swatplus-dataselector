@@ -599,6 +599,32 @@ export class SwatSingleTableViewerPanel {
                 columnMetadata.set(col.name, col);
             });
         }
+        // Built from SWAT+ source: each column knows the Fortran it is read
+        // into, or that SWAT+ never reads it (see generate_schema_from_layouts.py).
+        const swatLayout = schemaTable && (schemaTable as any).origin === 'tamandua'
+            ? (schemaTable as any).swat_layout as { read_at?: string; values_read?: number } | undefined
+            : undefined;
+        const swatColumns = new Map<string, any>();
+        if (swatLayout && schemaTable) {
+            for (const col of schemaTable.columns as any[]) {
+                swatColumns.set(String(col.name).toLowerCase(), col);
+            }
+        }
+        const swatName = (col: string): { text: string; title: string; unread: boolean } => {
+            const meta = swatColumns.get(col.toLowerCase());
+            if (!meta || meta.read_by_swat === false) {
+                const where = swatLayout?.read_at
+                    ? ` (${swatLayout.read_at} reads ${swatLayout.values_read} values)` : '';
+                return { text: '— not read by SWAT+', title: `SWAT+ does not read this column${where}.`, unread: true };
+            }
+            const swat = meta.swat || {};
+            const repeat = swat.repeat ? `, repeated ${swat.repeat === '*' ? 'a run-time number of' : swat.repeat} times` : '';
+            return {
+                text: swat.name || col,
+                title: `SWAT+ reads this into ${swat.path || swat.name}${repeat} — ${swat.read_at || swatLayout?.read_at || ''}`,
+                unread: false,
+            };
+        };
 
         // Get FK columns and their targets
         const fkColumns = new Map<string, any>();
@@ -666,6 +692,7 @@ export class SwatSingleTableViewerPanel {
                     <input type="text" class="table-filter-input" data-table="${this._escapeHtml(this.tableName)}" placeholder="Type to filter rows" />
                 </label>
                 <button type="button" class="table-filter-clear" data-action="clear-filter" data-table="${this._escapeHtml(this.tableName)}">Clear</button>
+                ${swatLayout ? `<button type="button" class="swat-names-toggle" data-action="toggle-swat-names" aria-pressed="false" title="Show the SWAT+ variable each column is read into (from the Fortran source)">Show SWAT+ names</button>` : ''}
             </div>
         `;
 
@@ -695,6 +722,9 @@ export class SwatSingleTableViewerPanel {
                                 }
                                 if (fkInfo) {
                                     tooltip += `\nForeign Key → ${fkInfo.references.table}`;
+                                }
+                                if (swatLayout) {
+                                    tooltip += `\n${swatName(col).title}`;
                                 }
                                 // Source-backed column documentation (meaning, units, source line).
                                 if (fileName) {
@@ -733,6 +763,14 @@ export class SwatSingleTableViewerPanel {
                             `;
                             }).join('')}
                         </tr>
+                        ${swatLayout ? `
+                        <tr class="swat-names-row" hidden>
+                            <th class="line-col swat-name-cell" title="The SWAT+ variable each column is read into">SWAT+</th>
+                            ${columns.map(col => {
+                                const info = swatName(col);
+                                return `<th class="swat-name-cell${info.unread ? ' swat-unread' : ''}" title="${this._escapeHtml(info.title)}">${this._escapeHtml(info.text)}</th>`;
+                            }).join('')}
+                        </tr>` : ''}
                     </thead>
                     <tbody>
         `;
@@ -2130,6 +2168,16 @@ export class SwatSingleTableViewerPanel {
                 cursor: pointer;
                 user-select: none;
             }
+            .data-table th.swat-name-cell {
+                font-weight: normal;
+                font-family: var(--vscode-editor-font-family);
+                font-size: 0.85em;
+                color: var(--vscode-descriptionForeground);
+            }
+            .data-table th.swat-unread {
+                font-style: italic;
+                opacity: 0.75;
+            }
             .data-table th .sort-indicator {
                 margin-left: 6px;
                 font-size: 0.75em;
@@ -3125,6 +3173,20 @@ export class SwatSingleTableViewerPanel {
                 return text.replace(/["\\\\]/g, '\\\\$&');
             };
 
+            // The SWAT+ names row, off by default and remembered per panel.
+            const setSwatNames = (show) => {
+                document.querySelectorAll('.swat-names-row').forEach(row => { row.hidden = !show; });
+                document.querySelectorAll('.swat-names-toggle').forEach(button => {
+                    button.setAttribute('aria-pressed', show ? 'true' : 'false');
+                    button.textContent = show ? 'Hide SWAT+ names' : 'Show SWAT+ names';
+                });
+                const state = vscode.getState() || {};
+                vscode.setState({ ...state, swatNames: show });
+            };
+            if ((vscode.getState() || {}).swatNames) {
+                setSwatNames(true);
+            }
+
             document.addEventListener('click', event => {
                 const target = event.target.closest('[data-action]');
                 if (!target) {
@@ -3191,6 +3253,10 @@ export class SwatSingleTableViewerPanel {
                     case 'clear-filter':
                         event.preventDefault();
                         clearFilter(target.getAttribute('data-table'));
+                        break;
+                    case 'toggle-swat-names':
+                        event.preventDefault();
+                        setSwatNames(target.getAttribute('aria-pressed') !== 'true');
                         break;
                     case 'external-link':
                         // Allow default navigation for external links.

@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { analyzeHeaderLine, getPhysicalColumnsForValidation, isAcceptedBooleanLiteral, resolveValidationLayout, formatColumnContext, isMissingRequiredValue } from '../fileFormatUtils';
+import { analyzeHeaderLine, getPhysicalColumnsForValidation, isAcceptedBooleanLiteral, resolveValidationLayout, formatColumnContext, isMissingRequiredValue, swatReadLayout, missingSwatValues, describeSwatRead } from '../fileFormatUtils';
 import type { SchemaColumn, SchemaTable } from '../indexer';
 
 suite('Validation helpers (enrichment-backed)', () => {
@@ -431,5 +431,60 @@ suite('File Format Header Analysis', () => {
             physicalColumns.map(column => column.name),
             ['id', 'name', 'init', 'gw_flo']
         );
+    });
+});
+
+suite('What SWAT+ reads (schema built from source)', () => {
+    const column = (name: string, extra: object = {}) => ({
+        name, db_column: name, type: 'DoubleField', nullable: true,
+        is_primary_key: false, is_foreign_key: false, read_by_swat: true, ...extra,
+    });
+    const table = (columns: object[], widths?: number[]): SchemaTable => ({
+        file_name: 'soil_plant.ini', table_name: 'soil_plant_ini', model_class: 'x',
+        has_metadata_line: true, has_header_line: true, data_starts_after: 2,
+        columns: columns as SchemaColumn[], primary_keys: ['name'], foreign_keys: [], notes: '',
+        origin: 'tamandua',
+        swat_layout: {
+            read_at: 'soil_plant_init.f90:50', values_read: 3, record_widths: widths,
+            preamble: [{ at: 'soil_plant_init.f90:40' }, { at: 'soil_plant_init.f90:42' }],
+        },
+    } as unknown as SchemaTable);
+
+    test('the row shape defaults to one record per line', () => {
+        assert.strictEqual(swatReadLayout(table([column('a')]))!.rows, 'records');
+        const sections = table([column('a')]);
+        (sections as any).swat_layout.rows = 'sections';
+        assert.strictEqual(swatReadLayout(sections)!.rows, 'sections');
+    });
+
+    test('only tables built from source have a read layout', () => {
+        const plain = { ...table([column('a')]), origin: undefined } as unknown as SchemaTable;
+        assert.strictEqual(swatReadLayout(plain), undefined);
+        const layout = swatReadLayout(table([column('a'), column('b')]))!;
+        assert.deepStrictEqual(layout.fixedColumns, ['a', 'b']);
+        assert.deepStrictEqual(layout.skippedAt, ['soil_plant_init.f90:40', 'soil_plant_init.f90:42']);
+    });
+
+    test('columns SWAT+ never reads are never required', () => {
+        const layout = swatReadLayout(table([
+            column('name'), column('sw_frac'), column('description', { read_by_swat: false })]))!;
+        assert.deepStrictEqual(layout.fixedColumns, ['name', 'sw_frac']);
+        assert.strictEqual(missingSwatValues(2, layout), undefined);
+        assert.deepStrictEqual(missingSwatValues(1, layout), ['sw_frac']);
+    });
+
+    test('either width of a record read two ways is accepted', () => {
+        const layout = swatReadLayout(table([column('a'), column('b'), column('c')], [2, 3]))!;
+        assert.strictEqual(missingSwatValues(2, layout), undefined);
+        assert.deepStrictEqual(missingSwatValues(1, layout), ['b']);
+        assert.strictEqual(describeSwatRead(layout),
+            'reads 3 values per record (soil_plant_init.f90:50), or 2 on another branch');
+    });
+
+    test('a run-time-sized group ends the fixed part of the record', () => {
+        const layout = swatReadLayout(table([
+            column('id'), column('name'), column('obj_typ', { swat: { repeat: 'nout' } })]))!;
+        assert.deepStrictEqual(layout.fixedColumns, ['id', 'name']);
+        assert.strictEqual(missingSwatValues(2, layout), undefined);
     });
 });

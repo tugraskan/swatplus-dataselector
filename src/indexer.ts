@@ -12,7 +12,7 @@ import * as path from 'path';
 import { spawn, spawnSync } from 'child_process';
 import * as os from 'os';
 import { normalizePathForComparison, resolveFileCioPath } from './pathUtils';
-import { getPhysicalColumnsForValidation, isAcceptedBooleanLiteral, resolveValidationLayout, formatColumnContext, isMissingRequiredValue } from './fileFormatUtils';
+import { getPhysicalColumnsForValidation, isAcceptedBooleanLiteral, resolveValidationLayout, formatColumnContext, isMissingRequiredValue, swatReadLayout, missingSwatValues, describeSwatRead } from './fileFormatUtils';
 import { getSharedEnrichedSchema } from './enrichedSchema';
 import { CURRENT_INDEX_CACHE_VERSION, isIndexCacheCompatible } from './indexCacheUtils';
 import { isFileChangedSince, MAX_TRACKED_STALE_FILES, shouldMarkStale } from './indexStalenessUtils';
@@ -217,6 +217,10 @@ export class SwatIndexer {
     private decisionTableIndex: Map<string, IndexedRow> = new Map(); // dtl name (lowercase) -> row
     private readonly indexCacheFileName = 'index.json';
     private schemaPathOverride: string | null = null;
+    // The schema built from SWAT+ source for the current dataset (see
+    // schemaBuilder.ts), used whenever the user has not picked one.
+    private generatedSchemaPath: string | null = null;
+    private schemaPreparer?: (txtInOutPath: string) => Promise<string | undefined>;
     private fileCioHeader: FileCioHeaderInfo | null = null;
     private readonly requiredPythonModules: string[] = ['pandas'];
     private readonly pythonPrereqCacheTtlMs = 10000;
@@ -272,14 +276,30 @@ export class SwatIndexer {
                     }
                 }
             }
+            // Switching schema clears the maps above; keep the metadata's
+            // additions, which the constructor applied only once.
+            this.applyMetadataTableMap();
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to load SWAT+ schema: ${error}`);
         }
     }
 
+    /**
+     * The schema in effect: the user's pick, else the one built from SWAT+
+     * source, else the one shipped (built from SWAT+ 62.0.0), else the static
+     * editor schema it replaced.
+     */
     private resolveSchemaPath(): string {
         if (this.schemaPathOverride) {
             return this.schemaPathOverride;
+        }
+        if (this.generatedSchemaPath && fs.existsSync(this.generatedSchemaPath)) {
+            return this.generatedSchemaPath;
+        }
+        const shipped = path.join(this.context.extensionPath, 'resources', 'schema',
+            'swatplus-generated-schema.json');
+        if (fs.existsSync(shipped)) {
+            return shipped;
         }
         return path.join(
             this.context.extensionPath,
@@ -287,6 +307,24 @@ export class SwatIndexer {
             'schema',
             'swatplus-editor-schema.json'
         );
+    }
+
+    /** The schema the user picked, uploaded or saved, if any. */
+    public getSchemaOverride(): string | null {
+        return this.schemaPathOverride;
+    }
+
+    /** Called before every index build to rebuild the schema from source. */
+    public setSchemaPreparer(preparer: (txtInOutPath: string) => Promise<string | undefined>): void {
+        this.schemaPreparer = preparer;
+    }
+
+    /** Use a newly built schema, unless the user has picked their own. */
+    public setGeneratedSchemaPath(schemaPath: string | null): void {
+        this.generatedSchemaPath = schemaPath;
+        if (!this.schemaPathOverride) {
+            this.loadSchema();
+        }
     }
 
     public setSchemaPath(schemaPath: string | null): void {
@@ -321,15 +359,27 @@ export class SwatIndexer {
                 this.fkNullValues = this.metadata.null_sentinel_values.global;
             }
 
-            // Enhance table to file mapping with metadata
-            if (this.metadata && this.metadata.table_name_to_file_name) {
-                for (const [tableName, fileName] of Object.entries(this.metadata.table_name_to_file_name)) {
-                    this.tableToFileMap.set(tableName, fileName);
-                    this.fileToTableMap.set(fileName.toLowerCase(), tableName);
-                }
-            }
+            this.applyMetadataTableMap();
         } catch (error) {
             console.log(`Failed to load TxtInOut metadata: ${error}`);
+        }
+    }
+
+    /**
+     * Add the metadata's table -> file names on top of the schema's own. A
+     * table built from SWAT+ source already carries the real file name (the
+     * source's own default), so the metadata does not override it.
+     */
+    private applyMetadataTableMap(): void {
+        if (this.metadata && this.metadata.table_name_to_file_name) {
+            for (const [tableName, fileName] of Object.entries(this.metadata.table_name_to_file_name)) {
+                const current = this.tableToFileMap.get(tableName);
+                if (current && (this.schema?.tables[current] as { origin?: string } | undefined)?.origin === 'tamandua') {
+                    continue;
+                }
+                this.tableToFileMap.set(tableName, fileName);
+                this.fileToTableMap.set(fileName.toLowerCase(), tableName);
+            }
         }
     }
 
@@ -887,6 +937,21 @@ export class SwatIndexer {
                 cancellable: true
             }, async (progress, token) => {
                 this.log(`Building index for ${datasetPath}`);
+
+                // The schema follows the SWAT+ source and this dataset's own
+                // header lines, so it is rebuilt here unless the user picked one.
+                if (!this.schemaPathOverride && this.schemaPreparer && this.txtInOutPath) {
+                    progress.report({ message: 'Building schema from SWAT+ source…' });
+                    try {
+                        const built = await this.schemaPreparer(this.txtInOutPath);
+                        if (built) {
+                            this.generatedSchemaPath = built;
+                            this.loadSchema();
+                        }
+                    } catch (error) {
+                        this.log(`Schema build failed, keeping the current schema: ${error}`);
+                    }
+                }
 
                 // Use pandas-backed indexing (required)
                 progress.report({ message: 'Reading input files…', increment: 10 });
@@ -1835,9 +1900,18 @@ export class SwatIndexer {
                     const headerAnalysis = validationLayout.headerAnalysis;
 
                     if (headerAnalysis?.kind === 'missing_header_line') {
-                        const message = rawLines[headerLineIdx]?.trim()
+                        let message = rawLines[headerLineIdx]?.trim()
                             ? `Expected a column header in ${fileName}, but found a data row instead`
                             : `Missing or blank column-header line in ${fileName}`;
+                        // Built from source, the checker can say what SWAT+ will do:
+                        // it skips a fixed number of lines, so this row is lost.
+                        const swatRead = swatReadLayout(table);
+                        if (swatRead && rawLines[headerLineIdx]?.trim()) {
+                            message += `. SWAT+ skips the first ${swatRead.skippedLines} line`
+                                + `${swatRead.skippedLines === 1 ? '' : 's'} before data`
+                                + (swatRead.skippedAt.length ? ` (${swatRead.skippedAt.join(', ')})` : '')
+                                + `, so it will not read this row`;
+                        }
 
                         issues.push({
                             file: filePath,
@@ -1864,13 +1938,15 @@ export class SwatIndexer {
             }
 
             // ── 4. Row-level checks (standard tabular files only) ───────────────
-            // Skip hierarchical and decision-table files for deep row inspection
-            if (isHierarchical || isDtl) {
+            // Skip hierarchical and decision-table files for deep row inspection,
+            // and files SWAT+ reads as lines of different kinds (print.prt).
+            if (isHierarchical || isDtl || swatReadLayout(table)?.rows === 'sections') {
                 continue;
             }
 
             const dataStartLine = validationLayout.dataStartLineIdx; // 0-based index of first data row
             const expectedColCount = physicalColumns.length;
+            const swatRead = swatReadLayout(table);
 
             // Build per-column indices for typed checks (position in physicalColumns array)
             const integerColIndices: Array<{ idx: number; name: string }> = [];
@@ -1912,6 +1988,8 @@ export class SwatIndexer {
 
             let rowIssueCount = 0;
 
+            const firstDataLine = rawLines.findIndex((line, idx) =>
+                idx >= dataStartLine && line.trim().length > 0 && !line.trim().startsWith('#'));
             for (let i = dataStartLine; i < rawLines.length; i++) {
                 if (rowIssueCount >= MAX_ISSUES_PER_FILE) {
                     break;
@@ -1925,10 +2003,32 @@ export class SwatIndexer {
                 const values = line.split(/\s+/);
 
                 // ── 4a. Column count ───────────────────────────────────────────
-                // Allow one trailing optional column to be absent (SWAT+ sometimes
-                // adds optional parameters in newer versions), but flag when
-                // significantly short.
-                if (expectedColCount > 0 && values.length < expectedColCount - 1) {
+                // Built from source, the count is exactly what SWAT+ reads: a
+                // row with fewer values makes it read on into the next line.
+                // Columns it never reads (a trailing description) are optional.
+                if (swatRead) {
+                    // A single-record file (codes.bsn) is read from its first line only.
+                    const missing = swatRead.rows === 'single' && i > firstDataLine
+                        ? undefined
+                        : missingSwatValues(values.length, swatRead);
+                    if (missing) {
+                        issues.push({
+                            file: filePath,
+                            line: i + 1,
+                            kind: 'wrong_column_count',
+                            message: `Too few values in ${fileName} at line ${i + 1}: SWAT+ `
+                                + `${describeSwatRead(swatRead)}, this row has ${values.length}; `
+                                + `missing ${missing.join(', ')}`,
+                            expected: `${Math.min(...swatRead.widths)}`,
+                            actual: `${values.length}`
+                        });
+                        rowIssueCount++;
+                        continue; // skip type checks for this malformed row
+                    }
+                } else if (expectedColCount > 0 && values.length < expectedColCount - 1) {
+                // Otherwise allow one trailing optional column to be absent (SWAT+
+                // sometimes adds optional parameters in newer versions), but flag
+                // when significantly short.
                     issues.push({
                         file: filePath,
                         line: i + 1,
