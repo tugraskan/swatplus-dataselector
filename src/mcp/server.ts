@@ -398,19 +398,15 @@ function main(): void {
             + 'directory, and report how it ended. A crash is the interesting case and '
             + 'leads the result: the forrtl line, then the traceback, which names the '
             + 'failing routine and source line when the build was compiled /traceback and '
-            + 'linked /INCREMENTAL:NO. This is a plain run, not a debug session -- for '
+            + 'linked /INCREMENTAL:NO. It runs only the executable the server was started with (--exe). This is a plain run, not a debug session -- for '
             + 'breakpoints and variables use the fortran-ifx debug tools.',
         inputSchema: {
-            executable: z.string().optional()
-                .describe('SWAT+ executable to run; defaults to the server\'s --exe'),
             dataset: z.string().optional()
                 .describe('Dataset directory to run in; defaults to the active dataset'),
             timeout_seconds: z.number().int().positive().max(86400).optional()
                 .describe('Give up after this long (default 900)'),
-            args: z.array(z.string()).optional()
-                .describe('Extra arguments for the executable; SWAT+ normally takes none'),
         },
-    }, async ({ executable, dataset, timeout_seconds, args: extraArgs }) => {
+    }, async ({ dataset, timeout_seconds }) => {
         const datasetDir = dataset ?? state.datasetDir;
         if (!datasetDir) {
             return textResult(
@@ -427,10 +423,13 @@ function main(): void {
             return textResult(`Cannot run: ${problem}.`);
         }
 
-        const exe = executable ?? args.exe;
+        // Only the executable the server was started with. Taking a path or
+        // arguments from the caller would let any MCP client, an agent
+        // included, run an arbitrary program on this machine.
+        const exe = args.exe;
         if (!exe) {
             return textResult(
-                'No SWAT+ executable to run. Pass `executable`, or start this server '
+                'No SWAT+ executable to run. Start this server '
                 + 'with --exe <path>.',
             );
         }
@@ -443,7 +442,7 @@ function main(): void {
         // Output is captured rather than streamed: this is one tool call that
         // answers when the run is over, and a SWAT+ run prints far more than
         // belongs in a result, so the digest does the choosing.
-        const result = spawnSync(exe, extraArgs ?? [], {
+        const result = spawnSync(exe, [], {
             cwd: datasetDir,
             encoding: 'utf-8',
             timeout: timeoutMs,
