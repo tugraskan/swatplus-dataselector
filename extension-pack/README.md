@@ -4,8 +4,8 @@ An extension pack, not an extension: installing this pulls in both
 
 - [SWAT+ Dataset Selector](https://github.com/tugraskan/swatplus-dataselector) —
   dataset browsing, FK navigation, output exploration
-- [Fortran ifx Debug](https://github.com/tugraskan/vsc_ifx_debug) — the
-  `fortran-ifx` debug adapter
+- [Fortran Debug (ifx / gfortran)](https://github.com/tugraskan/vsc_ifx_debug) —
+  the `fortran-debug` debug adapter
 
 so a new machine gets both with one install instead of two, and each still
 updates independently through VS Code's normal extension auto-update.
