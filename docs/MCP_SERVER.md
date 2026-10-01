@@ -69,9 +69,99 @@ client below for those.
 | `list_entities` | `entity`, `limit?` | Ids/names in an entity table, to discover what to describe |
 | `query_rows` | `entity`, `predicates[]`, `match?`, `limit?` | Rows matching column predicates (equals/contains/gt/gte/lt/lte/in/is_empty, AND/OR) |
 | `find_orphans` | `entity`, `limit?` | Rows nothing references (unused/dead data) |
+| `check_dataset` | `dataset?`, `source?` | Preflight of `file.cio` against the source that reads it: text, plus a structured verdict (see below) |
 
 `entity` accepts an entity kind (`hru`, `aquifer`, `channel`, `reservoir`,
 `wetland`, `plant`, `soil`), a file name (`hru-data.hru`), or a table name.
+
+## Preflight: `check_dataset`
+
+`check_dataset` compares a dataset's `file.cio` with what
+`src/readcio_read.f90` reads, using the field lists declared in
+`src/input_file_module.f90`. The failure it exists for is a row one value
+short. List-directed input spans records, so the short row takes the first
+token of the next line. Every later row is then read shifted by one, and the
+run fails far away, usually as a subscript error.
+
+The expectations come from the source tree given by `source` (or the
+server's `--source`), not from a reference dataset. An older branch therefore
+expects an older `file.cio`, and a dataset that matches it passes.
+
+### Result
+
+The text content is what the tool has always returned. Every result also has
+`structuredContent`, described by the tool's advertised `outputSchema`
+(strict: unknown fields are rejected). Version:
+`check_version: "dataselector-cio-preflight/1"`.
+
+| `status` | Meaning |
+| --- | --- |
+| `pass` | Every list-directed row was judged (`coverage.complete`), and none is short or missing. |
+| `fail` | An error is established: a short row, a missing section, an empty file, or a title with no rows. This holds even when coverage is incomplete. |
+| `inconclusive` | No error was found, but not every row could be judged. **Never a pass.** |
+| `error` | The check could not run. The result has `isError: true` and `error.code` is set. |
+
+A pass is never inferred from an empty `findings` list. Clients that gate a
+run on this check should require `status == "pass"`, which already implies
+complete coverage.
+
+| Field | Content |
+| --- | --- |
+| `summary` | One line, e.g. `pass: 30 of 30 section(s) checked; …`. |
+| `dataset` | The dataset directory, plus the `path`, `sha256` and `bytes` of the `file.cio` bytes that were judged. |
+| `source` | The source directory, plus the identity of `readcio_read.f90` and `input_file_module.f90`. |
+| `coverage` | `complete`; four counts (`expected_sections` the code reads, `resolved_sections` with a known value count, `checked_sections` compared with the file, `observed_sections` non-blank rows after the title); and the lists `unresolved`, `unsupported` and `unjudged`. |
+| `sections` | One entry per read, in read order: `position`, `variable`, `read_kind`, `source_line`, `type_name`, `expected`, `label`, `line`, `found`, `outcome`. |
+| `findings` | `short_row`, `missing_section`, `empty_file` and `no_rows` are errors. `surplus_values` and `extra_row` are notes. A short row lists its `missing_fields` with the code's default filenames. |
+| `error` | `null`, or `{code, message}` with code `no_dataset`, `no_source`, `dataset_file_missing`, `source_file_missing` or `read_failed`. |
+
+### What is judged
+
+- **Positions are fixed by the source.** Each read of unit 107 after the
+  title is one position, in source order.
+  - A row whose type cannot be resolved keeps its place, marked
+    `unresolved`, and the rows after it are still compared with what the
+    code reads into them. Those later findings carry `position_assumed:
+    true`: a failure there still stands, but the short row may be the
+    earlier, uncounted one.
+  - Older versions of this check dropped unresolved rows, which silently
+    compared later rows with the wrong expectations.
+- **Short is an error, surplus is a note.** List-directed input ignores
+  values past what it reads, so extra values are harmless. They usually mean
+  the dataset is newer than the source.
+- **A file that ends early fails.** Each section the code reads after the
+  last row is a `missing_section`. An empty file, or a title with no rows,
+  fails once rather than once per section.
+- **Rows after everything the code reads** are `extra_row` notes.
+- **Labels are diagnostic only.** The code reads each row's first token into
+  `name` and discards it, so a relabelled row still passes. A swapped row is
+  judged where the code reads it, not where its label suggests.
+
+### What makes coverage incomplete
+
+Anything this check does not model is reported, not guessed. It makes the
+result `inconclusive`, unless an error elsewhere already makes it `fail`.
+
+| Where | `reason` | Why |
+| --- | --- | --- |
+| source | `undeclared_variable`, `undeclared_type` | The variable or its `type … end type` block is not found. |
+| source | `unsupported_declaration` | The type holds something other than one `character(len=N) :: name [= "default"]` per line. |
+| source | `no_fields` | The type declares no fields. |
+| source | `unrecognized_read` | A read of unit 107 in another form. Nothing after it is placed. |
+| source | `whole_record_not_trailing` | A `'(A)'` read before a list-directed row. |
+| source | `no_title_read`, `no_row_reads` | `readcio_read.f90` no longer has the shape this check reads. |
+| dataset | `uncounted_syntax` | A row uses a comma, slash, quote or repeat count, which list-directed input counts differently from whitespace. |
+| dataset | `blank_first_line` | It is unclear which line the title read consumes. |
+
+A trailing `read (107,'(A)',…)` reads one whole line as text. Current SWAT+
+uses one for the output path after the weather paths. It is counted for
+position and listed under `coverage.unjudged` with the `file.cio` line it
+takes (or `null` when there is none), but its content is not judged. It cannot
+be short and cannot shift anything after it.
+
+The check models a straight sequence of `read (107, …)` statements. Reads
+behind a condition, a unit other than the literal `107`, or a statement
+continued across lines show up as `unrecognized_read`.
 
 ## Building the server
 
@@ -136,6 +226,7 @@ python3 scripts/pandas_indexer.py \
 | `--output-schema <path>` | shipped `swatplus-output-schema.json` | Output-column docs |
 | `--metadata <path>` | shipped `txtinout-metadata.json` | Metadata for the indexer (with `--dataset`) |
 | `--scripts <dir>` | bundled `scripts/` | Location of `pandas_indexer.py` (with `--dataset`) |
+| `--source <dir>` | — | SWAT+ source tree whose `src/` `check_dataset` reads expectations from |
 
 ## Configuring an MCP client
 

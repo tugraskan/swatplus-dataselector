@@ -1,12 +1,18 @@
 import * as assert from 'assert';
 import {
+    CIO_PREFLIGHT_VERSION,
+    CioPreflight,
+    buildCioLayout,
     buildExpectations,
     checkCio,
+    cioPreflightError,
     describeCioCheck,
+    describeCioPreflight,
     parseCioRows,
     parseInputTypes,
     parseReadOrder,
     parseVariableTypes,
+    preflightCio,
 } from '../mcp/cioCheck';
 
 /** `readcio_read.f90`, reduced to the shape the row order is read from. */
@@ -260,5 +266,342 @@ suite('file.cio check - what it says', () => {
         const text = describeCioCheck([], context);
         assert.match(text, /dataset: C:\/work\/Ames_sub1/);
         assert.match(text, /expectations read from: C:\/src\/swatplus/);
+    });
+});
+
+/** The trailing whole-line read the real readcio_read.f90 makes for the output path. */
+const READCIO_WITH_OUT_PATH = READCIO.replace(
+    '     end do',
+    "        read (107,'(A)',iostat=eof) line_buffer\n     end do"
+);
+
+function preflight(cio: string, readcio = READCIO, module = MODULE): CioPreflight {
+    return preflightCio(cio, readcio, module, {
+        dataset: { dir: 'C:/work/Ames_sub1', file_cio: null },
+        source: { dir: 'C:/src/swatplus', readcio_read: null, input_file_module: null },
+    });
+}
+
+function kinds(result: CioPreflight): string[] {
+    return result.findings.map(f => f.kind);
+}
+
+suite('file.cio preflight - the verdict', () => {
+    test('a matching dataset passes, and says how much it checked', () => {
+        const result = preflight(GOOD_CIO);
+        assert.strictEqual(result.status, 'pass');
+        assert.strictEqual(result.check_version, CIO_PREFLIGHT_VERSION);
+        assert.strictEqual(result.coverage.complete, true);
+        assert.strictEqual(result.coverage.expected_sections, 4);
+        assert.strictEqual(result.coverage.resolved_sections, 4);
+        assert.strictEqual(result.coverage.checked_sections, 4);
+        assert.strictEqual(result.coverage.observed_sections, 4);
+        assert.deepStrictEqual(result.findings, []);
+        assert.ok(result.sections.every(s => s.outcome === 'match'));
+    });
+
+    test('a short row fails and names the field it lacks', () => {
+        const result = preflight(SHORT_CIO);
+        assert.strictEqual(result.status, 'fail');
+        assert.deepStrictEqual(kinds(result), ['short_row']);
+        const [short] = result.findings;
+        assert.strictEqual(short.position, 2);
+        assert.strictEqual(short.variable, 'in_basin');
+        assert.deepStrictEqual(short.missing_fields, [{ name: 'carbon_bsn', fallback: 'carbon.bsn' }]);
+        assert.strictEqual(short.position_assumed, false);
+    });
+
+    test('a matching older dataset on the older tree still passes', () => {
+        assert.strictEqual(preflight(SHORT_CIO, READCIO, OLDER_MODULE).status, 'pass');
+    });
+
+    test('surplus values are a note, never a missing value', () => {
+        const result = preflight(GOOD_CIO, READCIO, OLDER_MODULE);
+        assert.strictEqual(result.status, 'pass');
+        assert.deepStrictEqual(kinds(result), ['surplus_values']);
+        assert.strictEqual(result.findings[0].severity, 'note');
+        assert.deepStrictEqual(result.findings[0].missing_fields, []);
+        assert.strictEqual(result.sections[1].outcome, 'surplus');
+    });
+});
+
+suite('file.cio preflight - truncated and empty files', () => {
+    const WITHOUT_CONNECT = GOOD_CIO.replace('\nconnect           hru.con           null', '');
+
+    test('a missing last section fails', () => {
+        // The old check compared only as far as the shorter of the two lists,
+        // so a file cut off before its last row came out clean.
+        assert.deepStrictEqual(checkCio(parseCioRows(WITHOUT_CONNECT), buildExpectations(READCIO, MODULE)), []);
+        const result = preflight(WITHOUT_CONNECT);
+        assert.strictEqual(result.status, 'fail');
+        assert.deepStrictEqual(kinds(result), ['missing_section']);
+        assert.strictEqual(result.findings[0].position, 4);
+        assert.strictEqual(result.findings[0].variable, 'in_con');
+        assert.deepStrictEqual(result.findings[0].missing_fields.map(f => f.name), ['hru_con', 'hruez_con']);
+        assert.strictEqual(result.sections[3].outcome, 'missing');
+        assert.strictEqual(result.coverage.observed_sections, 3);
+    });
+
+    test('several missing sections each say which', () => {
+        const result = preflight(['file.cio: AMES', 'simulation  time.sim  print.prt'].join('\n'));
+        assert.strictEqual(result.status, 'fail');
+        assert.deepStrictEqual(result.findings.map(f => f.variable), ['in_basin', 'in_cli', 'in_con']);
+    });
+
+    test('a title with no body fails once, not once per section', () => {
+        const result = preflight('file.cio: AMES\n\n   \n');
+        assert.strictEqual(result.status, 'fail');
+        assert.deepStrictEqual(kinds(result), ['no_rows']);
+        assert.ok(result.sections.every(s => s.outcome === 'missing'));
+    });
+
+    test('an empty file fails', () => {
+        for (const text of ['', '\n', '  \r\n\t\r\n']) {
+            const result = preflight(text);
+            assert.strictEqual(result.status, 'fail', JSON.stringify(text));
+            assert.deepStrictEqual(kinds(result), ['empty_file']);
+        }
+    });
+});
+
+suite('file.cio preflight - positions stay put', () => {
+    const MYSTERY_READCIO = READCIO.replace('name, in_basin', 'name, in_mystery');
+
+    test('an unresolved middle row keeps its place, so later rows are not misjudged', () => {
+        // The old expectations dropped in_mystery, so the basin row was judged
+        // against in_cli and the climate row against in_con: a clean result
+        // from comparing the wrong things.
+        const legacy = checkCio(parseCioRows(GOOD_CIO), buildExpectations(MYSTERY_READCIO, MODULE));
+        assert.ok(!legacy.some(f => f.severity === 'error'));
+
+        const result = preflight(GOOD_CIO, MYSTERY_READCIO);
+        assert.strictEqual(result.status, 'inconclusive');
+        assert.strictEqual(result.coverage.complete, false);
+        assert.strictEqual(result.coverage.expected_sections, 4);
+        assert.strictEqual(result.coverage.resolved_sections, 3);
+        assert.deepStrictEqual(result.coverage.unresolved.map(g => [g.position, g.variable, g.reason]),
+            [[2, 'in_mystery', 'undeclared_variable']]);
+        assert.deepStrictEqual(result.sections.map(s => [s.variable, s.label, s.outcome]), [
+            ['in_sim', 'simulation', 'match'],
+            ['in_mystery', 'basin', 'unresolved'],
+            ['in_cli', 'climate', 'match'],
+            ['in_con', 'connect', 'match'],
+        ]);
+    });
+
+    test('a short row after an unresolved one still fails, flagged as assumed', () => {
+        const shortClimate = GOOD_CIO.replace('climate           weather-sta.cli   pcp.cli',
+            'climate           weather-sta.cli');
+        const result = preflight(shortClimate, MYSTERY_READCIO);
+        assert.strictEqual(result.status, 'fail');
+        assert.deepStrictEqual(kinds(result), ['short_row']);
+        assert.strictEqual(result.findings[0].variable, 'in_cli');
+        assert.strictEqual(result.findings[0].position_assumed, true);
+    });
+
+    test('an unresolved section with no row is still missing', () => {
+        const result = preflight(GOOD_CIO.replace('\nconnect           hru.con           null', ''),
+            READCIO.replace('name, in_con', 'name, in_mystery'));
+        assert.strictEqual(result.status, 'fail');
+        assert.strictEqual(result.findings[0].kind, 'missing_section');
+        assert.strictEqual(result.findings[0].expected, null);
+    });
+
+    test('a type with a declaration this check does not count is unresolved', () => {
+        const module = MODULE.replace('       character(len=25) :: pcp_cli = "pcp.cli"',
+            '       character(len=25) :: pcp_cli = "pcp.cli"\n       integer :: n_cli = 0');
+        const result = preflight(GOOD_CIO, READCIO, module);
+        assert.strictEqual(result.status, 'inconclusive');
+        assert.deepStrictEqual(result.coverage.unresolved.map(g => g.reason), ['unsupported_declaration']);
+        assert.strictEqual(result.sections[2].outcome, 'unresolved');
+    });
+
+    test('a row in list-directed syntax the check cannot count is not counted', () => {
+        const commas = GOOD_CIO.replace('climate           weather-sta.cli   pcp.cli',
+            'climate           weather-sta.cli,pcp.cli');
+        const result = preflight(commas);
+        assert.strictEqual(result.status, 'inconclusive');
+        assert.deepStrictEqual(result.coverage.unsupported.map(g => [g.where, g.reason, g.line]),
+            [['dataset', 'uncounted_syntax', 4]]);
+        assert.strictEqual(result.sections[2].outcome, 'uncounted');
+    });
+
+    test('an unrecognised read stops placement rather than guessing past it', () => {
+        const readcio = READCIO.replace('read (107,*,iostat=eof) name, in_cli',
+            'read (107,*,iostat=eof) name, in_cli, in_extra');
+        const result = preflight(GOOD_CIO, readcio);
+        assert.strictEqual(result.status, 'inconclusive');
+        assert.deepStrictEqual(result.coverage.unsupported.map(g => g.reason), ['unrecognized_read']);
+        assert.deepStrictEqual(result.sections.map(s => s.outcome),
+            ['match', 'match', 'unrecognized', 'not_checked']);
+    });
+
+    test('a failure before an unrecognised read still fails', () => {
+        const readcio = READCIO.replace('read (107,*,iostat=eof) name, in_con',
+            "read (107,'(i4)',iostat=eof) count");
+        const result = preflight(SHORT_CIO, readcio);
+        assert.strictEqual(result.status, 'fail');
+        assert.deepStrictEqual(kinds(result), ['short_row']);
+    });
+
+    test('a commented-out read is not a row', () => {
+        const readcio = READCIO.replace('        read (107,*,iostat=eof) name, in_cli',
+            '        !read (107,*,iostat=eof) name, in_old\n        read (107,*,iostat=eof) name, in_cli');
+        assert.strictEqual(preflight(GOOD_CIO, readcio).status, 'pass');
+    });
+
+    test('a blank first line is not placed', () => {
+        // The title read is list-directed too, so whether it takes the blank
+        // line or skips to the next one decides every position after it.
+        const result = preflight('\n' + GOOD_CIO);
+        assert.strictEqual(result.status, 'inconclusive');
+        assert.deepStrictEqual(result.coverage.unsupported.map(g => g.reason), ['blank_first_line']);
+    });
+});
+
+suite('file.cio preflight - labels, order and extra rows', () => {
+    test('labels are not required: the code reads them and throws them away', () => {
+        const relabelled = GOOD_CIO.replace('basin             codes.bsn', 'bsn               codes.bsn');
+        const result = preflight(relabelled);
+        assert.strictEqual(result.status, 'pass');
+        assert.strictEqual(result.sections[1].label, 'bsn');
+        assert.strictEqual(result.sections[1].variable, 'in_basin');
+    });
+
+    test('order is what counts: swapped rows are judged where the code reads them', () => {
+        const lines = GOOD_CIO.split('\n');
+        [lines[2], lines[3]] = [lines[3], lines[2]];
+        const result = preflight(lines.join('\n'));
+        assert.strictEqual(result.status, 'fail');
+        assert.deepStrictEqual(result.findings.map(f => [f.kind, f.variable, f.label]), [
+            ['short_row', 'in_basin', 'climate'],
+            ['surplus_values', 'in_cli', 'basin'],
+        ]);
+    });
+
+    test('rows past what the code reads are noted, and do not fail', () => {
+        const result = preflight(GOOD_CIO + '\npcp_path          null');
+        assert.strictEqual(result.status, 'pass');
+        assert.deepStrictEqual(kinds(result), ['extra_row']);
+        assert.strictEqual(result.findings[0].line, 6);
+        assert.strictEqual(result.coverage.observed_sections, 5);
+    });
+
+    test('a trailing whole-line read is counted but not judged', () => {
+        const absent = preflight(GOOD_CIO, READCIO_WITH_OUT_PATH);
+        assert.strictEqual(absent.status, 'pass');
+        assert.strictEqual(absent.coverage.complete, true);
+        assert.strictEqual(absent.coverage.expected_sections, 4);
+        assert.deepStrictEqual(absent.coverage.unjudged,
+            [{ position: 5, variable: 'line_buffer', source_line: 16, line: null }]);
+
+        // When present, it takes its line, which is then not an extra row.
+        const present = preflight(GOOD_CIO + '\nout_path          C:/runs/out', READCIO_WITH_OUT_PATH);
+        assert.strictEqual(present.status, 'pass');
+        assert.deepStrictEqual(present.findings, []);
+        assert.strictEqual(present.coverage.unjudged[0].line, 6);
+    });
+
+    test('a whole-line read between rows is not placed', () => {
+        const readcio = READCIO.replace('        read (107,*,iostat=eof) name, in_con',
+            "        read (107,'(A)',iostat=eof) line_buffer\n        read (107,*,iostat=eof) name, in_con");
+        const result = preflight(GOOD_CIO, readcio);
+        assert.strictEqual(result.status, 'inconclusive');
+        assert.deepStrictEqual(result.coverage.unsupported.map(g => g.reason), ['whole_record_not_trailing']);
+    });
+});
+
+suite('file.cio preflight - missing expectations', () => {
+    test('zero row reads are inconclusive, never a pass', () => {
+        const titleOnly = 'read (107,*) titldum\n';
+        const result = preflight(GOOD_CIO, titleOnly);
+        assert.strictEqual(result.status, 'inconclusive');
+        assert.strictEqual(result.coverage.expected_sections, 0);
+        assert.deepStrictEqual(result.coverage.unsupported.map(g => g.reason), ['no_row_reads']);
+        assert.match(describeCioPreflight(result), /Read no row expectations from C:\/src\/swatplus/);
+    });
+
+    test('empty source text is inconclusive, not a pass', () => {
+        const result = preflight(GOOD_CIO, '', '');
+        assert.strictEqual(result.status, 'inconclusive');
+        assert.deepStrictEqual(result.coverage.unsupported.map(g => g.reason).sort(),
+            ['no_row_reads', 'no_title_read']);
+    });
+
+    test('a module without the types leaves every row unresolved', () => {
+        const result = preflight(GOOD_CIO, READCIO, '');
+        assert.strictEqual(result.status, 'inconclusive');
+        assert.strictEqual(result.coverage.resolved_sections, 0);
+        assert.strictEqual(result.coverage.unresolved.length, 4);
+    });
+
+    test('the layout keeps a title, every row and its source line', () => {
+        const layout = buildCioLayout(READCIO_WITH_OUT_PATH + READCIO_WITH_OUT_PATH, MODULE);
+        assert.strictEqual(layout.titleLine, 6);
+        assert.deepStrictEqual(layout.reads.map(r => [r.position, r.kind, r.variable]), [
+            [1, 'list_directed', 'in_sim'],
+            [2, 'list_directed', 'in_basin'],
+            [3, 'list_directed', 'in_cli'],
+            [4, 'list_directed', 'in_con'],
+            [5, 'whole_record', 'line_buffer'],
+        ]);
+    });
+});
+
+suite('file.cio preflight - structured and text agree', () => {
+    const context = { datasetDir: 'C:/work/Ames_sub1', sourceDir: 'C:/src/swatplus' };
+
+    test('a pass reads exactly as it always has', () => {
+        assert.strictEqual(describeCioPreflight(preflight(GOOD_CIO)), describeCioCheck([], context));
+    });
+
+    test('a short row reads exactly as it always has', () => {
+        const legacy = checkCio(parseCioRows(SHORT_CIO), buildExpectations(READCIO, MODULE));
+        assert.strictEqual(describeCioPreflight(preflight(SHORT_CIO)), describeCioCheck(legacy, context));
+    });
+
+    test('a surplus note reads exactly as it always has', () => {
+        const legacy = checkCio(parseCioRows(GOOD_CIO), buildExpectations(READCIO, OLDER_MODULE));
+        assert.strictEqual(describeCioPreflight(preflight(GOOD_CIO, READCIO, OLDER_MODULE)),
+            describeCioCheck(legacy, context));
+    });
+
+    test('only a pass carries the clean headline', () => {
+        const cases: [string, CioPreflight][] = [
+            ['missing', preflight(GOOD_CIO.replace('\nconnect           hru.con           null', ''))],
+            ['empty', preflight('')],
+            ['no rows', preflight('file.cio: AMES')],
+            ['unresolved', preflight(GOOD_CIO, READCIO.replace('name, in_basin', 'name, in_mystery'))],
+            ['no expectations', preflight(GOOD_CIO, 'read (107,*) titldum')],
+            ['pass', preflight(GOOD_CIO)],
+        ];
+        for (const [name, result] of cases) {
+            const clean = /matches what the code reads/.test(describeCioPreflight(result));
+            assert.strictEqual(clean, result.status === 'pass', name);
+        }
+    });
+
+    test('a missing section and an inconclusive check say so', () => {
+        const missing = describeCioPreflight(preflight(GOOD_CIO.replace('\nconnect           hru.con           null', '')));
+        assert.match(missing, /file\.cio ends before the code has read all of it/);
+        assert.match(missing, /section 4: no row for in_con \(input_con, 2 value\(s\)\)/);
+
+        const unresolved = describeCioPreflight(preflight(GOOD_CIO, READCIO.replace('name, in_basin', 'name, in_mystery')));
+        assert.match(unresolved, /could not be checked completely, so this is not a pass/);
+        assert.match(unresolved, /section 2 \(in_mystery, readcio_read\.f90:10\): in_mystery is not declared/);
+    });
+
+    test('an error is its message, in the same shape as a result', () => {
+        const result = cioPreflightError('source_file_missing', 'Cannot check: no C:/src/readcio_read.f90 (source path wrong?).');
+        assert.strictEqual(result.status, 'error');
+        assert.strictEqual(result.error?.code, 'source_file_missing');
+        assert.strictEqual(result.coverage.complete, false);
+        assert.strictEqual(describeCioPreflight(result), result.error?.message);
+        assert.deepStrictEqual(Object.keys(result).sort(), Object.keys(preflight(GOOD_CIO)).sort());
+    });
+
+    test('the result is plain JSON', () => {
+        const result = preflight(SHORT_CIO);
+        assert.deepStrictEqual(JSON.parse(JSON.stringify(result)), result);
     });
 });
