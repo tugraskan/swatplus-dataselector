@@ -4,6 +4,31 @@ All notable changes to the "swatplus-vscode-dataset-selector" extension will be 
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.5.0] - 2026-10-02
+
+### Added
+- `check_dataset` now also returns a structured verdict: `structuredContent`
+  under the contract `dataselector-cio-preflight/1`, advertised as a strict
+  `outputSchema`.
+  - The verdict is pass, fail or inconclusive, so a run gate can tell "nothing
+    is wrong" from "not everything could be checked".
+  - It names the SHA-256 of the `file.cio`, `readcio_read.f90` and
+    `input_file_module.f90` bytes it judged.
+  - See docs/MCP_SERVER.md.
+
+### Changed
+- Each read of `file.cio` keeps a fixed position. A row whose type does not
+  resolve is marked unresolved instead of dropped, so later rows are no longer
+  compared with the wrong expectations.
+- Fails:
+  - a `file.cio` that ends early fails once for each missing section;
+  - an empty file, or a title with no rows, fails once.
+- Stay notes: surplus values, and rows past the last read.
+- Read forms and row forms that the check does not model make the result
+  inconclusive instead of a pass.
+- A check that cannot run returns `isError` with a structured error code. The
+  text answer is unchanged wherever the old check could say the same thing.
+
 ## [0.4.0] - 2026-09-29
 
 ### Added
