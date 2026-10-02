@@ -2,7 +2,7 @@
   "name": "swatplus-tools",
   "displayName": "SWAT+ Tools",
   "description": "Installs SWAT+ Dataset Selector, Fortran Debug (ifx / gfortran) and SWAT+ Investigator together, so a new machine gets all three with one click.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "PbsandtDev",
   "license": "MIT",
   "repository": {
@@ -16,7 +16,8 @@
   "categories": [
     "Extension Packs"
   ],
-  "extensionPack": [
+    "extensionPack": [
+    "PbsandtDev.swat-dataset-selector",
     "PbsandtDev.vsc-ifx-debug",
     "PbsandtDev.swat-investigator"
   ],
