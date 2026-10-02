@@ -23,6 +23,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
+import { createHash } from 'crypto';
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -39,10 +40,18 @@ import {
     summarizeRun,
 } from './datasetRuntime';
 import {
-    buildExpectations,
-    checkCio,
-    describeCioCheck,
-    parseCioRows,
+    CIO_FINDING_KINDS,
+    CIO_GAP_REASONS,
+    CIO_PREFLIGHT_ERROR_CODES,
+    CIO_PREFLIGHT_VERSION,
+    CIO_SECTION_OUTCOMES,
+    CioFileIdentity,
+    CioPreflight,
+    CioPreflightErrorCode,
+    CioPreflightIdentity,
+    cioPreflightError,
+    describeCioPreflight,
+    preflightCio,
 } from './cioCheck';
 
 interface CliArgs {
@@ -142,6 +151,107 @@ function buildIndex(datasetDir: string, args: CliArgs): string {
 
 function textResult(text: string) {
     return { content: [{ type: 'text' as const, text }] };
+}
+
+/**
+ * The structured result of `check_dataset`, as advertised to clients.
+ *
+ * Strict objects, so a field added to {@link CioPreflight} without being
+ * declared here fails the server's own output validation instead of reaching
+ * a client that rejects it. An `error` result has the same shape, because some
+ * clients validate structured content even on an error result.
+ */
+const cioFileIdentity = z.strictObject({
+    path: z.string(),
+    sha256: z.string(),
+    bytes: z.number().int().nonnegative(),
+});
+const cioGap = z.strictObject({
+    where: z.enum(['source', 'dataset']),
+    reason: z.enum(CIO_GAP_REASONS),
+    position: z.number().int().nullable(),
+    variable: z.string().nullable(),
+    line: z.number().int().nullable(),
+    detail: z.string(),
+});
+const cioPreflightOutput = z.strictObject({
+    check_version: z.literal(CIO_PREFLIGHT_VERSION),
+    status: z.enum(['pass', 'fail', 'inconclusive', 'error']),
+    summary: z.string(),
+    error: z.strictObject({
+        code: z.enum(CIO_PREFLIGHT_ERROR_CODES),
+        message: z.string(),
+    }).nullable(),
+    dataset: z.strictObject({
+        dir: z.string().nullable(),
+        file_cio: cioFileIdentity.nullable(),
+    }),
+    source: z.strictObject({
+        dir: z.string().nullable(),
+        readcio_read: cioFileIdentity.nullable(),
+        input_file_module: cioFileIdentity.nullable(),
+    }),
+    coverage: z.strictObject({
+        complete: z.boolean(),
+        expected_sections: z.number().int().nonnegative(),
+        resolved_sections: z.number().int().nonnegative(),
+        checked_sections: z.number().int().nonnegative(),
+        observed_sections: z.number().int().nonnegative(),
+        unresolved: z.array(cioGap),
+        unsupported: z.array(cioGap),
+        unjudged: z.array(z.strictObject({
+            position: z.number().int(),
+            variable: z.string(),
+            source_line: z.number().int(),
+            line: z.number().int().nullable(),
+        })),
+    }),
+    sections: z.array(z.strictObject({
+        position: z.number().int(),
+        variable: z.string(),
+        read_kind: z.enum(['list_directed', 'whole_record', 'unrecognized']),
+        source_line: z.number().int(),
+        type_name: z.string().nullable(),
+        expected: z.number().int().nullable(),
+        label: z.string().nullable(),
+        line: z.number().int().nullable(),
+        found: z.number().int().nullable(),
+        outcome: z.enum(CIO_SECTION_OUTCOMES),
+    })),
+    findings: z.array(z.strictObject({
+        kind: z.enum(CIO_FINDING_KINDS),
+        severity: z.enum(['error', 'note']),
+        position: z.number().int().nullable(),
+        line: z.number().int().nullable(),
+        label: z.string().nullable(),
+        variable: z.string().nullable(),
+        type_name: z.string().nullable(),
+        expected: z.number().int().nullable(),
+        found: z.number().int().nullable(),
+        missing_fields: z.array(z.strictObject({
+            name: z.string(),
+            fallback: z.string().nullable(),
+        })),
+        position_assumed: z.boolean(),
+        message: z.string(),
+    })),
+});
+
+/** The text `check_dataset` has always returned, plus the same result structured. */
+function preflightResult(result: CioPreflight) {
+    return {
+        content: [{ type: 'text' as const, text: describeCioPreflight(result) }],
+        structuredContent: { ...result },
+        ...(result.status === 'error' ? { isError: true } : {}),
+    };
+}
+
+function fileIdentity(filePath: string, bytes: Buffer): CioFileIdentity {
+    return {
+        path: path.resolve(filePath),
+        sha256: createHash('sha256').update(bytes).digest('hex'),
+        bytes: bytes.length,
+    };
 }
 
 function main(): void {
@@ -334,7 +444,9 @@ function main(): void {
             + 'then surfaces far away, typically as a subscript error in an unrelated '
             + 'routine. Expectations come from the Fortran source, so an older branch '
             + 'expects an older file.cio and a matching dataset passes. Run this before '
-            + 'run_dataset.',
+            + 'run_dataset. The structured result says pass, fail or inconclusive, '
+            + 'and how much of file.cio could be checked; only a pass with complete '
+            + 'coverage means every row was judged.',
         inputSchema: {
             dataset: z.string().optional()
                 .describe('Dataset directory; defaults to the active dataset'),
@@ -342,16 +454,24 @@ function main(): void {
                 .describe('SWAT+ source tree to read expectations from; defaults to '
                     + 'the server\'s --source'),
         },
+        outputSchema: cioPreflightOutput,
     }, async ({ dataset, source }) => {
         const datasetDir = dataset ?? state.datasetDir;
+        const sourceDir = source ?? args.source;
+        const identity: CioPreflightIdentity = {
+            dataset: { dir: datasetDir ?? null, file_cio: null },
+            source: { dir: sourceDir ?? null, readcio_read: null, input_file_module: null },
+        };
+        const failure = (code: CioPreflightErrorCode, message: string) =>
+            preflightResult(cioPreflightError(code, message, identity));
+
         if (!datasetDir) {
-            return textResult(
+            return failure('no_dataset',
                 'No dataset to check. Call select_dataset first, or pass `dataset`.',
             );
         }
-        const sourceDir = source ?? args.source;
         if (!sourceDir) {
-            return textResult(
+            return failure('no_source',
                 'No SWAT+ source tree to read expectations from. Pass `source`, or '
                 + 'start this server with --source <swatplus repo>. The check '
                 + 'compares file.cio against the types in src/input_file_module.f90, '
@@ -363,33 +483,38 @@ function main(): void {
         const cioPath = path.join(datasetDir, 'file.cio');
         const readcioPath = path.join(sourceDir, 'src', 'readcio_read.f90');
         const modulePath = path.join(sourceDir, 'src', 'input_file_module.f90');
-        for (const [label, needed] of [
-            ['dataset', cioPath],
-            ['source', readcioPath],
-            ['source', modulePath],
+        for (const [label, needed, code] of [
+            ['dataset', cioPath, 'dataset_file_missing'],
+            ['source', readcioPath, 'source_file_missing'],
+            ['source', modulePath, 'source_file_missing'],
         ] as const) {
             if (!fs.existsSync(needed)) {
-                return textResult(`Cannot check: no ${needed} (${label} path wrong?).`);
+                return failure(code, `Cannot check: no ${needed} (${label} path wrong?).`);
             }
         }
 
-        const expectations = buildExpectations(
-            fs.readFileSync(readcioPath, 'utf-8'),
-            fs.readFileSync(modulePath, 'utf-8'),
-        );
-        if (expectations.length === 0) {
-            return textResult(
-                `Read no row expectations from ${sourceDir}. The check needs `
-                + 'readcio_read.f90 to read rows as `name, <derived type>`; if that '
-                + 'has changed shape, this needs updating rather than trusting.',
-            );
+        let bytes: { cio: Buffer; readcio: Buffer; module: Buffer };
+        try {
+            bytes = {
+                cio: fs.readFileSync(cioPath),
+                readcio: fs.readFileSync(readcioPath),
+                module: fs.readFileSync(modulePath),
+            };
+        } catch (err) {
+            return failure('read_failed',
+                `Cannot check: ${err instanceof Error ? err.message : String(err)}`);
         }
-
-        const findings = checkCio(
-            parseCioRows(fs.readFileSync(cioPath, 'utf-8')),
-            expectations,
-        );
-        return textResult(describeCioCheck(findings, { datasetDir, sourceDir }));
+        // Hashed from the same bytes that are checked, so the identity names
+        // exactly what the verdict is about.
+        identity.dataset.file_cio = fileIdentity(cioPath, bytes.cio);
+        identity.source.readcio_read = fileIdentity(readcioPath, bytes.readcio);
+        identity.source.input_file_module = fileIdentity(modulePath, bytes.module);
+        return preflightResult(preflightCio(
+            bytes.cio.toString('utf-8'),
+            bytes.readcio.toString('utf-8'),
+            bytes.module.toString('utf-8'),
+            identity,
+        ));
     });
 
     server.registerTool('run_dataset', {
