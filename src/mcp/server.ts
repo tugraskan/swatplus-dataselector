@@ -53,6 +53,20 @@ import {
     describeCioPreflight,
     preflightCio,
 } from './cioCheck';
+import {
+    INPUT_FILE_OUTCOMES,
+    INPUT_PREFLIGHT_ERROR_CODES,
+    INPUT_PREFLIGHT_VERSION,
+    INPUT_UNCHECKED_REASONS,
+    INPUT_UNJUDGED_REASONS,
+    DatasetFile,
+    InputExpectations,
+    InputPreflight,
+    describeInputPreflight,
+    expectationsFrom,
+    inputPreflightError,
+    preflightInputs,
+} from './inputCheck';
 
 interface CliArgs {
     index?: string;
@@ -65,6 +79,8 @@ interface CliArgs {
     exe?: string;
     /** SWAT+ source tree, for check_dataset's expectations. */
     source?: string;
+    /** Tamandua `swatplus-layouts` JSON, for check_inputs' expectations. */
+    layouts?: string;
 }
 
 function parseArgs(argv: string[]): CliArgs {
@@ -81,6 +97,7 @@ function parseArgs(argv: string[]): CliArgs {
             case '--scripts': args.scripts = next(); break;
             case '--exe': args.exe = next(); break;
             case '--source': args.source = next(); break;
+            case '--layouts': args.layouts = next(); break;
         }
     }
     return args;
@@ -236,6 +253,91 @@ const cioPreflightOutput = z.strictObject({
         message: z.string(),
     })),
 });
+
+const inputPreflightOutput = z.strictObject({
+    check_version: z.literal(INPUT_PREFLIGHT_VERSION),
+    status: z.enum(['pass', 'fail', 'inconclusive', 'error']),
+    summary: z.string(),
+    error: z.strictObject({
+        code: z.enum(INPUT_PREFLIGHT_ERROR_CODES),
+        message: z.string(),
+    }).nullable(),
+    dataset: z.strictObject({
+        dir: z.string().nullable(),
+        file_cio: cioFileIdentity.nullable(),
+    }),
+    expectations: z.strictObject({
+        origin: z.enum(['layouts', 'schema']),
+        swatplus: z.strictObject({
+            commit: z.string().nullable(),
+            describe: z.string().nullable(),
+        }),
+        path: z.string().nullable(),
+        sha256: z.string().nullable(),
+    }).nullable(),
+    coverage: z.strictObject({
+        complete: z.boolean(),
+        named_files: z.number().int().nonnegative(),
+        checked_files: z.number().int().nonnegative(),
+        unchecked_files: z.number().int().nonnegative(),
+        unjudged_rows: z.number().int().nonnegative(),
+        unjudged: z.array(z.strictObject({
+            file: z.string(),
+            line: z.number().int(),
+            reason: z.enum(INPUT_UNJUDGED_REASONS),
+        })),
+    }),
+    files: z.array(z.strictObject({
+        label: z.string(),
+        cio_line: z.number().int(),
+        file: z.string(),
+        outcome: z.enum(INPUT_FILE_OUTCOMES),
+        reason: z.enum(INPUT_UNCHECKED_REASONS).nullable(),
+        identity: cioFileIdentity.nullable(),
+        read_at: z.string().nullable(),
+        needed: z.number().int().nullable(),
+        rows_checked: z.number().int().nonnegative(),
+        rows_unjudged: z.number().int().nonnegative(),
+        short_rows: z.number().int().nonnegative(),
+    })),
+    findings: z.array(z.strictObject({
+        file: z.string(),
+        line: z.number().int(),
+        at_end: z.boolean(),
+        found: z.number().int(),
+        needed: z.number().int(),
+        missing_columns: z.array(z.string()),
+        read_at: z.string(),
+        message: z.string(),
+    })),
+});
+
+function inputPreflightResult(result: InputPreflight) {
+    return {
+        content: [{ type: 'text' as const, text: describeInputPreflight(result) }],
+        structuredContent: { ...result },
+        ...(result.status === 'error' ? { isError: true } : {}),
+    };
+}
+
+/** A named file, found case-insensitively as SWAT+ finds it on Windows. */
+function readDatasetFile(datasetDir: string, name: string, listing: string[]): DatasetFile {
+    const entry = listing.find(item => item === name)
+        ?? listing.find(item => item.toLowerCase() === name.toLowerCase());
+    if (entry === undefined) {
+        return { kind: 'missing' };
+    }
+    const filePath = path.join(datasetDir, entry);
+    try {
+        if (!fs.statSync(filePath).isFile()) {
+            return { kind: 'missing' };
+        }
+        const bytes = fs.readFileSync(filePath);
+        return { kind: 'text', text: bytes.toString('utf-8'), identity: fileIdentity(filePath, bytes) };
+    } catch (err) {
+        return { kind: 'unreadable', message: err instanceof Error ? err.message : String(err) };
+    }
+}
 
 /** The text `check_dataset` has always returned, plus the same result structured. */
 function preflightResult(result: CioPreflight) {
@@ -514,6 +616,88 @@ function main(): void {
             bytes.readcio.toString('utf-8'),
             bytes.module.toString('utf-8'),
             identity,
+        ));
+    });
+
+    // Expectations are read once per file and kept: a layouts file is large.
+    const expectationCache = new Map<string, { expectations: InputExpectations; sha256: string }>();
+    const loadExpectations = (file: string): { expectations: InputExpectations; sha256: string } | string => {
+        const cached = expectationCache.get(file);
+        if (cached) {
+            return cached;
+        }
+        let bytes: Buffer;
+        let parsed: unknown;
+        try {
+            bytes = fs.readFileSync(file);
+            parsed = JSON.parse(bytes.toString('utf-8'));
+        } catch (err) {
+            return `Cannot read the expectations ${file}: ${err instanceof Error ? err.message : String(err)}`;
+        }
+        const expectations = expectationsFrom(parsed);
+        if (!expectations) {
+            return `${file} is neither a swatplus-layouts file nor a generated schema.`;
+        }
+        const loaded = { expectations, sha256: createHash('sha256').update(bytes).digest('hex') };
+        expectationCache.set(file, loaded);
+        return loaded;
+    };
+
+    server.registerTool('check_inputs', {
+        title: 'Check the files file.cio names against what SWAT+ reads',
+        description: 'Open every file the dataset\'s file.cio names and count the values on '
+            + 'each data line against the read statement SWAT+ uses for that file. A line '
+            + 'short of values makes the list-directed read carry on into the next line, so '
+            + 'every record after it is read shifted. check_dataset judges file.cio itself; '
+            + 'this judges the files it points to. Expectations come from one SWAT+ source, '
+            + 'named in expectations.swatplus: a Tamandua swatplus-layouts file built from '
+            + 'the checkout that will run (`layouts`), or by default the schema this server '
+            + 'ships. Files with no read layout, renamed files, and lines with quotes, '
+            + 'commas, slashes or repeat counts are reported as not judged; a pass needs '
+            + 'every named file checked.',
+        inputSchema: {
+            dataset: z.string().optional()
+                .describe('Dataset directory; defaults to the active dataset'),
+            layouts: z.string().optional()
+                .describe('Tamandua swatplus-layouts JSON for the SWAT+ source that will read '
+                    + 'the dataset; defaults to the server\'s --layouts, then its shipped schema'),
+        },
+        outputSchema: inputPreflightOutput,
+    }, async ({ dataset, layouts }) => {
+        const datasetDir = dataset ?? state.datasetDir;
+        if (!datasetDir) {
+            return inputPreflightResult(inputPreflightError('no_dataset',
+                'No dataset to check. Call select_dataset first, or pass `dataset`.', null));
+        }
+        const cioPath = path.join(datasetDir, 'file.cio');
+        if (!fs.existsSync(cioPath)) {
+            return inputPreflightResult(inputPreflightError('dataset_file_missing',
+                `Cannot check: no ${cioPath} (dataset path wrong?).`, datasetDir));
+        }
+        let cio: Buffer;
+        let listing: string[];
+        try {
+            cio = fs.readFileSync(cioPath);
+            listing = fs.readdirSync(datasetDir);
+        } catch (err) {
+            return inputPreflightResult(inputPreflightError('read_failed',
+                `Cannot check: ${err instanceof Error ? err.message : String(err)}`, datasetDir));
+        }
+        const fileCio = fileIdentity(cioPath, cio);
+        const expectationPath = layouts ?? args.layouts ?? defaultSchemaPath('swatplus-generated-schema.json');
+        const loaded = loadExpectations(expectationPath);
+        if (typeof loaded === 'string') {
+            return inputPreflightResult(inputPreflightError('no_expectations', loaded, datasetDir, fileCio));
+        }
+        return inputPreflightResult(preflightInputs(
+            cio.toString('utf-8'),
+            name => readDatasetFile(datasetDir, name, listing),
+            {
+                datasetDir,
+                fileCio,
+                expectations: loaded.expectations,
+                expectationFile: { path: path.resolve(expectationPath), sha256: loaded.sha256 },
+            },
         ));
     });
 

@@ -70,6 +70,7 @@ client below for those.
 | `query_rows` | `entity`, `predicates[]`, `match?`, `limit?` | Rows matching column predicates (equals/contains/gt/gte/lt/lte/in/is_empty, AND/OR) |
 | `find_orphans` | `entity`, `limit?` | Rows nothing references (unused/dead data) |
 | `check_dataset` | `dataset?`, `source?` | Preflight of `file.cio` against the source that reads it: text, plus a structured verdict (see below) |
+| `check_inputs` | `dataset?`, `layouts?` | Preflight of every file `file.cio` names against what SWAT+ reads from it: text, plus a structured verdict (see below) |
 
 `entity` accepts an entity kind (`hru`, `aquifer`, `channel`, `reservoir`,
 `wetland`, `plant`, `soil`), a file name (`hru-data.hru`), or a table name.
@@ -163,6 +164,71 @@ The check models a straight sequence of `read (107, …)` statements. Reads
 behind a condition, a unit other than the literal `107`, or a statement
 continued across lines show up as `unrecognized_read`.
 
+## Preflight: `check_inputs`
+
+`check_dataset` judges `file.cio` and never opens the files its rows name.
+`check_inputs` opens each of them and counts the values on every data line
+against the statement SWAT+ reads that file with. A line short of values is
+the same failure as a short `file.cio` row: the list-directed read carries on
+into the next line, and every record after it is read shifted. When the short
+line is the last one, the read reaches the end of the file instead
+(`at_end: true`).
+
+### Expectations
+
+The layouts come from one SWAT+ source, named in `expectations.swatplus`
+(`commit`, `describe`):
+
+1. `layouts` with the call, or the server's `--layouts`: a Tamandua
+   `swatplus-layouts` file. Build it from the checkout that will read the
+   dataset:
+
+   ```
+   swatplus-build --source <swatplus checkout> --facts facts.json
+   swatplus-layouts --facts facts.json --out layouts.json
+   ```
+
+2. Otherwise the shipped `swatplus-generated-schema.json`, which is built from
+   one SWAT+ release.
+
+Input files change shape between SWAT+ versions (`plants.plt`, `exco.exc`), so
+a verdict says something certain only about the version it was judged
+against. A client compares `expectations.swatplus.commit` with the source it
+runs.
+
+### Result
+
+`check_version: "dataselector-input-preflight/1"`, with a strict
+`outputSchema` as for `check_dataset`.
+
+| `status` | Meaning |
+| --- | --- |
+| `pass` | Every named file was checked and every data line counted (`coverage.complete`), and none is short. |
+| `fail` | At least one data line is short, whatever the coverage. |
+| `inconclusive` | Nothing short was found, but not every file or line could be judged. **Never a pass.** |
+| `error` | The check could not run: `no_dataset`, `dataset_file_missing`, `read_failed` or `no_expectations`. |
+
+| Field | Content |
+| --- | --- |
+| `dataset` | The dataset directory and the identity of the `file.cio` bytes read. |
+| `expectations` | `origin` (`layouts` or `schema`), `swatplus`, and the `path` and `sha256` of the expectations file. |
+| `coverage` | `complete`; `named_files`, `checked_files`, `unchecked_files`; `unjudged_rows` and up to 50 of them in `unjudged`. |
+| `files` | One entry per distinct file named on a `file.cio` row: the `label` and `cio_line` that name it, `outcome` (`match`, `short` or `unchecked`), the unchecked `reason`, the identity of the bytes judged, `read_at`, `needed`, `rows_checked`, `rows_unjudged` and `short_rows`. |
+| `findings` | Each short line, up to 20 per file and 200 in all: `file`, `line`, `at_end`, `found`, `needed`, `missing_columns`, `read_at`. The `short_rows` counts always cover every line. |
+
+### What is not judged
+
+- **Files with no read layout** (`no_layout`), including a file `file.cio`
+  names by something other than SWAT+'s default name: layouts are matched by
+  file name.
+- **Files of lines of different kinds or nested records** (`sections`), such
+  as `print.prt` and `management.sch`.
+- **Files named but absent** (`missing`) or unreadable (`unreadable`).
+- **Lines whose values whitespace cannot count**: a quoted value
+  (`quoted_values`), or a short line with a comma, slash or repeat count
+  (`list_directed_syntax`). Blank lines and `#` lines are skipped, as the
+  editor's diagnostics skip them.
+
 ## Building the server
 
 The server is bundled alongside the extension:
@@ -227,6 +293,7 @@ python3 scripts/pandas_indexer.py \
 | `--metadata <path>` | shipped `txtinout-metadata.json` | Metadata for the indexer (with `--dataset`) |
 | `--scripts <dir>` | bundled `scripts/` | Location of `pandas_indexer.py` (with `--dataset`) |
 | `--source <dir>` | — | SWAT+ source tree whose `src/` `check_dataset` reads expectations from |
+| `--layouts <path>` | shipped `swatplus-generated-schema.json` | Tamandua `swatplus-layouts` JSON that `check_inputs` reads expectations from |
 
 ## Configuring an MCP client
 

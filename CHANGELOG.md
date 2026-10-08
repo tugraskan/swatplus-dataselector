@@ -4,6 +4,22 @@ All notable changes to the "swatplus-vscode-dataset-selector" extension will be 
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [Unreleased]
+
+### Added
+- `check_inputs` MCP tool: opens every file `file.cio` names and counts the
+  values on each data line against what SWAT+ reads from that file. A short
+  line is a `fail`; files with no read layout, files of nested records and
+  lines whose values cannot be counted are listed as not judged, so a pass
+  needs complete coverage.
+  - Structured verdict under the contract `dataselector-input-preflight/1`,
+    with a strict `outputSchema`.
+  - Expectations come from a Tamandua `swatplus-layouts` file (`layouts`, or
+    the server's `--layouts`) built from the checkout that will run, or by
+    default the shipped generated schema. The verdict names the SWAT+ commit
+    it judged against.
+  - See docs/MCP_SERVER.md.
+
 ## [0.5.0] - 2026-10-02
 
 ### Added
