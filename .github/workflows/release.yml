@@ -35,6 +35,7 @@ jobs:
           cp dist/mcp-server.js release-assets/
           cp resources/schema/swatplus-schema-enriched.json release-assets/
           cp resources/schema/swatplus-output-schema.json release-assets/
+          cp resources/schema/swatplus-generated-schema.json release-assets/
           cp swat-dataset-selector-*.vsix release-assets/ || true
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -45,6 +46,7 @@ jobs:
             release-assets/mcp-server.js
             release-assets/swatplus-schema-enriched.json
             release-assets/swatplus-output-schema.json
+            release-assets/swatplus-generated-schema.json
             release-assets/*.vsix
       - name: Publish to VS Code Marketplace
         # Needs a VSCE_PAT repo secret (Marketplace: Manage, for the

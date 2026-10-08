@@ -246,6 +246,8 @@ publishes the self-contained server and schemas as assets (see
 
 - `mcp-server.js` — the bundled, vscode-free server (run with `node mcp-server.js`)
 - `swatplus-schema-enriched.json`, `swatplus-output-schema.json` — the docs
+- `swatplus-generated-schema.json` — the read layouts `check_inputs` uses
+  when no `--layouts` file is given
 
 Pin a release tag and download those files. The server finds the schemas
 alongside the bundle automatically; otherwise pass `--schema` / `--output-schema`.

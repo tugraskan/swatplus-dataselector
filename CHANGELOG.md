@@ -4,7 +4,7 @@ All notable changes to the "swatplus-vscode-dataset-selector" extension will be 
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
-## [Unreleased]
+## [0.5.1] - 2026-10-08
 
 ### Added
 - `check_inputs` MCP tool: opens every file `file.cio` names and counts the
@@ -19,6 +19,9 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
     default the shipped generated schema. The verdict names the SWAT+ commit
     it judged against.
   - See docs/MCP_SERVER.md.
+- Each release also attaches `swatplus-generated-schema.json`, which
+  `check_inputs` reads by default, so a server run from the release assets
+  needs no checkout.
 
 ## [0.5.0] - 2026-10-02
 
