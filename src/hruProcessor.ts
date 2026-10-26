@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn } from 'child_process';
+import { buildHruProcessorArgs, HruAddedFeeder, HruSubsetFlags } from './hruProcessorOptions';
 
 export interface HruProcessorResult {
     ok: boolean;
@@ -12,6 +13,10 @@ export interface HruProcessorResult {
     run_simulation: boolean;
     simulation_exe?: string | null;
     retained_counts?: Record<string, number>;
+    /** HRUs added so channels do not have only channel inflows (workaround W1). */
+    added_hru_ids?: HruAddedFeeder[];
+    /** Ids (W1..W4) of the tracked SWAT+ workarounds the subset needed; see scripts/SWAT_WORKAROUNDS.md. */
+    workarounds_applied?: string[];
     error?: string;
 }
 
@@ -24,7 +29,7 @@ export interface HruRangeResult {
     error?: string;
 }
 
-export interface HruProcessorOptions {
+export interface HruProcessorOptions extends HruSubsetFlags {
     datasetPath: string;
     hruIds: string;
     keepRouting: boolean;
@@ -162,22 +167,7 @@ export async function runHruProcessor(
     options: HruProcessorOptions,
     outputChannel: vscode.OutputChannel
 ): Promise<HruProcessorResult> {
-    const args = [
-        '--dataset',
-        options.datasetPath,
-        '--hru-ids',
-        options.hruIds
-    ];
-
-    if (options.keepRouting) {
-        args.push('--keep-routing');
-    }
-    if (options.runSwat) {
-        args.push('--run-swat');
-    }
-    if (options.executablePath) {
-        args.push('--exe', options.executablePath);
-    }
+    const args = buildHruProcessorArgs(options);
 
     const result = await runHruProcessorJson<HruProcessorResult>(context, args, outputChannel);
     if (!result.ok) {
