@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Create reduced SWAT+ TxtInOut folders for selected HRUs.
 
-The extension uses this as a dependency-free sidecar. It vendors the useful
-core behavior from SWATPLUS_HRU_Processor and replaces the Tkinter GUI with a
-small CLI that returns JSON.
+The SWAT+ HRU Subset extension (hru-subset/) uses this as a dependency-free sidecar. It vendors the
+useful core behavior from SWATPLUS_HRU_Processor and replaces the Tkinter GUI with a small CLI that
+returns JSON. Besides making a subset it can describe one without writing anything (--plan), list the
+HRUs of a dataset (--hru-table) and report their range (--hru-range).
 """
 
 from __future__ import annotations
@@ -115,7 +116,7 @@ SWAT_BRANCH_COMMITS = {
 }
 
 # Every workaround the tool applies for a SWAT+ defect, so each one can be
-# removed once SWAT+ is fixed. scripts/SWAT_WORKAROUNDS.md is rendered from this
+# removed once SWAT+ is fixed. SWAT_WORKAROUNDS.md is rendered from this
 # list (render_workarounds_markdown) and `--check-swat-source` greps the patterns.
 #
 # A bug entry names a file under the checkout's src/ folder and a regular
@@ -318,15 +319,15 @@ def _grep_command(bug: dict[str, Any]) -> str:
 
 
 def render_workarounds_markdown() -> str:
-    """Render scripts/SWAT_WORKAROUNDS.md from the registry (the file is generated)."""
+    """Render SWAT_WORKAROUNDS.md from the registry (the file is generated)."""
     out: list[str] = [
         "# SWAT+ workarounds in the HRU subset tool",
         "",
         "<!-- Generated from SWAT_WORKAROUNDS in hru_processor.py. Edit the registry, then regenerate:",
         "     python -c \"import hru_processor as h; open('SWAT_WORKAROUNDS.md', 'w', newline='\\n').write(h.render_workarounds_markdown())\"",
-        "     (run from scripts/). A unit test fails when this file and the registry differ. -->",
+        "     (run from hru-subset/python/). A unit test fails when this file and the registry differ. -->",
         "",
-        "`scripts/hru_processor.py` works around defects in SWAT+ so that a subset of a dataset can run. Each",
+        "`hru-subset/python/hru_processor.py` works around defects in SWAT+ so that a subset of a dataset can run. Each",
         "workaround has an id (`W1`..`W4`), is listed in the JSON result as `workarounds_applied`, and is",
         "recorded here with the SWAT+ code it works around, so it can be removed once SWAT+ is fixed.",
         "",
@@ -337,7 +338,7 @@ def render_workarounds_markdown() -> str:
         "To see which workarounds a SWAT+ checkout still needs:",
         "",
         "```bash",
-        "python scripts/hru_processor.py --check-swat-source /path/to/swatplus",
+        "python hru-subset/python/hru_processor.py --check-swat-source /path/to/swatplus",
         "```",
         "",
         "The command greps each pattern below under `src/` and prints JSON with one status per workaround:",
@@ -409,7 +410,7 @@ def render_workarounds_markdown() -> str:
     out.append("   can go.")
     out.append("2. Delete its code and its entry in `SWAT_WORKAROUNDS`, and the flag from the CLI and from")
     out.append("   `src/hruProcessor.ts` and the extension options.")
-    out.append("3. Update `scripts/test_hru_processor.py`; the registry test lists every id.")
+    out.append("3. Update `hru-subset/python/test_hru_processor.py`; the registry test lists every id.")
     out.append("")
     return "\n".join(out)
 
@@ -735,33 +736,25 @@ def column_index(header: list[str], names: set[str], default: int) -> int:
     return next((index for index, column in enumerate(header) if column.lower() in lowered), default)
 
 
-def compact_hydrology_wet(directory: str | os.PathLike[str]) -> dict[str, int]:
-    """W2: rewrite hydrology.wet so each wetland's row sits at its own HRU number.
+def _read_wetland_inputs(directory: str) -> dict[str, Any] | None:
+    """The tables W2 works from, or None when a file is missing or too short.
 
-    SWAT+ fills the per-HRU array wet_hyd at the HRU's number but et_act reads it at the
-    hydrology.wet row. So the row of each wetland's hydrology goes to the number of the first
-    kept HRU that uses it (hru.con -> hru-data.hru SURF_STOR -> wetland.wet HYD -> hydrology.wet).
-    Rows in between are copies named unused_row_<n>, so there are never more rows than HRUs
-    and wet_hyd(row) is the wetland's own entry (other HRUs sharing it read the same data).
-
-    Returns {"wetlands", "placeholders", "rows", "changed"}; changed is 0 when the file was left
-    alone (no kept wetland, or the rows are already placed).
+    props_of_hru: HRU number -> hru-data.hru row id (hru.con), store_of_props: that id -> SURF_STOR,
+    hyd_of_store: wetland name -> hydrology name (wetland.wet), hyd_lines/hyd_eol: hydrology.wet.
     """
-    directory = os.fspath(directory)
     con_path = os.path.join(directory, "hru.con")
     hru_path = os.path.join(directory, "hru-data.hru")
     wet_path = os.path.join(directory, "wetland.wet")
     hyd_path = os.path.join(directory, "hydrology.wet")
-    result = {"wetlands": 0, "placeholders": 0, "rows": 0, "changed": 0}
     if not all(os.path.isfile(path) for path in (con_path, hru_path, wet_path, hyd_path)):
-        return result
+        return None
 
     con_lines, _ = read_text_lines(con_path)
     hru_lines, _ = read_text_lines(hru_path)
     wet_lines, _ = read_text_lines(wet_path)
     hyd_lines, hyd_eol = read_text_lines(hyd_path)
     if min(len(con_lines), len(hru_lines), len(wet_lines), len(hyd_lines)) < 3:
-        return result
+        return None
 
     props_of_hru: dict[int, int] = {}
     for line in con_lines[2:]:
@@ -789,6 +782,22 @@ def compact_hydrology_wet(directory: str | os.PathLike[str]) -> dict[str, int]:
         if len(fields) > max(name_col, hyd_col):
             hyd_of_store.setdefault(fields[name_col], fields[hyd_col])
 
+    return {
+        "props_of_hru": props_of_hru,
+        "store_of_props": store_of_props,
+        "hyd_of_store": hyd_of_store,
+        "hyd_lines": hyd_lines,
+        "hyd_eol": hyd_eol,
+    }
+
+
+def _aligned_hydrology_rows(
+    props_of_hru: dict[int, int],
+    store_of_props: dict[int, str],
+    hyd_of_store: dict[str, str],
+    hyd_lines: list[str],
+) -> tuple[list[str], list[str], dict[str, int]] | None:
+    """(new rows, current rows, {"wetlands", "placeholders", "rows"}) or None when no kept HRU has a wetland."""
     rows = [line for line in hyd_lines[2:] if line.strip()]
     row_of_name: dict[str, str] = {}
     for line in rows:
@@ -802,7 +811,7 @@ def compact_hydrology_wet(directory: str | os.PathLike[str]) -> dict[str, int]:
         if hyd is not None and hyd in row_of_name:
             first_hru.setdefault(hyd, hru_id)
     if not first_hru:
-        return result
+        return None
 
     name_at = {hru_id: name for name, hru_id in first_hru.items()}
     template = row_of_name[name_at[min(name_at)]]
@@ -812,16 +821,70 @@ def compact_hydrology_wet(directory: str | os.PathLike[str]) -> dict[str, int]:
             new_rows.append(row_of_name[name_at[position]])
         else:
             new_rows.append(replace_token(template, 0, f"unused_row_{position}"))
-    result.update(wetlands=len(name_at), placeholders=len(new_rows) - len(name_at), rows=len(new_rows))
+    summary = {"wetlands": len(name_at), "placeholders": len(new_rows) - len(name_at), "rows": len(new_rows)}
+    return new_rows, rows, summary
+
+
+def compact_hydrology_wet(directory: str | os.PathLike[str]) -> dict[str, int]:
+    """W2: rewrite hydrology.wet so each wetland's row sits at its own HRU number.
+
+    SWAT+ fills the per-HRU array wet_hyd at the HRU's number but et_act reads it at the
+    hydrology.wet row. So the row of each wetland's hydrology goes to the number of the first
+    kept HRU that uses it (hru.con -> hru-data.hru SURF_STOR -> wetland.wet HYD -> hydrology.wet).
+    Rows in between are copies named unused_row_<n>, so there are never more rows than HRUs
+    and wet_hyd(row) is the wetland's own entry (other HRUs sharing it read the same data).
+
+    Returns {"wetlands", "placeholders", "rows", "changed"}; changed is 0 when the file was left
+    alone (no kept wetland, or the rows are already placed).
+    """
+    directory = os.fspath(directory)
+    result = {"wetlands": 0, "placeholders": 0, "rows": 0, "changed": 0}
+    inputs = _read_wetland_inputs(directory)
+    if inputs is None:
+        return result
+    aligned = _aligned_hydrology_rows(
+        inputs["props_of_hru"], inputs["store_of_props"], inputs["hyd_of_store"], inputs["hyd_lines"]
+    )
+    if aligned is None:
+        return result
+    new_rows, rows, summary = aligned
+    result.update(summary)
     if new_rows == rows:
         return result
 
-    write_text_lines(hyd_path, hyd_lines[:2] + new_rows, hyd_eol)
+    hyd_lines = inputs["hyd_lines"]
+    write_text_lines(os.path.join(directory, "hydrology.wet"), hyd_lines[:2] + new_rows, inputs["hyd_eol"])
     result["changed"] = 1
     print(
-        f"hydrology.wet aligned to the HRU numbers: {len(name_at)} wetland row(s), "
-        f"{result['placeholders']} placeholder(s), {len(new_rows)} of {len(rows)} row(s) kept."
+        f"hydrology.wet aligned to the HRU numbers: {summary['wetlands']} wetland row(s), "
+        f"{summary['placeholders']} placeholder(s), {len(new_rows)} of {len(rows)} row(s) kept."
     )
+    return result
+
+
+def plan_hydrology_wet(directory: str | os.PathLike[str], kept_hru_ids: list[int]) -> dict[str, int]:
+    """What compact_hydrology_wet would do to a subset of `directory`, without writing anything.
+
+    `kept_hru_ids` are the HRUs of the full dataset in the order the subset numbers them 1..n.
+    Returns the same dictionary as compact_hydrology_wet.
+    """
+    directory = os.fspath(directory)
+    result = {"wetlands": 0, "placeholders": 0, "rows": 0, "changed": 0}
+    inputs = _read_wetland_inputs(directory)
+    if inputs is None:
+        return result
+    source_props = inputs["props_of_hru"]
+    props_of_hru = {
+        new_no: source_props[old_id] for new_no, old_id in enumerate(kept_hru_ids, start=1) if old_id in source_props
+    }
+    aligned = _aligned_hydrology_rows(
+        props_of_hru, inputs["store_of_props"], inputs["hyd_of_store"], inputs["hyd_lines"]
+    )
+    if aligned is None:
+        return result
+    new_rows, rows, summary = aligned
+    result.update(summary)
+    result["changed"] = 0 if new_rows == rows else 1
     return result
 
 
@@ -1556,18 +1619,54 @@ class FileModifier:
         print(f"hru-data.hru updated: kept {len(renumbered)} row(s).")
 
 
+def extract_routing_targets(fields: list[str]) -> list[tuple[str, int, str, float]]:
+    """The (object type, object id, hydrograph type, fraction) outflows of one .con row.
+
+    Column 12 holds the number of outflows; each is four fields starting at column 13.
+    """
+    targets: list[tuple[str, int, str, float]] = []
+    try:
+        src_tot = int(fields[12])
+    except (IndexError, ValueError):
+        return targets
+    for index in range(src_tot):
+        base = 13 + index * 4
+        if base + 3 >= len(fields):
+            break
+        obj_typ = fields[base]
+        try:
+            obj_id = int(fields[base + 1])
+        except ValueError:
+            continue
+        hyd_typ = fields[base + 2]
+        try:
+            frac = float(fields[base + 3])
+        except ValueError:
+            frac = 1.0
+        targets.append((obj_typ, obj_id, hyd_typ, frac))
+    return targets
+
+
+
 class RoutingTracer:
     def __init__(self, txtinout_dir: str | os.PathLike[str], add_feeder_hrus: bool = True):
         self.dir = os.fspath(txtinout_dir)
         self.add_feeder_hrus = add_feeder_hrus
         self.added_hrus: list[dict[str, Any]] = []
+        self.warnings: list[str] = []
+        self._left_out_rus: set[int] = set()
         self._elem_id_map: dict[int, int] = {}
         self._graph: dict[tuple[str, int], list[tuple[str, int, str, float]]] = {}
         self._names: dict[tuple[str, int], str] = {}
         self._ru_elements: dict[int, list[int]] = {}
         self._element_objects: dict[int, tuple[str, int]] = {}
 
-    def trace_and_filter(self, selected_hru_ids: list[int]) -> tuple[dict[str, set[int]], dict[str, dict[int, int]]]:
+    def plan(self, selected_hru_ids: list[int]) -> dict[str, set[int]]:
+        """Everything the trace decides, without writing: the objects to keep, by type.
+
+        Reads the directory it was made with and never changes it, so it can be pointed at the
+        full dataset. `added_hrus` and `warnings` are filled in as a side effect.
+        """
         selected = sorted({int(hru_id) for hru_id in selected_hru_ids})
         self._load_graph()
         missing = [hru_id for hru_id in selected if ("hru", hru_id) not in self._graph]
@@ -1580,10 +1679,36 @@ class RoutingTracer:
         keep = self._compute_keep(selected)
         if self.add_feeder_hrus:
             keep = self._add_feeder_hrus(selected, keep)
+        else:
+            channel_only = self._channel_only_channels(keep)
+            if channel_only:
+                self._warn(
+                    f"{len(channel_only)} kept channel(s) have only channel inflows ({self._label_ids(channel_only)}). "
+                    "SWAT+ main/dev ch_temp reads hin_d(0) there and can crash; leave the feeder HRUs (W1) on."
+                )
+
+        if self._left_out_rus:
+            self.warnings.append(
+                "Routing units left out because none of their elements is kept: "
+                f"{self._label_ids(sorted(self._left_out_rus))}."
+            )
 
         print("Objects to keep:")
         for typ in sorted(keep):
             print(f"  {typ}: {sorted(keep[typ])}")
+        return keep
+
+    def _warn(self, message: str) -> None:
+        self.warnings.append(message)
+        print(f"  WARNING: {message}")
+
+    @staticmethod
+    def _label_ids(ids: list[int], limit: int = 8) -> str:
+        shown = ", ".join(str(item) for item in ids[:limit])
+        return shown + (f", and {len(ids) - limit} more" if len(ids) > limit else "")
+
+    def trace_and_filter(self, selected_hru_ids: list[int]) -> tuple[dict[str, set[int]], dict[str, dict[int, int]]]:
+        keep = self.plan(selected_hru_ids)
 
         id_maps = {
             typ: {old: new for new, old in enumerate(sorted(ids), start=1)}
@@ -1719,6 +1844,7 @@ class RoutingTracer:
             keep = self._trace(selected, excluded)
             empty = {ru_id for ru_id in keep.get("ru", set()) if not self._ru_has_kept_element(ru_id, keep)}
             if not empty:
+                self._left_out_rus = excluded
                 return keep
             print(f"Routing units with no kept element are left out: {sorted(empty)}")
             excluded |= empty
@@ -1775,7 +1901,7 @@ class RoutingTracer:
                         break
                 label = self._names.get(("sdc", channel_id), "")
                 if choice is None:
-                    print(f"  WARNING: channel {channel_id} {label} has only channel inflows and no feeder HRU was found.")
+                    self._warn(f"channel {channel_id} {label} has only channel inflows and no feeder HRU was found.")
                     continue
                 feeder_typ, feeder_id, hru_id = choice
                 feeder_label = self._names.get((feeder_typ, feeder_id), "")
@@ -1818,27 +1944,7 @@ class RoutingTracer:
         return expand_element_tokens(tokens)
 
     def _extract_routing_targets(self, fields: list[str]) -> list[tuple[str, int, str, float]]:
-        targets: list[tuple[str, int, str, float]] = []
-        try:
-            src_tot = int(fields[12])
-        except (IndexError, ValueError):
-            return targets
-        for index in range(src_tot):
-            base = 13 + index * 4
-            if base + 3 >= len(fields):
-                break
-            obj_typ = fields[base]
-            try:
-                obj_id = int(fields[base + 1])
-            except ValueError:
-                continue
-            hyd_typ = fields[base + 2]
-            try:
-                frac = float(fields[base + 3])
-            except ValueError:
-                frac = 1.0
-            targets.append((obj_typ, obj_id, hyd_typ, frac))
-        return targets
+        return extract_routing_targets(fields)
 
     def _find_routing_units_for_hrus(self, hru_ids: list[int]) -> set[int]:
         hru_set = set(hru_ids)
@@ -2225,12 +2331,14 @@ def process_hru_subset(
 
     workarounds_applied: list[str] = []
     added_hru_ids: list[dict[str, Any]] = []
+    warnings: list[str] = []
 
     if keep_routing:
         tracer = RoutingTracer(dest_dir, add_feeder_hrus=not exact_hrus)
         keep, id_maps = tracer.trace_and_filter(hru_ids)
         retained_counts = {key: len(value) for key, value in keep.items()}
         added_hru_ids = tracer.added_hrus
+        warnings = tracer.warnings
         if added_hru_ids:
             workarounds_applied.append("W1")
     else:
@@ -2264,7 +2372,7 @@ def process_hru_subset(
         workarounds_applied.append("W4")
 
     if workarounds_applied:
-        print(f"Workarounds applied: {', '.join(workarounds_applied)} (see scripts/SWAT_WORKAROUNDS.md)")
+        print(f"Workarounds applied: {', '.join(workarounds_applied)} (see SWAT_WORKAROUNDS.md next to this script)")
 
     simulation_exe: str | None = None
     if run_simulation:
@@ -2289,6 +2397,7 @@ def process_hru_subset(
         "retained_counts": retained_counts,
         "added_hru_ids": added_hru_ids,
         "workarounds_applied": workarounds_applied,
+        "warnings": warnings,
         "id_maps": {
             key: {str(old): new for old, new in value.items()}
             for key, value in id_maps.items()
@@ -2305,6 +2414,347 @@ def inspect_hru_range(dataset: str) -> dict[str, Any]:
         "min_hru": minimum,
         "max_hru": maximum,
         "total_hrus": total,
+    }
+
+
+def plan_hru_subset(
+    dataset: str,
+    hru_ids: list[int],
+    keep_routing: bool = False,
+    exact_hrus: bool = False,
+    keep_wetland_file: bool = False,
+    main_compat: bool = False,
+    no_outputs: bool = False,
+) -> dict[str, Any]:
+    """What process_hru_subset would do with the same arguments, without copying or writing anything.
+
+    Runs the tracing, the feeder-HRU selection (W1) and the workaround decisions against the dataset
+    itself, read-only, and returns the keys of a real run's result that do not depend on the written
+    files: retained_counts, added_hru_ids, workarounds_applied, plus the warnings. No output folder
+    is made or looked at.
+    """
+    source_dir = resolve_txtinout_dir(dataset)
+    added_hru_ids: list[dict[str, Any]] = []
+    warnings: list[str] = []
+
+    if keep_routing:
+        tracer = RoutingTracer(source_dir, add_feeder_hrus=not exact_hrus)
+        keep = tracer.plan(hru_ids)
+        retained_counts = {key: len(value) for key, value in keep.items()}
+        kept_hrus = sorted(keep.get("hru", set()))
+        added_hru_ids = tracer.added_hrus
+        warnings = tracer.warnings
+    else:
+        # Same order as modify_hru_con: the HRUs are numbered 1..n as they appear in hru.con.
+        table = read_table(str(source_dir), "hru.con")
+        if table is None:
+            raise ValueError(f"hru.con not found in {source_dir}.")
+        columns, rows = table
+        id_col = columns.get("id", 0)
+        wanted = set(hru_ids)
+        kept_hrus = []
+        for fields in rows:
+            try:
+                hru_id = int(fields[id_col])
+            except (IndexError, ValueError):
+                continue
+            if hru_id in wanted:
+                kept_hrus.append(hru_id)
+        missing = sorted(wanted - set(kept_hrus))
+        if missing:
+            raise ValueError(f"HRU ID(s) not found in hru.con: {missing}")
+        retained_counts = {"hru": len(kept_hrus)}
+
+    workarounds_applied: list[str] = []
+    if added_hru_ids:
+        workarounds_applied.append("W1")
+    if not keep_wetland_file and plan_hydrology_wet(source_dir, kept_hrus)["changed"]:
+        workarounds_applied.append("W2")
+    if main_compat:
+        workarounds_applied.append("W3")
+    if no_outputs:
+        workarounds_applied.append("W4")
+
+    return {
+        "ok": True,
+        "plan": True,
+        "source_dir": str(source_dir),
+        "hru_ids": hru_ids,
+        "keep_routing": keep_routing,
+        "options": {
+            "exact_hrus": exact_hrus,
+            "keep_wetland_file": keep_wetland_file,
+            "main_compat": main_compat,
+            "no_outputs": no_outputs,
+        },
+        "retained_counts": retained_counts,
+        "added_hru_ids": added_hru_ids,
+        "workarounds_applied": workarounds_applied,
+        "warnings": warnings,
+    }
+
+
+def _find_file(directory: str, name: str) -> str | None:
+    direct = os.path.join(directory, name)
+    if os.path.isfile(direct):
+        return direct
+    target = name.lower()
+    try:
+        for existing in os.listdir(directory):
+            if existing.lower() == target and os.path.isfile(os.path.join(directory, existing)):
+                return os.path.join(directory, existing)
+    except OSError:
+        pass
+    return None
+
+
+def read_table(directory: str, name: str) -> tuple[dict[str, int], list[list[str]]] | None:
+    """A SWAT+ table as (lower-case column name -> index, data rows), or None when the file is missing.
+
+    The first line is a title. The header is the first following line that does not start with a
+    number, which skips the count line some files (ls_unit.def) carry before it.
+    """
+    path = _find_file(directory, name)
+    if path is None:
+        return None
+    lines, _ = read_text_lines(path)
+    header_at = None
+    for index in range(1, min(len(lines), 6)):
+        fields = lines[index].split()
+        if fields and not re.fullmatch(r"-?\d+", fields[0]):
+            header_at = index
+            break
+    if header_at is None:
+        return None
+    columns: dict[str, int] = {}
+    for index, column in enumerate(lines[header_at].split()):
+        columns.setdefault(column.lower(), index)
+    rows = [line.split() for line in lines[header_at + 1 :] if line.strip()]
+    return columns, rows
+
+
+def _cell(fields: list[str], columns: dict[str, int], name: str, default: int | None = None) -> str | None:
+    index = columns.get(name, default)
+    if index is None or index >= len(fields):
+        return None
+    return fields[index]
+
+
+def _elements_of_definitions(
+    table: tuple[dict[str, int], list[list[str]]] | None, tot_column: str, name_column: str
+) -> list[tuple[str, list[int]]]:
+    """(definition name, element ids) of a rout_unit.def / ls_unit.def style table, in file order."""
+    if table is None:
+        return []
+    columns, rows = table
+    tot_index = columns.get(tot_column)
+    name_index = columns.get(name_column, 1)
+    if tot_index is None:
+        return []
+    result: list[tuple[str, list[int]]] = []
+    for fields in rows:
+        try:
+            count = int(fields[tot_index])
+        except (IndexError, ValueError):
+            continue
+        if name_index >= len(fields):
+            continue
+        tokens = fields[tot_index + 1 : tot_index + 1 + count]
+        result.append((fields[name_index], expand_element_tokens(tokens)))
+    return result
+
+
+def _hru_of_elements(table: tuple[dict[str, int], list[list[str]]] | None) -> dict[int, int]:
+    """Element id -> HRU number for the elements of a rout_unit.ele / ls_unit.ele table that are HRUs."""
+    if table is None:
+        return {}
+    columns, rows = table
+    typ_index = columns.get("obj_typ", 2)
+    no_index = columns.get("obj_typ_no", 3)
+    result: dict[int, int] = {}
+    for fields in rows:
+        try:
+            if fields[typ_index].lower() == "hru":
+                result[int(fields[0])] = int(fields[no_index])
+        except (IndexError, ValueError):
+            continue
+    return result
+
+
+def _hru_to_definitions(
+    definitions: list[tuple[str, list[int]]], element_hru: dict[int, int]
+) -> dict[int, list[str]]:
+    """HRU number -> names of the definitions that list it, in file order."""
+    result: dict[int, list[str]] = {}
+    for name, element_ids in definitions:
+        for element_id in element_ids:
+            hru_id = element_hru.get(element_id)
+            if hru_id is not None and name not in result.setdefault(hru_id, []):
+                result[hru_id].append(name)
+    return result
+
+
+_SUBBASIN_FROM_LSU = re.compile(r"^sub(?:basin)?[_-]?(.+)$", re.IGNORECASE)
+_SUBBASIN_FROM_RU = re.compile(r"^ru\d*[_-](.+)$", re.IGNORECASE)
+
+SUBBASIN_RULE = (
+    "Subbasin of an HRU, first match wins: (1) the landscape unit in ls_unit.def whose name starts with "
+    "'sub' and lists the HRU in ls_unit.ele, shown without its 'sub_' prefix; (2) the routing unit that "
+    "lists the HRU, when its name looks like ru<n>_<code>, shown as <code>; (3) the HRU's weather station "
+    "(hru.con WST) when it is not null. null (shown as '-') when none of these exists."
+)
+
+
+def _subbasin_of_hru(
+    hru_id: int,
+    lsu_names: dict[int, list[str]],
+    routing_unit: str | None,
+    weather_station: str | None,
+) -> tuple[str | None, str | None]:
+    """(subbasin label, which source gave it) following SUBBASIN_RULE."""
+    for name in lsu_names.get(hru_id, []):
+        match = _SUBBASIN_FROM_LSU.match(name)
+        if match:
+            return match.group(1), "ls_unit"
+    if routing_unit:
+        match = _SUBBASIN_FROM_RU.match(routing_unit)
+        if match:
+            return match.group(1), "routing_unit"
+    if weather_station and weather_station.lower() not in {"null", "0"}:
+        return weather_station, "weather_station"
+    return None, None
+
+
+def _hrus_receiving_water(directory: str) -> set[int]:
+    """HRU numbers that some connect (*.con) file routes to."""
+    receiving: set[int] = set()
+    try:
+        names = sorted(os.listdir(directory))
+    except OSError:
+        return receiving
+    for name in names:
+        if not name.lower().endswith(".con") or not os.path.isfile(os.path.join(directory, name)):
+            continue
+        lines, _ = read_text_lines(os.path.join(directory, name))
+        for line in lines[2:]:
+            fields = line.split()
+            if len(fields) < 17:
+                continue
+            for obj_typ, obj_id, _, _ in extract_routing_targets(fields):
+                if obj_typ.lower() == "hru":
+                    receiving.add(obj_id)
+    return receiving
+
+
+def build_hru_table(dataset: str) -> dict[str, Any]:
+    """One row per HRU of hru.con with what the HRU picker shows. Read-only.
+
+    Columns per row: id, name, landuse (landuse.lum name = hru-data.hru LU_MGT), landuse_group
+    (landuse.lum CAL_GRP), plant_community, management, area_ha (hru.con AREA), subbasin
+    (see SUBBASIN_RULE), routing_unit (rout_unit.def name of the unit that lists the HRU),
+    wetland (hru-data.hru SURF_STOR is not null) with wetland_name, and receives_upstream (some
+    .con file routes to the HRU). Optional files that are missing leave their columns empty
+    (null) and add a warning; only hru.con is required.
+    """
+    source_dir = str(resolve_txtinout_dir(dataset))
+    warnings: list[str] = []
+
+    con = read_table(source_dir, "hru.con")
+    if con is None:
+        raise ValueError(f"hru.con not found in {source_dir}.")
+    con_columns, con_rows = con
+    if "id" not in con_columns:
+        raise ValueError("No 'ID' column found in hru.con file.")
+
+    data = read_table(source_dir, "hru-data.hru")
+    land = read_table(source_dir, "landuse.lum")
+    if data is None:
+        warnings.append("hru-data.hru not found: land use, plant community, management and wetland columns are empty.")
+    elif land is None:
+        warnings.append("landuse.lum not found: plant community and management columns are empty.")
+
+    data_by_id: dict[str, tuple[str | None, str | None]] = {}
+    if data is not None:
+        data_columns, data_rows = data
+        for fields in data_rows:
+            data_by_id[fields[0]] = (
+                _cell(fields, data_columns, "lu_mgt", 5),
+                _cell(fields, data_columns, "surf_stor", 7),
+            )
+
+    land_by_name: dict[str, tuple[str | None, str | None, str | None]] = {}
+    if land is not None:
+        land_columns, land_rows = land
+        for fields in land_rows:
+            land_by_name.setdefault(
+                fields[0],
+                (
+                    _cell(fields, land_columns, "cal_grp"),
+                    _cell(fields, land_columns, "plnt_com"),
+                    _cell(fields, land_columns, "mgt"),
+                ),
+            )
+
+    rout_ele = read_table(source_dir, "rout_unit.ele")
+    rout_def = read_table(source_dir, "rout_unit.def")
+    if rout_ele is None or rout_def is None:
+        warnings.append("rout_unit.ele or rout_unit.def not found: the routing unit column is empty.")
+    ru_of_hru = _hru_to_definitions(
+        _elements_of_definitions(rout_def, "elem_tot", "name"), _hru_of_elements(rout_ele)
+    )
+
+    lsu_of_hru = _hru_to_definitions(
+        _elements_of_definitions(read_table(source_dir, "ls_unit.def"), "elem_tot", "lsu_name"),
+        _hru_of_elements(read_table(source_dir, "ls_unit.ele")),
+    )
+
+    receiving = _hrus_receiving_water(source_dir)
+
+    rows: list[dict[str, Any]] = []
+    sources: dict[str, int] = {}
+    for fields in con_rows:
+        try:
+            hru_id = int(fields[con_columns["id"]])
+        except (IndexError, ValueError):
+            continue
+        props = _cell(fields, con_columns, "hru", 7) or str(hru_id)
+        landuse, surf_stor = data_by_id.get(props, (None, None))
+        group, plant, management = land_by_name.get(landuse or "", (None, None, None))
+        routing_unit = (ru_of_hru.get(hru_id) or [None])[0]
+        subbasin, source = _subbasin_of_hru(hru_id, lsu_of_hru, routing_unit, _cell(fields, con_columns, "wst", 8))
+        if source:
+            sources[source] = sources.get(source, 0) + 1
+        area_text = _cell(fields, con_columns, "area")
+        try:
+            area = float(area_text) if area_text is not None else None
+        except ValueError:
+            area = None
+        wetland = surf_stor is not None and surf_stor.lower() != "null"
+        rows.append({
+            "id": hru_id,
+            "name": _cell(fields, con_columns, "name"),
+            "landuse": landuse,
+            "landuse_group": group,
+            "plant_community": plant,
+            "management": management,
+            "area_ha": area,
+            "subbasin": subbasin,
+            "routing_unit": routing_unit,
+            "wetland": wetland,
+            "wetland_name": surf_stor if wetland else None,
+            "receives_upstream": hru_id in receiving,
+        })
+    if not rows:
+        raise ValueError("No HRU IDs found in hru.con file.")
+
+    return {
+        "ok": True,
+        "source_dir": source_dir,
+        "total_hrus": len(rows),
+        "rows": rows,
+        "subbasin_rule": SUBBASIN_RULE,
+        "subbasin_sources": sources,
+        "warnings": warnings,
     }
 
 
@@ -2342,6 +2792,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--overwrite", action="store_true", help="Overwrite output folder if it exists.")
     parser.add_argument("--hru-range", action="store_true", help="Print HRU range/count only.")
     parser.add_argument(
+        "--hru-table",
+        action="store_true",
+        help="List every HRU with its land use, plant community, management, area, subbasin, routing unit, "
+        "wetland flag and whether upstream water reaches it. Read-only.",
+    )
+    parser.add_argument(
+        "--plan",
+        action="store_true",
+        help="With --hru-ids: do the tracing, the feeder-HRU selection and the workaround decisions and "
+        "report what a run would keep and add, without copying or writing anything (--output-dir is ignored).",
+    )
+    parser.add_argument(
         "--check-swat-source",
         metavar="SWATPLUS_DIR",
         help="Grep a SWAT+ checkout for the defects the workarounds cover and print, as JSON, which "
@@ -2350,10 +2812,42 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--print-workarounds",
         action="store_true",
-        help="Print scripts/SWAT_WORKAROUNDS.md (rendered from the registry) and exit.",
+        help="Print SWAT_WORKAROUNDS.md (rendered from the registry) and exit.",
     )
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
     return parser
+
+
+def quietly(json_mode: bool, func: Any, *args: Any, **kwargs: Any) -> dict[str, Any]:
+    """Call func; with --json its progress prints go to stderr so stdout holds only the JSON."""
+    if json_mode:
+        with contextlib.redirect_stdout(sys.stderr):
+            return func(*args, **kwargs)
+    return func(*args, **kwargs)
+
+
+def print_hru_table(table: dict[str, Any]) -> None:
+    columns = (
+        "id", "name", "landuse", "landuse_group", "plant_community", "management",
+        "area_ha", "subbasin", "routing_unit", "wetland", "receives_upstream",
+    )
+    print(f"{table['total_hrus']} HRUs in {table['source_dir']}")
+    print("\t".join(columns))
+    for row in table["rows"]:
+        print("\t".join("-" if row[column] is None else str(row[column]) for column in columns))
+    for warning in table["warnings"]:
+        print(f"Warning: {warning}", file=sys.stderr)
+
+
+def print_plan(plan: dict[str, Any]) -> None:
+    counts = ", ".join(f"{count} {key}" for key, count in plan["retained_counts"].items())
+    print(f"Plan for {len(plan['hru_ids'])} requested HRU(s) in {plan['source_dir']} (nothing written)")
+    print(f"  would keep: {counts}")
+    for item in plan["added_hru_ids"]:
+        print(f"  would add HRU {item['hru_id']}: {item['reason']}")
+    print(f"  workarounds that apply: {', '.join(plan['workarounds_applied']) or 'none'}")
+    for warning in plan["warnings"]:
+        print(f"  warning: {warning}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -2369,15 +2863,29 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if not args.dataset:
             raise ValueError("--dataset is required.")
+        if sum(1 for flag in (args.hru_range, args.hru_table, args.plan) if flag) > 1:
+            raise ValueError("--hru-range, --hru-table and --plan cannot be combined.")
         if args.hru_range:
-            if args.json:
-                with contextlib.redirect_stdout(sys.stderr):
-                    result = inspect_hru_range(args.dataset)
-            else:
-                result = inspect_hru_range(args.dataset)
+            result = quietly(args.json, inspect_hru_range, args.dataset)
+        elif args.hru_table:
+            result = quietly(args.json, build_hru_table, args.dataset)
+        elif args.plan:
+            if not args.hru_ids:
+                raise ValueError("--hru-ids is required with --plan.")
+            result = quietly(
+                args.json,
+                plan_hru_subset,
+                args.dataset,
+                parse_filter_ids(args.hru_ids),
+                keep_routing=args.keep_routing,
+                exact_hrus=args.exact_hrus,
+                keep_wetland_file=args.keep_wetland_file,
+                main_compat=args.main_compat,
+                no_outputs=args.no_outputs,
+            )
         else:
             if not args.hru_ids:
-                raise ValueError("--hru-ids is required unless --hru-range is used.")
+                raise ValueError("--hru-ids is required unless --hru-range or --hru-table is used.")
             hru_ids = parse_filter_ids(args.hru_ids)
             options = dict(
                 dataset=args.dataset,
@@ -2392,19 +2900,20 @@ def main(argv: list[str] | None = None) -> int:
                 main_compat=args.main_compat,
                 no_outputs=args.no_outputs,
             )
-            if args.json:
-                with contextlib.redirect_stdout(sys.stderr):
-                    result = process_hru_subset(**options)
-            else:
-                result = process_hru_subset(**options)
+            result = quietly(args.json, process_hru_subset, **options)
 
         if args.json:
-            print(json.dumps(result, indent=2))
+            # The table is large (one object per HRU): no indentation.
+            print(json.dumps(result, separators=(",", ":")) if args.hru_table else json.dumps(result, indent=2))
         elif args.hru_range:
             print(
                 f"HRU range: {result['min_hru']} - {result['max_hru']} "
                 f"({result['total_hrus']} total)"
             )
+        elif args.hru_table:
+            print_hru_table(result)
+        elif args.plan:
+            print_plan(result)
         else:
             print(f"Subset created: {result['output_dir']}")
         return 0

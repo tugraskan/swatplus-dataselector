@@ -2,9 +2,9 @@
 
 <!-- Generated from SWAT_WORKAROUNDS in hru_processor.py. Edit the registry, then regenerate:
      python -c "import hru_processor as h; open('SWAT_WORKAROUNDS.md', 'w', newline='\n').write(h.render_workarounds_markdown())"
-     (run from scripts/). A unit test fails when this file and the registry differ. -->
+     (run from hru-subset/python/). A unit test fails when this file and the registry differ. -->
 
-`scripts/hru_processor.py` works around defects in SWAT+ so that a subset of a dataset can run. Each
+`hru-subset/python/hru_processor.py` works around defects in SWAT+ so that a subset of a dataset can run. Each
 workaround has an id (`W1`..`W4`), is listed in the JSON result as `workarounds_applied`, and is
 recorded here with the SWAT+ code it works around, so it can be removed once SWAT+ is fixed.
 
@@ -13,7 +13,7 @@ Confirmed against these SWAT+ commits: `NAM_Branch` 6efcee0, `main` 6f51536, `de
 To see which workarounds a SWAT+ checkout still needs:
 
 ```bash
-python scripts/hru_processor.py --check-swat-source /path/to/swatplus
+python hru-subset/python/hru_processor.py --check-swat-source /path/to/swatplus
 ```
 
 The command greps each pattern below under `src/` and prints JSON with one status per workaround:
@@ -112,4 +112,4 @@ ru_read_elements sizes ru_def by the largest element id in rout_unit.ele and all
    can go.
 2. Delete its code and its entry in `SWAT_WORKAROUNDS`, and the flag from the CLI and from
    `src/hruProcessor.ts` and the extension options.
-3. Update `scripts/test_hru_processor.py`; the registry test lists every id.
+3. Update `hru-subset/python/test_hru_processor.py`; the registry test lists every id.

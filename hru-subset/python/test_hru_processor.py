@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unit tests for scripts/hru_processor.py (HRU subsets and the tracked SWAT+ workarounds).
+"""Unit tests for hru_processor.py (HRU subsets and the tracked SWAT+ workarounds).
 
 The fixtures are a tiny SWAT+ dataset written to a temp folder: three subbasins
 A, B and C, each with an upland HRU, a riparian wetland HRU and two routing
@@ -11,7 +11,7 @@ units laid out like the 02070009 dataset:
 
     channels  1 -> 2 -> 3 -> 4 -> 5 -> 6 -> outlet   (A: 1,2  B: 3,4  C: 5,6)
 
-Run with:  python3 -m unittest scripts.test_hru_processor
+Run from this folder with:  python3 -m unittest test_hru_processor
 """
 
 import contextlib
@@ -19,6 +19,7 @@ import io
 import json
 import os
 import re
+import shutil
 import sys
 import tempfile
 import unittest
@@ -593,6 +594,248 @@ class RegistryTests(TempDirTest):
         payload = json.loads(buffer.getvalue())
         self.assertEqual(payload["workarounds_applied"], ["W2", "W3"])
         self.assertEqual(payload["added_hru_ids"], [])
+
+
+def tree_fingerprint(root):
+    """Every file under root with its size and modification time: proves a folder was only read."""
+    return sorted(
+        (str(path.relative_to(root)), path.stat().st_size, path.stat().st_mtime_ns)
+        for path in Path(root).rglob("*") if path.is_file()
+    )
+
+
+def run_cli(*argv):
+    """hp.main(argv) -> (exit code, stdout text)."""
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(io.StringIO()):
+        code = hp.main(list(argv))
+    return code, buffer.getvalue()
+
+
+class PlanTests(TempDirTest):
+    """--plan reports what a run would do, and a real run then does exactly that."""
+
+    SELECTIONS = [
+        ([1], dict(keep_routing=True)),
+        ([3], dict(keep_routing=True)),
+        ([1, 5], dict(keep_routing=True)),
+        ([1], dict(keep_routing=True, exact_hrus=True)),
+        ([2, 4], dict(keep_routing=True, keep_wetland_file=True)),
+        ([1, 3], dict()),
+        ([2, 4, 6], dict()),
+        ([1, 2, 3, 4, 5, 6], dict(keep_routing=True, main_compat=True, no_outputs=True)),
+    ]
+
+    def test_plan_matches_the_real_run(self):
+        for hru_ids, options in self.SELECTIONS:
+            with self.subTest(hru_ids=hru_ids, options=options):
+                plan = quiet(hp.plan_hru_subset, str(self.src), hru_ids, **options)
+                _, real = self.subset(hru_ids, **options)
+                for key in ("retained_counts", "added_hru_ids", "workarounds_applied", "warnings", "hru_ids",
+                            "keep_routing", "options", "source_dir"):
+                    self.assertEqual(plan[key], real[key], key)
+
+    def test_plan_changes_nothing_and_never_makes_the_output_folder(self):
+        out = self.tmp / "never_made"
+        before = tree_fingerprint(self.tmp)
+        code, text = run_cli("--dataset", str(self.src), "--hru-ids", "1", "--keep-routing", "--plan",
+                             "--output-dir", str(out), "--json")
+        self.assertEqual(code, 0)
+        self.assertFalse(out.exists())
+        self.assertEqual(tree_fingerprint(self.tmp), before)
+        payload = json.loads(text)
+        self.assertTrue(payload["ok"] and payload["plan"])
+        self.assertNotIn("output_dir", payload)
+        self.assertEqual([item["hru_id"] for item in payload["added_hru_ids"]], [4, 6])
+        self.assertEqual(payload["retained_counts"]["hru"], 4)
+        self.assertEqual(payload["workarounds_applied"], ["W1", "W2"])
+
+    def test_plan_without_keep_routing_counts_only_hrus_and_still_decides_w2(self):
+        plan = quiet(hp.plan_hru_subset, str(self.src), [2, 4])
+        self.assertEqual(plan["retained_counts"], {"hru": 2})
+        self.assertEqual(plan["added_hru_ids"], [])
+        self.assertEqual(plan["workarounds_applied"], ["W2"])  # hydrology.wet shrinks to the two kept wetlands
+        # Already aligned: the wetlands of new HRUs 1-3 use the first three rows, and there are only three.
+        aligned = build_dataset(self.tmp / "aligned", hydrology_rows=[
+            f"hyd_{x} 0.8 1200 1 1300 0.01 {evap}" for x, evap in zip("ABC", ("0.5", "0.6", "0.7"))])
+        plan = quiet(hp.plan_hru_subset, str(aligned), [2, 4, 6])
+        self.assertEqual(plan["workarounds_applied"], [])
+
+    def test_plan_reports_main_compat_and_no_outputs(self):
+        plan = quiet(hp.plan_hru_subset, str(self.src), [1], main_compat=True, no_outputs=True)
+        self.assertEqual(plan["workarounds_applied"], ["W3", "W4"])
+
+    def test_exact_hrus_warns_about_channels_with_only_channel_inflows(self):
+        plan = quiet(hp.plan_hru_subset, str(self.src), [1], keep_routing=True, exact_hrus=True)
+        self.assertEqual(plan["added_hru_ids"], [])
+        self.assertEqual(len(plan["warnings"]), 1)
+        self.assertIn("only channel inflows", plan["warnings"][0])
+        self.assertIn("3", plan["warnings"][0])  # channel 3 is the crash case
+
+    def test_unused_routing_unit_is_reported_as_a_warning(self):
+        work = self.tmp / "orphan"
+        build_dataset(work)
+        lines = read_lines(work / "rout_unit.con")
+        lines.append(con_row(7, "ru_orphan", 7, []))
+        lines[lines.index(next(l for l in lines if l.startswith("1 ru1_A")))] = con_row(
+            1, "ru1_A", 1, [("res", 1, 1), ("hru", 2, 1), ("aqu", 1, 1), ("ru", 7, 1)])
+        write_lines(work / "rout_unit.con", lines)
+        write_lines(work / "rout_unit.def", read_lines(work / "rout_unit.def") + ["7 ru_orphan 1 99"])
+        plan = quiet(hp.plan_hru_subset, str(work), [1], keep_routing=True, exact_hrus=True)
+        self.assertTrue(any("left out" in warning and "7" in warning for warning in plan["warnings"]))
+
+    def test_missing_hru_is_an_error_in_both_modes(self):
+        for keep_routing in (True, False):
+            with self.assertRaisesRegex(ValueError, r"not found in hru.con: \[99\]"):
+                quiet(hp.plan_hru_subset, str(self.src), [1, 99], keep_routing=keep_routing)
+
+    def test_cli_plan_needs_hru_ids_and_cannot_be_combined(self):
+        code, text = run_cli("--dataset", str(self.src), "--plan", "--json")
+        self.assertEqual(code, 1)
+        self.assertIn("--hru-ids is required with --plan", json.loads(text)["error"])
+        code, text = run_cli("--dataset", str(self.src), "--plan", "--hru-range", "--hru-ids", "1", "--json")
+        self.assertEqual(code, 1)
+        self.assertIn("cannot be combined", json.loads(text)["error"])
+
+    def test_cli_plan_text_mode_says_nothing_was_written(self):
+        code, text = run_cli("--dataset", str(self.src), "--hru-ids", "1", "--keep-routing", "--plan")
+        self.assertEqual(code, 0)
+        self.assertIn("nothing written", text)
+        self.assertIn("would add HRU 4", text)
+
+    def test_real_run_result_now_carries_warnings(self):
+        _, result = self.subset([1], keep_routing=True, exact_hrus=True)
+        self.assertEqual(len(result["warnings"]), 1)
+        _, result = self.subset([1, 3])
+        self.assertEqual(result["warnings"], [])
+
+
+class HruTableTests(TempDirTest):
+    LANDUSE = [
+        "lulc test",
+        "NAME CAL_GRP PLNT_COM MGT CN2",
+        "lum 1 up_plant mgt_a cn_a",
+        "lum 2 rip_plant null cn_b",
+    ]
+
+    def table(self, root=None):
+        return quiet(hp.build_hru_table, str(root or self.src))
+
+    def with_landuse(self):
+        # hru-data.hru in the fixture points every HRU at LU_MGT "lum"
+        write_lines(self.src / "landuse.lum", self.LANDUSE[:3] + ["lum_wet grp wetn null cn_c"])
+
+    def test_one_row_per_hru_with_the_picker_columns(self):
+        self.with_landuse()
+        table = self.table()
+        self.assertEqual(table["total_hrus"], 6)
+        self.assertEqual([row["id"] for row in table["rows"]], [1, 2, 3, 4, 5, 6])
+        row = table["rows"][0]
+        self.assertEqual(row, {
+            "id": 1, "name": "hru1", "landuse": "lum", "landuse_group": "1", "plant_community": "up_plant",
+            "management": "mgt_a", "area_ha": 10.0, "subbasin": "A", "routing_unit": "ru1_A",
+            "wetland": False, "wetland_name": None, "receives_upstream": False,
+        })
+
+    def test_wetland_flag_follows_surf_stor(self):
+        by_id = {row["id"]: row for row in self.table()["rows"]}
+        self.assertEqual([by_id[i]["wetland"] for i in range(1, 7)], [False, True, False, True, False, True])
+        self.assertEqual(by_id[2]["wetland_name"], "wet_A")
+        self.assertIsNone(by_id[1]["wetland_name"])
+
+    def test_receives_upstream_when_a_con_file_routes_to_the_hru(self):
+        by_id = {row["id"]: row for row in self.table()["rows"]}
+        # ru1_x routes to its riparian HRU (2, 4, 6); nothing routes to the upland HRUs
+        self.assertEqual([by_id[i]["receives_upstream"] for i in range(1, 7)],
+                         [False, True, False, True, False, True])
+
+    def test_routing_unit_is_the_unit_that_lists_the_hru(self):
+        by_id = {row["id"]: row for row in self.table()["rows"]}
+        self.assertEqual(by_id[1]["routing_unit"], "ru1_A")
+        self.assertEqual(by_id[2]["routing_unit"], "ru2_A")
+        self.assertEqual(by_id[6]["routing_unit"], "ru2_C")
+
+    def test_subbasin_comes_from_ls_unit_then_routing_unit_then_weather_station(self):
+        table = self.table()
+        self.assertEqual([row["subbasin"] for row in table["rows"]], ["A", "A", "B", "B", "C", "C"])
+        self.assertEqual(table["subbasin_sources"], {"ls_unit": 6})
+        (self.src / "ls_unit.def").unlink()
+        table = self.table()
+        self.assertEqual([row["subbasin"] for row in table["rows"]], ["A", "A", "B", "B", "C", "C"])
+        self.assertEqual(table["subbasin_sources"], {"routing_unit": 6})
+        for name in ("rout_unit.def", "rout_unit.ele"):
+            (self.src / name).unlink()
+        table = self.table()
+        self.assertEqual({row["subbasin"] for row in table["rows"]}, {"wst"})
+        self.assertEqual(table["subbasin_sources"], {"weather_station": 6})
+        self.assertTrue(any("routing unit" in warning for warning in table["warnings"]))
+
+    def test_subbasin_is_none_when_nothing_names_it(self):
+        for name in ("ls_unit.def", "rout_unit.def", "rout_unit.ele"):
+            (self.src / name).unlink()
+        lines = read_lines(self.src / "hru.con")
+        write_lines(self.src / "hru.con", [line.replace(" wst ", " null ") for line in lines])
+        table = self.table()
+        self.assertTrue(all(row["subbasin"] is None for row in table["rows"]))
+        self.assertEqual(table["subbasin_sources"], {})
+        self.assertIn("ls_unit.def", table["subbasin_rule"])
+
+    def test_optional_files_may_be_missing(self):
+        for name in ("hru-data.hru", "landuse.lum", "rout_unit.ele", "rout_unit.def", "ls_unit.def", "ls_unit.ele"):
+            path = self.src / name
+            if path.exists():
+                path.unlink()
+        table = self.table()
+        self.assertEqual(table["total_hrus"], 6)
+        row = table["rows"][0]
+        self.assertIsNone(row["landuse"])
+        self.assertIsNone(row["plant_community"])
+        self.assertFalse(row["wetland"])
+        self.assertIsNone(row["routing_unit"])
+        self.assertEqual(len(table["warnings"]), 2)  # hru-data.hru and the routing unit files
+
+    def test_hru_con_is_required(self):
+        (self.src / "hru.con").unlink()
+        with self.assertRaisesRegex(ValueError, "hru.con not found"):
+            self.table()
+
+    def test_file_names_match_case_insensitively(self):
+        os.rename(self.src / "hru-data.hru", self.src / "HRU-DATA.HRU")
+        by_id = {row["id"]: row for row in self.table()["rows"]}
+        self.assertTrue(by_id[2]["wetland"])
+
+    def test_a_folder_with_txtinout_is_resolved(self):
+        parent = self.tmp / "project"
+        parent.mkdir()
+        shutil.copytree(self.src, parent / "TxtInOut")
+        self.assertEqual(self.table(parent)["total_hrus"], 6)
+
+    def test_read_only(self):
+        before = tree_fingerprint(self.tmp)
+        self.table()
+        self.assertEqual(tree_fingerprint(self.tmp), before)
+
+    def test_cli_json_is_compact_and_text_mode_lists_the_rows(self):
+        code, text = run_cli("--dataset", str(self.src), "--hru-table", "--json")
+        self.assertEqual(code, 0)
+        self.assertNotIn("\n  ", text)
+        self.assertEqual(json.loads(text)["total_hrus"], 6)
+        code, text = run_cli("--dataset", str(self.src), "--hru-table")
+        self.assertEqual(code, 0)
+        self.assertIn("6 HRUs in", text)
+        self.assertIn("ru2_A", text)
+
+    def test_cli_error_is_json(self):
+        (self.src / "hru.con").unlink()
+        code, text = run_cli("--dataset", str(self.src), "--hru-table", "--json")
+        self.assertEqual(code, 1)
+        self.assertFalse(json.loads(text)["ok"])
+
+    def test_read_table_skips_the_count_line_before_the_header(self):
+        columns, rows = hp.read_table(str(self.src), "ls_unit.def")
+        self.assertEqual(columns["lsu_name"], 1)
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[0][:2], ["1", "sub_A"])
 
 
 class SourceCheckerTests(unittest.TestCase):
