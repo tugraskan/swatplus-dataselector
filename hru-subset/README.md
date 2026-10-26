@@ -4,15 +4,23 @@ Carve a SWAT+ dataset down to the HRUs you pick, in a new folder next to it, and
 run SWAT+ on the result. It does this one job and installs separately from
 [SWAT+ Dataset Selector](https://github.com/tugraskan/swatplus-dataselector).
 
-> Version 0.1.0, built locally and not published to the Marketplace.
+> Version 0.1.1, built locally and not published to the Marketplace.
 
 ## Use
 
-Run **SWAT+ HRU Subset: Create Subset…** from the Command Palette.
+Three ways to start it:
+
+- Click the **SWAT+ HRU Subset** icon in the activity bar (a grid of nine
+  squares) and press **Create Subset…**.
+- Right-click a folder in the Explorer and choose **Create HRU Subset from This
+  Folder…**; that folder is the dataset.
+- Run **SWAT+ HRU Subset: Create Subset…** from the Command Palette
+  (`Ctrl+Shift+P`).
 
 1. **Dataset folder.** Pick the folder with `file.cio`, or its parent when the
-   files are in a `TxtInOut` subfolder. If the folder is itself a subset made by
-   this tool you are warned (see below).
+   files are in a `TxtInOut` subfolder (skipped when you started from the
+   Explorer). If the folder is itself a subset made by this tool you are warned
+   (see below).
 2. **HRU range.** The script reports `N HRUs (min–max)`, shown in the next box.
 3. **HRU IDs.** Single ids and ranges: `1,4-6,10`. They are checked for format
    and against the range.
@@ -77,8 +85,9 @@ Only the standard library is needed.
 | `swatHruSubset.pythonPath` | Interpreter to use first. |
 | `swatHruSubset.swatExecutable` | SWAT+ executable for **Run SWAT+**. |
 
-Both are machine-scoped, so a workspace cannot set them. The extension is off in
-untrusted workspaces because it starts programs.
+Both are machine-scoped, so a workspace cannot set them. That is why the
+extension also works in Restricted Mode: nothing it starts is chosen by the
+workspace.
 
 ## The Python script
 
@@ -96,10 +105,10 @@ From this folder, with Node 22:
 npm install
 npm run compile      # copy the script, type-check, lint, bundle to dist/
 npm test             # unit tests (mocha, no VS Code needed)
-npx @vscode/vsce package   # builds swat-hru-subset-0.1.0.vsix
+npx @vscode/vsce package   # builds swat-hru-subset-0.1.1.vsix
 ```
 
-Install the VSIX by hand (`code --install-extension swat-hru-subset-0.1.0.vsix`)
+Install the VSIX by hand (`code --install-extension swat-hru-subset-0.1.1.vsix`)
 when you want it; the build does not install it.
 
 ### Check against a real dataset

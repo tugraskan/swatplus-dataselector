@@ -2,7 +2,7 @@
   "name": "swat-hru-subset",
   "displayName": "SWAT+ HRU Subset",
   "description": "Carve a SWAT+ dataset down to the HRUs you pick, in a new folder next to it, and run SWAT+ on the result.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "PbsandtDev",
   "license": "MIT",
   "repository": {
@@ -25,7 +25,7 @@
   "main": "./dist/extension.js",
   "capabilities": {
     "untrustedWorkspaces": {
-      "supported": false
+      "supported": true
     }
   },
   "contributes": {
@@ -33,9 +33,53 @@
       {
         "command": "swatHruSubset.createSubset",
         "title": "Create Subset…",
-        "category": "SWAT+ HRU Subset"
+        "category": "SWAT+ HRU Subset",
+        "icon": "$(split-horizontal)"
+      },
+      {
+        "command": "swatHruSubset.createSubsetFromFolder",
+        "title": "Create HRU Subset from This Folder…",
+        "icon": "$(split-horizontal)"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "swat-hru-subset",
+          "title": "SWAT+ HRU Subset",
+          "icon": "resources/subset-activitybar.svg"
+        }
+      ]
+    },
+    "views": {
+      "swat-hru-subset": [
+        {
+          "id": "swatHruSubsetView",
+          "name": "HRU Subset"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "swatHruSubsetView",
+        "contents": "Make a smaller copy of a SWAT+ dataset that keeps only the HRUs you pick.\n[Create Subset…](command:swatHruSubset.createSubset)\nYou can also right-click a dataset folder in the Explorer, or run **SWAT+ HRU Subset: Create Subset…** from the Command Palette."
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "swatHruSubset.createSubsetFromFolder",
+          "when": "false"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "swatHruSubset.createSubsetFromFolder",
+          "when": "explorerResourceIsFolder",
+          "group": "2_workspace@100"
+        }
+      ]
+    },
     "configuration": {
       "title": "SWAT+ HRU Subset",
       "properties": {

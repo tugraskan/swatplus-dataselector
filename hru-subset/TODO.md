@@ -1,6 +1,6 @@
 # TODO
 
-What this extension (0.1.0) does not do yet, and what has to happen around it.
+What this extension (0.1.1) does not do yet, and what has to happen around it.
 
 ## Option 2: an HRU picker
 

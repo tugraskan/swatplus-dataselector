@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.1
+
+- The command had no visible entry point, only the Command Palette. Added an
+  activity bar icon with a **Create Subset…** button, and a **Create HRU Subset
+  from This Folder…** item in the Explorer folder menu (that folder is the
+  dataset).
+- Works in Restricted Mode (untrusted workspaces): the Python path and SWAT+
+  executable are machine-scoped settings, so the workspace cannot choose what is
+  started.
+
 ## 0.1.0
 
 First version, built locally; not published.

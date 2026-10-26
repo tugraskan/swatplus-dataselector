@@ -38,17 +38,26 @@ const realpath = (p: string): string | undefined => {
 
 const TITLE = 'SWAT+ HRU Subset';
 
-/** Asks for the dataset folder; undefined when cancelled. Loops while the user wants another folder. */
-async function pickDatasetFolder(log: vscode.OutputChannel): Promise<string | undefined> {
+/**
+ * The dataset folder; undefined when cancelled. `preselected` (a folder the user
+ * right-clicked) is used instead of the dialog the first time round. Loops while
+ * the user wants another folder.
+ */
+async function pickDatasetFolder(log: vscode.OutputChannel, preselected?: string): Promise<string | undefined> {
+    let next = preselected;
     for (;;) {
-        const picked = await vscode.window.showOpenDialog({
-            canSelectFiles: false,
-            canSelectFolders: true,
-            canSelectMany: false,
-            openLabel: 'Use as Dataset',
-            title: `${TITLE}: select the SWAT+ dataset folder (the one with file.cio)`
-        });
-        const folder = picked?.[0]?.fsPath;
+        let folder = next;
+        next = undefined;
+        if (!folder) {
+            const picked = await vscode.window.showOpenDialog({
+                canSelectFiles: false,
+                canSelectFolders: true,
+                canSelectMany: false,
+                openLabel: 'Use as Dataset',
+                title: `${TITLE}: select the SWAT+ dataset folder (the one with file.cio)`
+            });
+            folder = picked?.[0]?.fsPath;
+        }
         if (!folder) {
             return undefined;
         }
@@ -205,7 +214,11 @@ async function showFailure(
     }
 }
 
-export async function createSubsetCommand(context: vscode.ExtensionContext, log: vscode.OutputChannel): Promise<void> {
+export async function createSubsetCommand(
+    context: vscode.ExtensionContext,
+    log: vscode.OutputChannel,
+    datasetFolder?: string
+): Promise<void> {
     const scriptPath = path.join(context.extensionPath, 'python', 'hru_processor.py');
     if (!isFile(scriptPath)) {
         vscode.window.showErrorMessage(
@@ -216,7 +229,7 @@ export async function createSubsetCommand(context: vscode.ExtensionContext, log:
     }
 
     // 1. Dataset folder.
-    const datasetPick = await pickDatasetFolder(log);
+    const datasetPick = await pickDatasetFolder(log, datasetFolder);
     if (!datasetPick) {
         return;
     }
