@@ -4,6 +4,18 @@ All notable changes to the "swatplus-vscode-dataset-selector" extension will be 
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [Unreleased]
+
+### Removed
+- The HRU subset feature: the **SWAT+: Create HRU Subset** and **SWAT+: Create HRU
+  Subset and Run** commands, the "HRU Subset" panel in the Dataset Selector sidebar, and
+  the walkthrough text about them. It is now the only job of the separate extension
+  **SWAT+ HRU Subset** (`hru-subset/` in this repository, `PbsandtDev.swat-hru-subset`),
+  which has the same panel plus an HRU picker table and a preview of the feeder HRUs.
+  It can use the dataset selected here through `swat-dataset-selector.getDatasetFolder`,
+  which stays. `hru_processor.py`, its tests and `SWAT_WORKAROUNDS.md` moved from
+  `scripts/` to `hru-subset/python/`.
+
 ## [0.6.0] - 2026-10-26
 
 ### Added

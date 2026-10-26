@@ -52,7 +52,6 @@ scripts.
 | `tableViewerPanel.ts` | 1,765 | Multi-table viewer |
 | `schemaEditorPanel.ts` | 1,041 | Schema edit/create UI |
 | `fkDefinitionProvider` / `fkHoverProvider` / `fkDiagnostics` / `fkReferencesPanel` / `fkDecorations` | ~1,900 combined | FK language features |
-| `hruProcessor.ts` / `hruProcessorOptions.ts` | ~315 | HRU subset generation; processor flags and result text (no `vscode` import, unit-tested) |
 | `outputDataFramePanel` / `outputNotebookGenerator` / `outputDataFrameUtils` | ~1,075 | Output exploration & notebook generation |
 | `dependencyGraphPanel.ts` | 189 | Table dependency graph |
 | `environmentUtils` / `pathUtils` / `fileFormatUtils` | ~690 | Support utilities |
@@ -74,31 +73,16 @@ scripts.
     tables (`*.dtl`)
 - **Schema** — auto-generated schema for **213 SWAT+ input tables** extracted from
   `swatplus-editor`; in-editor schema editor.
-- **HRU subsets** — build a reduced `TxtInOut` for selected HRU IDs (optional
-  downstream-routing preservation); optionally run SWAT+ on the subset. Keep-routing
-  subsets follow routing-unit element links, renumber `aqu_cha.lin` and the other
-  files that carry channel/aquifer/routing-unit numbers, and apply tracked workarounds
-  for SWAT+ bugs, each with an id (`W1`–`W4`) in `SWAT_WORKAROUNDS` in
-  `scripts/hru_processor.py` and documented in `scripts/SWAT_WORKAROUNDS.md`:
-  - **W1 feeder HRUs** (keep-routing, on; `--exact-hrus` turns it off) — adds one HRU
-    for each kept channel whose inflows are only channels (SWAT+ `ch_temp` reads
-    `hin_d(0)`); reported as `added_hru_ids`.
-  - **W2 align `hydrology.wet`** (both modes, on; `--keep-wetland-file` turns it off) —
-    each wetland's row goes to the number of the HRU that uses it, because SWAT+ reads a
-    per-HRU array at that row.
-  - **W3 main/dev compatibility** (opt-in `--main-compat`) — water allocation off and
-    NAM-only `print.prt` rows removed.
-  - **W4 all outputs off** (opt-in `--no-outputs`).
-
-  The command offers these as options (the sidebar panel has checkboxes), the result
-  lists `workarounds_applied`, and `--check-swat-source <checkout>` reports which
-  workarounds a SWAT+ checkout still needs.
+- **HRU subsets** — moved out. They are the job of the separate extension **SWAT+ HRU
+  Subset** (`hru-subset/` in this repository; `PbsandtDev.swat-hru-subset`), which owns
+  `hru_processor.py` and its tracked SWAT+ workarounds (`SWAT_WORKAROUNDS.md`). It can
+  take the active dataset from this extension through the `getDatasetFolder` command.
 - **Data quality** — preflight report (markdown) of unresolved references / orphans;
   input-file format checker (header, column count, data types).
 - **Visualization** — table viewers, table-to-table dependency graph, output files opened
   as DataFrames, and generated Jupyter output notebooks.
 
-## Contributed Commands (21)
+## Contributed Commands (19)
 
 - **Dataset:** `selectDataset`, `selectAndDebug`, `launchDebug`, `switchDataset`,
   `useAsDataset`, `revealWorkdataFolder`
@@ -106,7 +90,6 @@ scripts.
 - **Navigation / View:** `showFKReferences`, `showTableViewer`, `editSchema`,
   `showDependencyGraph`
 - **Quality:** `runDataQualityPreflight`, `checkInputFiles`
-- **HRU:** `processHruSubset`, `processHruSubsetAndRun`
 - **Output:** `generateOutputNotebooks`, `openOutputAsDataFrame`
 
 **Context menus:** "Explore Output File" on `.csv` / `.out` / `.txt` files; "Use as SWAT+
@@ -136,6 +119,6 @@ Dataset" on folders.
 - **Schema:** `extract_all_models.py`, `extract_schema_static.py`, `parse_schema_md.py`,
   `merge_schema_metadata.py`, `add_con_files_to_schema.py`, `parse_gitbook_urls.py`,
   `generate_input_schema_relationships_doc.py`, `test_enhanced_schema.py`
-- **Data:** `pandas_indexer.py`, `hru_processor.py`, `output_to_dataframes.py`
+- **Data:** `pandas_indexer.py`, `output_to_dataframes.py`
 
 Output schema → `resources/schema/swatplus-editor-schema-full.json`.

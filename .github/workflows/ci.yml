@@ -46,6 +46,45 @@ jobs:
       - name: Merge-script and indexer tests
         run: npm run test:python
 
+  # SWAT+ HRU Subset (hru-subset/): a separate extension with its own package.json,
+  # and the Python script (hru-subset/python/) it runs. The Python script is stdlib
+  # only, so there is nothing to pip install.
+  hru-subset:
+    name: SWAT+ HRU Subset (build, lint, tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hru-subset
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: hru-subset/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: npm ci
+      - name: Type-check (extension host and webview scripts)
+        run: npm run check-types
+      - name: Lint
+        run: npm run lint
+      - name: Build (bundles for the host and the two webviews)
+        run: node esbuild.js --production
+      - name: Unit tests (mocha, no VS Code needed)
+        run: npm test
+      - name: Python tests (hru_processor.py, --plan, --hru-table, the workaround registry)
+        run: python -m unittest discover -s python -p "test_*.py"
+      - name: Package vsix
+        run: npx vsce package --no-dependencies
+      - name: Upload vsix artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: swat-hru-subset-vsix
+          path: hru-subset/*.vsix
+          if-no-files-found: error
+
   package:
     name: Package vsix
     runs-on: ubuntu-latest

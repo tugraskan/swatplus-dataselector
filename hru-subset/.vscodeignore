@@ -1,0 +1,20 @@
+.vscode/**
+node_modules/**
+src/**
+out/**
+scripts/**
+.gitignore
+.mocharc.json
+esbuild.js
+tsconfig.json
+tsconfig.browser.json
+eslint.config.mjs
+**/*.map
+**/*.ts
+**/__pycache__/**
+**/*.pyc
+*.vsix
+
+# Tests and notes that are only for the repo
+python/test_*.py
+TODO.md
