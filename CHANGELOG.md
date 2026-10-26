@@ -4,7 +4,7 @@ All notable changes to the "swatplus-vscode-dataset-selector" extension will be 
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
-## [Unreleased]
+## [0.7.0] - 2026-10-26
 
 ### Removed
 - The HRU subset feature: the **SWAT+: Create HRU Subset** and **SWAT+: Create HRU
