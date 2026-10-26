@@ -56,7 +56,7 @@ suite('HRU processor options', () => {
         assert.deepStrictEqual(lines, [
             'Added feeder HRU 1802: channel 404 had only channel inflows',
             'Added feeder HRU 2891: channel 608 had only channel inflows',
-            'Workarounds applied: W1 (feeder HRUs), W2 (compact hydrology.wet). See scripts/SWAT_WORKAROUNDS.md.'
+            'Workarounds applied: W1 (feeder HRUs), W2 (align hydrology.wet). See scripts/SWAT_WORKAROUNDS.md.'
         ]);
     });
 

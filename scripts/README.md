@@ -293,7 +293,7 @@ the commits it was confirmed against, and when to remove it).
 | Id | Flag | Default | What it does |
 |---|---|---|---|
 | W1 | `--exact-hrus` (turns it off) | on with `--keep-routing` | Adds one HRU for each kept channel that would have only channel inflows. Reported as `added_hru_ids`, with a reason each. |
-| W2 | `--keep-wetland-file` (turns it off) | on | Keeps only the `hydrology.wet` rows the kept HRUs' wetlands use. |
+| W2 | `--keep-wetland-file` (turns it off) | on | Rewrites `hydrology.wet` so each wetland's row sits at the number of the HRU that uses it (placeholder rows in between, never more rows than HRUs). |
 | W3 | `--main-compat` | off | Sets `WATER_RIGHTS` to `null null null`, creates an empty `null` file and removes `print.prt` rows only NAM_Branch accepts. |
 | W4 | `--no-outputs` | off | Sets all four flags of every `print.prt` object row to `n`. |
 

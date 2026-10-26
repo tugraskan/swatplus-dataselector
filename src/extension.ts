@@ -533,7 +533,7 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 
 	// W1..W4 in scripts/SWAT_WORKAROUNDS.md. The defaults match the CLI: feeder HRUs
-	// (keep routing) and the compact hydrology.wet on; main/dev compatibility and
+	// (keep routing) and the aligned hydrology.wet on; main/dev compatibility and
 	// all-outputs-off opt in.
 	const pickHruSubsetFlags = async (keepRouting: boolean): Promise<HruSubsetFlags | undefined> => {
 		type FlagItem = vscode.QuickPickItem & { flag: 'feeder' | 'wetland' | 'mainCompat' | 'noOutputs' };
@@ -549,9 +549,9 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		items.push(
 			{
-				label: 'Compact hydrology.wet',
+				label: 'Align hydrology.wet',
 				description: 'W2',
-				detail: 'Keep only the wetland hydrology rows the kept HRUs use (SWAT+ indexes a per-HRU array by that row).',
+				detail: 'Move each wetland hydrology row to the number of the HRU that uses it (SWAT+ reads a per-HRU array at that row).',
 				picked: true,
 				flag: 'wetland'
 			},
@@ -680,7 +680,7 @@ export function activate(context: vscode.ExtensionContext) {
 		hruProcessorOutput.appendLine(`Routing: ${keepRouting ? 'keep downstream routing' : 'isolate HRUs only'}`);
 		hruProcessorOutput.appendLine(
 			`Workarounds: feeder HRUs ${keepRouting && !flags.exactHrus ? 'on' : 'off'}, `
-			+ `compact hydrology.wet ${flags.keepWetlandFile ? 'off' : 'on'}, `
+			+ `align hydrology.wet ${flags.keepWetlandFile ? 'off' : 'on'}, `
 			+ `main/dev compatibility ${flags.mainCompat ? 'on' : 'off'}, `
 			+ `all outputs ${flags.noOutputs ? 'off' : 'as in print.prt'}`
 		);

@@ -2593,9 +2593,9 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         <input type="checkbox" id="hruFeederCheckbox" checked ${canProcessHruSubset ? '' : 'disabled'}>
                         <span>Add feeder HRUs (W1)</span>
                     </label>
-                    <label class="hru-checkbox-row" title="W2. SWAT+ indexes a per-HRU wetland array by the hydrology.wet row. Keeps only the hydrology.wet rows the kept HRUs use.">
+                    <label class="hru-checkbox-row" title="W2. SWAT+ reads a per-HRU wetland array at the hydrology.wet row. Moves each wetland hydrology row to the number of the HRU that uses it.">
                         <input type="checkbox" id="hruWetlandCheckbox" checked ${canProcessHruSubset ? '' : 'disabled'}>
-                        <span>Compact hydrology.wet (W2)</span>
+                        <span>Align hydrology.wet (W2)</span>
                     </label>
                     <label class="hru-checkbox-row" title="W3. Water allocation off (WATER_RIGHTS null) and print.prt rows only NAM_Branch accepts removed, so the subset runs on SWAT+ main/dev.">
                         <input type="checkbox" id="hruMainCompatCheckbox" ${canProcessHruSubset ? '' : 'disabled'}>

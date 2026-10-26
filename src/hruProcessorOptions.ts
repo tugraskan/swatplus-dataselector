@@ -28,7 +28,7 @@ export interface HruSubsetFlags {
 
 export const WORKAROUND_LABELS: Record<string, string> = {
     W1: 'feeder HRUs',
-    W2: 'compact hydrology.wet',
+    W2: 'align hydrology.wet',
     W3: 'main/dev compatibility',
     W4: 'all outputs off'
 };

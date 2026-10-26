@@ -83,7 +83,9 @@ scripts.
   - **W1 feeder HRUs** (keep-routing, on; `--exact-hrus` turns it off) — adds one HRU
     for each kept channel whose inflows are only channels (SWAT+ `ch_temp` reads
     `hin_d(0)`); reported as `added_hru_ids`.
-  - **W2 compact `hydrology.wet`** (both modes, on; `--keep-wetland-file` turns it off).
+  - **W2 align `hydrology.wet`** (both modes, on; `--keep-wetland-file` turns it off) —
+    each wetland's row goes to the number of the HRU that uses it, because SWAT+ reads a
+    per-HRU array at that row.
   - **W3 main/dev compatibility** (opt-in `--main-compat`) — water allocation off and
     NAM-only `print.prt` rows removed.
   - **W4 all outputs off** (opt-in `--no-outputs`).

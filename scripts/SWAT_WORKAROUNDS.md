@@ -24,7 +24,7 @@ form is present; that also holds for a checkout the defect never existed in, for
 | Id | Workaround | Controlled by | Default |
 |---|---|---|---|
 | W1 | Feeder HRUs | `--exact-hrus` | on for --keep-routing; --exact-hrus turns it off |
-| W2 | Compact hydrology.wet | `--keep-wetland-file` | on in both modes; --keep-wetland-file turns it off |
+| W2 | Align hydrology.wet with the HRU numbers | `--keep-wetland-file` | on in both modes; --keep-wetland-file turns it off |
 | W3 | main/dev compatibility (water allocation off, NAM-only print.prt rows removed) | `--main-compat` | off (opt-in) |
 | W4 | All outputs off | `--no-outputs` | off (opt-in); independent of --main-compat |
 
@@ -43,15 +43,15 @@ form is present; that also holds for a checkout the defect never existed in, for
 - Pattern: `trib1_temp *= *ob\(iob\)%hin_d\(in-1\)`
 - Find it: `grep -rniE 'trib1_temp *= *ob\(iob\)%hin_d\(in-1\)' <swatplus checkout>/src`
 
-## W2 - Compact hydrology.wet
+## W2 - Align hydrology.wet with the HRU numbers
 
 - **Flag:** `--keep-wetland-file`
 - **Default:** on in both modes; --keep-wetland-file turns it off
-- **What the tool does:** Keeps only the hydrology.wet rows that the kept HRUs' wetlands refer to (hru-data.hru SURF_STOR -> wetland.wet HYD -> hydrology.wet), in their original order, so every row number is at most the HRU count.
+- **What the tool does:** Rewrites hydrology.wet so that each wetland's hydrology row sits at the number of the first kept HRU that uses it (hru.con -> hru-data.hru SURF_STOR -> wetland.wet HYD -> hydrology.wet). Rows in between are copies named unused_row_<n>, so there are never more rows than HRUs, and the row SWAT+ reads for a wetland is that wetland's own hydrology.
 - **Confirmed in:** `NAM_Branch` 6efcee0, `main` 6f51536, `dev` 16ea369
-- **Remove when:** et_act.f90 reads the wetland's own hydrology (for example wet_hyddb(ihyd) or a per-HRU copy indexed by the HRU) instead of wet_hyd(ihyd). Then drop compact_hydrology_wet and the --keep-wetland-file flag.
+- **Remove when:** et_act.f90 reads the wetland's own hydrology (for example wet_hyddb(ihyd) or the entry of the HRU, wet_hyd(j)) instead of wet_hyd(ihyd). Then drop compact_hydrology_wet and the --keep-wetland-file flag.
 
-**SWAT+ code** - et_act indexes wet_hyd with the hydrology.wet row (wet_dat%hyd). wet_hyd is per HRU (sized sp_ob%hru, filled at wet_initial.f90:81) but the row can be larger than the HRU count in a subset. main stops with WET_HYD subscript 27 > upper bound 3; NAM reads past the array and gets junk (wetland ET = 0). Compacting keeps the row inside the array, though it can still read another HRU's entry (default evrsv 0.7) until SWAT+ is fixed.
+**SWAT+ code** - et_act indexes wet_hyd with the hydrology.wet row (wet_dat%hyd). wet_hyd is per HRU (sized sp_ob%hru, filled at the HRU's number, wet_initial.f90:81), so the row is only right when it equals the number of an HRU with that wetland. In a subset the row can also be larger than the HRU count: main stops with WET_HYD subscript 27 > upper bound 3 and NAM reads past the array and gets junk (wetland ET = 0). The tool puts each row at its HRU's number. A run on the full dataset has the same defect, so its wetland ET can differ from a subset's.
 
 - File: `src/et_act.f90`
 - Where: `NAM_Branch` et_act.f90:143, `main` et_act.f90:142, `dev` et_act.f90:142

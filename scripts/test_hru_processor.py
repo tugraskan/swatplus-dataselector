@@ -159,7 +159,8 @@ def build_dataset(root, hydrology_rows=None):
                       "1 wet_C wet_init hyd_C wetland wetland wetland",
                       "1 wet_D wet_init hyd_D wetland wetland wetland"])
     w("hydrology.wet", ["hyd_wet test", "NAME HRU_PS DP_PS HRU_ES DP_ES K EVAP"]
-      + (hydrology_rows or [f"hyd_{x} 0.8 1200 1 1300 0.01 1" for x in "ABCD"]))
+      + (hydrology_rows or [f"hyd_{x} 0.8 1200 1 1300 0.01 {evap}"
+                            for x, evap in zip("ABCD", ("0.5", "0.6", "0.7", "0.8"))]))
 
     # REGIONS files that carry aquifer numbers.
     w("aqu_catunit.ele", ["aqu_ele test", "ID NAME OBJ_TYP OBJ_TYP_NO",
@@ -320,24 +321,98 @@ class FeederHruTests(TempDirTest):
             self.subset([99], keep_routing=True)
 
 
+def wet_hyd_for_kept_hrus(out):
+    """Emulate wet_initial and et_act on a subset folder.
+
+    wet_initial.f90 fills wet_hyd(iihru) with the hydrology of HRU iihru's wetland and stores the
+    hydrology.wet row in wet_dat%hyd; et_act.f90 reads wet_hyd(row). Returns, for each wetland HRU,
+    (row, row <= number of HRUs, hydrology EVAP that et_act would use, EVAP of the wetland's own).
+    """
+    hru_count = len(data_rows(out / "hru.con"))
+    props = {int(r[0]): int(r[7]) for r in data_rows(out / "hru.con")}
+    stores = {int(r[0]): r[7] for r in data_rows(out / "hru-data.hru")}
+    hyd_of_store = {r[1]: r[3] for r in data_rows(out / "wetland.wet")}
+    rows = data_rows(out / "hydrology.wet")
+    evap = {r[0]: r[6] for r in rows}
+    wet_hyd = {}
+    for hru_id, prop in props.items():
+        store = stores[prop]
+        if store != "null":
+            wet_hyd[hru_id] = evap[hyd_of_store[store]]
+    found = {}
+    for hru_id, prop in props.items():
+        store = stores[prop]
+        if store == "null":
+            continue
+        row = next(i for i, r in enumerate(rows, start=1) if r[0] == hyd_of_store[store])
+        found[hru_id] = (row, row <= hru_count, wet_hyd.get(row, "default"), evap[hyd_of_store[store]])
+    return found
+
+
 class HydrologyWetTests(TempDirTest):
-    def test_keeps_only_the_rows_the_kept_wetlands_use_in_original_order(self):
-        out, result = self.subset([1], keep_routing=True)  # keeps HRUs 1,2,4,6 -> wet_A, wet_B, wet_C
+    def assert_et_act_reads_each_wetlands_own_row(self, out):
+        found = wet_hyd_for_kept_hrus(out)
+        self.assertTrue(found)
+        for hru_id, (row, inside, used, own) in found.items():
+            self.assertTrue(inside, f"HRU {hru_id}: row {row} is past the HRU count")
+            self.assertEqual(used, own, f"HRU {hru_id}: et_act would read another HRU's hydrology")
+
+    def test_each_wetland_row_sits_at_the_number_of_the_hru_that_uses_it(self):
+        # keeps HRUs 1,2,4,6 -> new 1..4; wetlands on new HRUs 2,3,4 use hyd_A, hyd_B, hyd_C
+        out, result = self.subset([1], keep_routing=True)
         names = [row[0] for row in data_rows(out / "hydrology.wet")]
-        self.assertEqual(names, ["hyd_A", "hyd_B", "hyd_C"])
+        self.assertEqual(names, ["unused_row_1", "hyd_A", "hyd_B", "hyd_C"])
         self.assertIn("W2", result["workarounds_applied"])
         self.assertLessEqual(len(names), len(result["id_maps"]["hru"]))
+        self.assert_et_act_reads_each_wetlands_own_row(out)
 
-    def test_isolate_mode_compacts_too(self):
+    def test_the_old_compaction_read_another_hrus_entry(self):
+        # Rows kept in their original order, no gaps: HRU 2 (wet_A, row 1) would read wet_hyd(1),
+        # the entry of upland HRU 1.
+        out, _ = self.subset([1], keep_routing=True, keep_wetland_file=True)
+        write_lines(out / "hydrology.wet", read_lines(out / "hydrology.wet")[:2]
+                    + [line for line in read_lines(self.src / "hydrology.wet")[2:] if "hyd_D" not in line])
+        found = wet_hyd_for_kept_hrus(out)
+        self.assertEqual(found[2][2], "default")
+        self.assertNotEqual(found[2][2], found[2][3])
+
+    def test_placeholder_rows_are_copies_with_a_name_no_wetland_uses(self):
+        out, _ = self.subset([1], keep_routing=True)
+        rows = data_rows(out / "hydrology.wet")
+        wetland_hyds = {row[3] for row in data_rows(out / "wetland.wet")}
+        self.assertNotIn(rows[0][0], wetland_hyds)
+        self.assertEqual(rows[0][1:], rows[1][1:])  # values of the first real row, not zeros
+
+    def test_isolate_mode_aligns_too(self):
         out, result = self.subset([4, 6])
         self.assertEqual([row[0] for row in data_rows(out / "hydrology.wet")], ["hyd_B", "hyd_C"])
         self.assertEqual(result["workarounds_applied"], ["W2"])
+        self.assert_et_act_reads_each_wetlands_own_row(out)
 
-    def test_row_numbers_stay_within_the_hru_count_when_the_wetland_is_a_late_row(self):
-        out, result = self.subset([6])  # one HRU, its wetland is row 3 of 4 in the full file
-        rows = data_rows(out / "hydrology.wet")
-        self.assertEqual([row[0] for row in rows], ["hyd_C"])
-        self.assertLessEqual(len(rows), 1)
+    def test_a_late_wetland_file_row_comes_down_to_the_hru_number(self):
+        out, result = self.subset([6])  # one HRU; its wetland is row 3 of 4 in the full file
+        self.assertEqual([row[0] for row in data_rows(out / "hydrology.wet")], ["hyd_C"])
+        self.assert_et_act_reads_each_wetlands_own_row(out)
+
+    def test_wetlands_that_share_a_hydrology_row_read_the_same_row(self):
+        wet = read_lines(self.src / "wetland.wet")
+        wet[4] = wet[4].replace("hyd_C", "hyd_A")  # wet_C now uses hyd_A as well
+        write_lines(self.src / "wetland.wet", wet)
+        out, _ = self.subset([1], keep_routing=True)  # wetlands on new HRUs 2,3,4: hyd_A, hyd_B, hyd_A
+        self.assertEqual([row[0] for row in data_rows(out / "hydrology.wet")], ["unused_row_1", "hyd_A", "hyd_B"])
+        self.assert_et_act_reads_each_wetlands_own_row(out)
+
+    def test_never_more_rows_than_hrus(self):
+        for hru_ids in ([1], [3], [2, 6], [1, 3, 5]):
+            out, result = self.subset(hru_ids, keep_routing=True)
+            self.assertLessEqual(len(data_rows(out / "hydrology.wet")), len(result["id_maps"]["hru"]), hru_ids)
+
+    def test_running_it_again_changes_nothing(self):
+        out, _ = self.subset([1], keep_routing=True)
+        before = read_lines(out / "hydrology.wet")
+        again = quiet(hp.compact_hydrology_wet, out)
+        self.assertEqual(again["changed"], 0)
+        self.assertEqual(read_lines(out / "hydrology.wet"), before)
 
     def test_keep_wetland_file_leaves_the_file_alone(self):
         before = read_lines(self.src / "hydrology.wet")

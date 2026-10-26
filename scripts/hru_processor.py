@@ -154,22 +154,25 @@ SWAT_WORKAROUNDS: list[dict[str, Any]] = [
     },
     {
         "id": "W2",
-        "title": "Compact hydrology.wet",
+        "title": "Align hydrology.wet with the HRU numbers",
         "flag": "--keep-wetland-file",
         "default": "on in both modes; --keep-wetland-file turns it off",
         "tool_does": (
-            "Keeps only the hydrology.wet rows that the kept HRUs' wetlands refer to (hru-data.hru SURF_STOR "
-            "-> wetland.wet HYD -> hydrology.wet), in their original order, so every row number is at most "
-            "the HRU count."
+            "Rewrites hydrology.wet so that each wetland's hydrology row sits at the number of the first kept "
+            "HRU that uses it (hru.con -> hru-data.hru SURF_STOR -> wetland.wet HYD -> hydrology.wet). Rows "
+            "in between are copies named unused_row_<n>, so there are never more rows than HRUs, and the "
+            "row SWAT+ reads for a wetland is that wetland's own hydrology."
         ),
         "bugs": [
             {
                 "summary": (
                     "et_act indexes wet_hyd with the hydrology.wet row (wet_dat%hyd). wet_hyd is per HRU "
-                    "(sized sp_ob%hru, filled at wet_initial.f90:81) but the row can be larger than the HRU "
-                    "count in a subset. main stops with WET_HYD subscript 27 > upper bound 3; NAM reads past "
-                    "the array and gets junk (wetland ET = 0). Compacting keeps the row inside the array, "
-                    "though it can still read another HRU's entry (default evrsv 0.7) until SWAT+ is fixed."
+                    "(sized sp_ob%hru, filled at the HRU's number, wet_initial.f90:81), so the row is only "
+                    "right when it equals the number of an HRU with that wetland. In a subset the row can "
+                    "also be larger than the HRU count: main stops with WET_HYD subscript 27 > upper bound 3 "
+                    "and NAM reads past the array and gets junk (wetland ET = 0). The tool puts each row at "
+                    "its HRU's number. A run on the full dataset has the same defect, so its wetland ET can "
+                    "differ from a subset's."
                 ),
                 "file": "et_act.f90",
                 "pattern": r"es_max *= *wet_hyd\(ihyd\)",
@@ -181,8 +184,8 @@ SWAT_WORKAROUNDS: list[dict[str, Any]] = [
             }
         ],
         "remove_when": (
-            "et_act.f90 reads the wetland's own hydrology (for example wet_hyddb(ihyd) or a per-HRU copy "
-            "indexed by the HRU) instead of wet_hyd(ihyd). Then drop compact_hydrology_wet and the "
+            "et_act.f90 reads the wetland's own hydrology (for example wet_hyddb(ihyd) or the entry of the "
+            "HRU, wet_hyd(j)) instead of wet_hyd(ihyd). Then drop compact_hydrology_wet and the "
             "--keep-wetland-file flag."
         ),
     },
@@ -733,51 +736,92 @@ def column_index(header: list[str], names: set[str], default: int) -> int:
 
 
 def compact_hydrology_wet(directory: str | os.PathLike[str]) -> dict[str, int]:
-    """W2: keep only the hydrology.wet rows the kept HRUs' wetlands refer to, in their original order.
+    """W2: rewrite hydrology.wet so each wetland's row sits at its own HRU number.
 
-    Chain: hru-data.hru SURF_STOR -> wetland.wet NAME, whose HYD names a hydrology.wet row.
-    Returns {"kept": n, "removed": n}; removed is 0 when the file was left alone.
+    SWAT+ fills the per-HRU array wet_hyd at the HRU's number but et_act reads it at the
+    hydrology.wet row. So the row of each wetland's hydrology goes to the number of the first
+    kept HRU that uses it (hru.con -> hru-data.hru SURF_STOR -> wetland.wet HYD -> hydrology.wet).
+    Rows in between are copies named unused_row_<n>, so there are never more rows than HRUs
+    and wet_hyd(row) is the wetland's own entry (other HRUs sharing it read the same data).
+
+    Returns {"wetlands", "placeholders", "rows", "changed"}; changed is 0 when the file was left
+    alone (no kept wetland, or the rows are already placed).
     """
     directory = os.fspath(directory)
+    con_path = os.path.join(directory, "hru.con")
     hru_path = os.path.join(directory, "hru-data.hru")
     wet_path = os.path.join(directory, "wetland.wet")
     hyd_path = os.path.join(directory, "hydrology.wet")
-    result = {"kept": 0, "removed": 0}
-    if not all(os.path.isfile(path) for path in (hru_path, wet_path, hyd_path)):
+    result = {"wetlands": 0, "placeholders": 0, "rows": 0, "changed": 0}
+    if not all(os.path.isfile(path) for path in (con_path, hru_path, wet_path, hyd_path)):
         return result
 
+    con_lines, _ = read_text_lines(con_path)
     hru_lines, _ = read_text_lines(hru_path)
     wet_lines, _ = read_text_lines(wet_path)
     hyd_lines, hyd_eol = read_text_lines(hyd_path)
-    if len(hru_lines) < 3 or len(wet_lines) < 3 or len(hyd_lines) < 3:
+    if min(len(con_lines), len(hru_lines), len(wet_lines), len(hyd_lines)) < 3:
         return result
 
+    props_of_hru: dict[int, int] = {}
+    for line in con_lines[2:]:
+        fields = line.split()
+        try:
+            props_of_hru[int(fields[0])] = int(fields[7])
+        except (IndexError, ValueError):
+            continue
+
     stor_col = column_index(hru_lines[1].split(), {"surf_stor"}, 7)
-    stores: set[str] = set()
+    store_of_props: dict[int, str] = {}
     for line in hru_lines[2:]:
         fields = line.split()
-        if len(fields) > stor_col and fields[stor_col].lower() != "null":
-            stores.add(fields[stor_col])
+        try:
+            store_of_props[int(fields[0])] = fields[stor_col]
+        except (IndexError, ValueError):
+            continue
 
     wet_header = wet_lines[1].split()
     name_col = column_index(wet_header, {"name"}, 1)
     hyd_col = column_index(wet_header, {"hyd"}, 3)
-    needed: set[str] = set()
+    hyd_of_store: dict[str, str] = {}
     for line in wet_lines[2:]:
         fields = line.split()
-        if len(fields) > max(name_col, hyd_col) and fields[name_col] in stores:
-            needed.add(fields[hyd_col])
+        if len(fields) > max(name_col, hyd_col):
+            hyd_of_store.setdefault(fields[name_col], fields[hyd_col])
 
     rows = [line for line in hyd_lines[2:] if line.strip()]
-    kept = [line for line in rows if line.split()[0] in needed]
-    result["kept"] = len(kept)
-    if not kept or len(kept) == len(rows):
-        # Nothing refers to the file (no kept wetland), or nothing to drop.
+    row_of_name: dict[str, str] = {}
+    for line in rows:
+        row_of_name.setdefault(line.split()[0], line)
+
+    # hydrology name -> first (lowest-numbered) kept HRU whose wetland uses it
+    first_hru: dict[str, int] = {}
+    for hru_id in sorted(props_of_hru):
+        store = store_of_props.get(props_of_hru[hru_id], "null")
+        hyd = hyd_of_store.get(store) if store.lower() != "null" else None
+        if hyd is not None and hyd in row_of_name:
+            first_hru.setdefault(hyd, hru_id)
+    if not first_hru:
         return result
 
-    write_text_lines(hyd_path, hyd_lines[:2] + kept, hyd_eol)
-    result["removed"] = len(rows) - len(kept)
-    print(f"hydrology.wet compacted: kept {len(kept)} of {len(rows)} row(s).")
+    name_at = {hru_id: name for name, hru_id in first_hru.items()}
+    template = row_of_name[name_at[min(name_at)]]
+    new_rows: list[str] = []
+    for position in range(1, max(name_at) + 1):
+        if position in name_at:
+            new_rows.append(row_of_name[name_at[position]])
+        else:
+            new_rows.append(replace_token(template, 0, f"unused_row_{position}"))
+    result.update(wetlands=len(name_at), placeholders=len(new_rows) - len(name_at), rows=len(new_rows))
+    if new_rows == rows:
+        return result
+
+    write_text_lines(hyd_path, hyd_lines[:2] + new_rows, hyd_eol)
+    result["changed"] = 1
+    print(
+        f"hydrology.wet aligned to the HRU numbers: {len(name_at)} wetland row(s), "
+        f"{result['placeholders']} placeholder(s), {len(new_rows)} of {len(rows)} row(s) kept."
+    )
     return result
 
 
@@ -2209,7 +2253,7 @@ def process_hru_subset(
         id_maps = {"hru": modifier.hru_id_map}
         retained_counts = {"hru": len(hru_ids)}
 
-    if not keep_wetland_file and compact_hydrology_wet(dest_dir)["removed"]:
+    if not keep_wetland_file and compact_hydrology_wet(dest_dir)["changed"]:
         workarounds_applied.append("W2")
     if main_compat:
         apply_main_compat(dest_dir)
@@ -2278,7 +2322,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--keep-wetland-file",
         action="store_true",
-        help="Keep hydrology.wet as it is. By default only the rows the kept wetlands use are kept (workaround W2).",
+        help="Keep hydrology.wet as it is. By default each wetland's row is moved to the number of the HRU "
+        "that uses it (workaround W2).",
     )
     parser.add_argument(
         "--main-compat",

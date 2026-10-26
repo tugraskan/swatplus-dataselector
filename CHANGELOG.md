@@ -12,7 +12,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   `scripts/SWAT_WORKAROUNDS.md`; the result lists `workarounds_applied`.
   - **W1 feeder HRUs** (keep routing, on; `--exact-hrus` off): adds one HRU for each
     kept channel that would have only channel inflows, reported as `added_hru_ids`.
-  - **W2 compact `hydrology.wet`** (on; `--keep-wetland-file` off).
+  - **W2 align `hydrology.wet`** (on; `--keep-wetland-file` off): each wetland's row
+    moves to the number of the HRU that uses it, with placeholder rows in between.
   - **W3 `--main-compat`** and **W4 `--no-outputs`** (opt-in).
   - `--check-swat-source <checkout>` reports which workarounds a SWAT+ checkout still needs.
 - The HRU subset command and the sidebar panel offer these options.

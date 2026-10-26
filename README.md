@@ -129,7 +129,7 @@ Both commands ask for the HRU IDs, whether to keep downstream routing, and which
 | Option | Default | What it does |
 |---|---|---|
 | Add feeder HRUs (W1) | on, with routing | Adds one HRU for each kept channel whose inflows are only other channels, which SWAT+ `main`/`dev` cannot run. The added HRUs are listed in the output channel and the result message. |
-| Compact `hydrology.wet` (W2) | on | Keeps only the wetland hydrology rows the kept HRUs use, so SWAT+ does not index past a per-HRU array. |
+| Align `hydrology.wet` (W2) | on | Puts each wetland's hydrology row at the number of the HRU that uses it (rows in between are placeholders, never more rows than HRUs), because SWAT+ reads a per-HRU array at that row. |
 | SWAT+ main/dev compatibility (W3) | off | Turns water allocation off and removes `print.prt` rows only `NAM_Branch` accepts. |
 | Turn all outputs off (W4) | off | Sets every `print.prt` object row to `n`. |
 
