@@ -261,52 +261,6 @@ Notes:
 
 ## HRU subset processor
 
-`scripts/hru_processor.py` creates a reduced TxtInOut folder for selected HRU IDs.
-It is dependency-free and is used by the VS Code commands `SWAT+: Create HRU Subset`
-and `SWAT+: Create HRU Subset and Run`.
-
-Manual example:
-
-```bash
-python3 scripts/hru_processor.py --dataset /path/to/TxtInOut --hru-ids 1,4-6 --keep-routing
-```
-
-Add `--run-swat --exe /path/to/swatplus.exe` to run the generated subset, and
-`--output-dir` to choose where the subset is written (the source folder is never
-changed).
-
-`--keep-routing` traces the objects downstream of the selected HRUs. A routing unit
-listed as an element of another routing unit reaches the channels through it, so a
-single upland HRU still keeps the channel network. `aqu_cha.lin`, `chan-surf.lin`,
-`rout_unit.rtu` and the REGIONS files that carry channel, aquifer, reservoir or
-routing-unit numbers are filtered and renumbered with the same id maps; region files
-the tool cannot renumber are set to `null` in `file.cio`.
-
-### Workarounds for SWAT+ bugs
-
-Some subsets only run because the tool works around defects in SWAT+. Each workaround
-has an id, is listed in the JSON result as `workarounds_applied`, and is tracked in
-the `SWAT_WORKAROUNDS` registry in `hru_processor.py` and in
-[`SWAT_WORKAROUNDS.md`](SWAT_WORKAROUNDS.md) (the SWAT+ file, line and code pattern,
-the commits it was confirmed against, and when to remove it).
-
-| Id | Flag | Default | What it does |
-|---|---|---|---|
-| W1 | `--exact-hrus` (turns it off) | on with `--keep-routing` | Adds one HRU for each kept channel that would have only channel inflows. Reported as `added_hru_ids`, with a reason each. |
-| W2 | `--keep-wetland-file` (turns it off) | on | Rewrites `hydrology.wet` so each wetland's row sits at the number of the HRU that uses it (placeholder rows in between, never more rows than HRUs). |
-| W3 | `--main-compat` | off | Sets `WATER_RIGHTS` to `null null null`, creates an empty `null` file and removes `print.prt` rows only NAM_Branch accepts. |
-| W4 | `--no-outputs` | off | Sets all four flags of every `print.prt` object row to `n`. |
-
-```bash
-python3 scripts/hru_processor.py --dataset /path/to/TxtInOut --hru-ids 1532,1538,3978 \
-    --keep-routing --main-compat --output-dir /path/to/subset --json
-```
-
-To see which workarounds a SWAT+ checkout still needs (JSON per workaround:
-`still_needed`, `no_longer_needed` or `unknown`):
-
-```bash
-python3 scripts/hru_processor.py --check-swat-source /path/to/swatplus
-```
-
-Run the tests with `python3 -m unittest scripts.test_hru_processor`.
+Moved. `hru_processor.py`, its tests and `SWAT_WORKAROUNDS.md` now live in
+[`hru-subset/python/`](../hru-subset/python/README.md), next to the SWAT+ HRU Subset
+extension that uses them.

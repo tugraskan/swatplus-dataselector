@@ -27,12 +27,6 @@ import { normalizePathForComparison, pathStartsWith, resolveFileCioPath } from '
 import { detectEnvironment, isCmakeToolsInstalled, isSwatPlusWorkspace } from './environmentUtils';
 import { setupWorkspace, SetupStepResult } from './workspaceSetup';
 import { generateOutputNotebooks } from './outputNotebookGenerator';
-import { inspectHruRange, runHruProcessor, validateHruIdInput } from './hruProcessor';
-import {
-	describeHruSubsetWorkarounds,
-	HruSubsetFlags,
-	summarizeHruSubsetWorkarounds
-} from './hruProcessorOptions';
 import { isSelfWrittenFile } from './indexStalenessUtils';
 import { installInstructionPointers } from './instructionPointer';
 import { resolveMcpServerDatasetArgs, resolveMcpServerDefinitionVersion } from './mcpServerDefinition';
@@ -100,7 +94,6 @@ export function activate(context: vscode.ExtensionContext) {
 	setSharedEnrichedSchema(enrichedSchema);
 	const datasetEngine = new SwatDatasetEngine(indexer, enrichedSchema);
 	registerSwatChatParticipant(context, indexer, datasetEngine);
-	const hruProcessorOutput = vscode.window.createOutputChannel('SWAT+ HRU Processor');
 	const workspaceSetupOutput = vscode.window.createOutputChannel('SWAT+ Workspace Setup');
 	// Create and register the webview view provider
 	const swatProvider = new SwatDatasetWebviewProvider(context, indexer);
@@ -477,278 +470,6 @@ export function activate(context: vscode.ExtensionContext) {
 			swatProvider.refresh();
 			await announceIndexBuilt();
 		}
-	});
-
-	const getTxtInOutPath = (datasetPath: string): string => {
-		const fileCioPath = resolveFileCioPath(datasetPath);
-		return fileCioPath ? path.dirname(fileCioPath) : datasetPath;
-	};
-
-	const findDatasetExecutables = (datasetPath: string): string[] => {
-		const txtInOutPath = getTxtInOutPath(datasetPath);
-		if (!fs.existsSync(txtInOutPath)) {
-			return [];
-		}
-		return fs.readdirSync(txtInOutPath, { withFileTypes: true })
-			.filter(entry => entry.isFile() && entry.name.toLowerCase().endsWith('.exe'))
-			.map(entry => path.join(txtInOutPath, entry.name));
-	};
-
-	const pickSwatExecutable = async (datasetPath: string): Promise<string | undefined> => {
-		const candidates = findDatasetExecutables(datasetPath);
-		if (candidates.length === 1) {
-			return candidates[0];
-		}
-
-		if (candidates.length > 1) {
-			const pick = await vscode.window.showQuickPick(
-				candidates.map(exePath => ({
-					label: path.basename(exePath),
-					description: exePath,
-					exePath
-				})),
-				{
-					title: 'SWAT+: Select Executable',
-					placeHolder: 'Choose the SWAT+ executable to run with the HRU subset'
-				}
-			);
-			return pick?.exePath;
-		}
-
-		const picked = await vscode.window.showOpenDialog({
-			canSelectFiles: true,
-			canSelectFolders: false,
-			canSelectMany: false,
-			filters: { 'Executable': ['exe'], 'All Files': ['*'] },
-			openLabel: 'Select SWAT+ Executable',
-			title: 'Select the SWAT+ executable to run with the HRU subset'
-		});
-		return picked?.[0]?.fsPath;
-	};
-
-	interface HruSubsetCommandOptions extends HruSubsetFlags {
-		hruIds?: string;
-		keepRouting?: boolean;
-		runSwat?: boolean;
-	}
-
-	// W1..W4 in scripts/SWAT_WORKAROUNDS.md. The defaults match the CLI: feeder HRUs
-	// (keep routing) and the aligned hydrology.wet on; main/dev compatibility and
-	// all-outputs-off opt in.
-	const pickHruSubsetFlags = async (keepRouting: boolean): Promise<HruSubsetFlags | undefined> => {
-		type FlagItem = vscode.QuickPickItem & { flag: 'feeder' | 'wetland' | 'mainCompat' | 'noOutputs' };
-		const items: FlagItem[] = [];
-		if (keepRouting) {
-			items.push({
-				label: 'Add feeder HRUs',
-				description: 'W1',
-				detail: 'Add one HRU for each kept channel that would have only channel inflows (SWAT+ main/dev ch_temp crashes on those).',
-				picked: true,
-				flag: 'feeder'
-			});
-		}
-		items.push(
-			{
-				label: 'Align hydrology.wet',
-				description: 'W2',
-				detail: 'Move each wetland hydrology row to the number of the HRU that uses it (SWAT+ reads a per-HRU array at that row).',
-				picked: true,
-				flag: 'wetland'
-			},
-			{
-				label: 'SWAT+ main/dev compatibility',
-				description: 'W3',
-				detail: 'Water allocation off and print.prt rows only NAM_Branch accepts removed.',
-				picked: false,
-				flag: 'mainCompat'
-			},
-			{
-				label: 'Turn all outputs off',
-				description: 'W4',
-				detail: 'Set every print.prt object row to n, so the subset writes no output tables.',
-				picked: false,
-				flag: 'noOutputs'
-			}
-		);
-		const picks = await vscode.window.showQuickPick(items, {
-			title: 'SWAT+: HRU Subset Options',
-			placeHolder: 'Workarounds for SWAT+ bugs (see scripts/SWAT_WORKAROUNDS.md). Press Enter to keep the defaults.',
-			canPickMany: true
-		});
-		if (!picks) {
-			return undefined;
-		}
-		const chosen = new Set(picks.map(pick => pick.flag));
-		return {
-			exactHrus: keepRouting && !chosen.has('feeder'),
-			keepWetlandFile: !chosen.has('wetland'),
-			mainCompat: chosen.has('mainCompat'),
-			noOutputs: chosen.has('noOutputs')
-		};
-	};
-
-	const processHruSubset = async (options: HruSubsetCommandOptions = {}) => {
-		const runSwat = options.runSwat === true;
-		const selectedPath = swatProvider.getSelectedDataset();
-		if (!selectedPath) {
-			vscode.window.showWarningMessage('Please select a SWAT+ dataset folder first.');
-			return;
-		}
-
-		let hruIds = options.hruIds?.trim();
-		if (!hruIds) {
-			let rangeHint = 'Enter a single HRU ID or ranges, for example: 1,4-6,10.';
-			try {
-				const range = await inspectHruRange(context, selectedPath, hruProcessorOutput);
-				if (range.ok) {
-					rangeHint = `Detected HRUs ${range.min_hru}-${range.max_hru} (${range.total_hrus} total). Enter IDs or ranges.`;
-				}
-			} catch (err) {
-				hruProcessorOutput.appendLine(`Could not inspect HRU range: ${err instanceof Error ? err.message : String(err)}`);
-			}
-
-			const promptedHruIds = await vscode.window.showInputBox({
-				title: runSwat ? 'SWAT+: Create HRU Subset and Run' : 'SWAT+: Create HRU Subset',
-				prompt: rangeHint,
-				placeHolder: '1,4-6,10',
-				validateInput: value => validateHruIdInput(value)
-			});
-			if (promptedHruIds === undefined) {
-				return;
-			}
-			hruIds = promptedHruIds.trim();
-		} else {
-			const validationError = validateHruIdInput(hruIds);
-			if (validationError) {
-				vscode.window.showWarningMessage(validationError);
-				return;
-			}
-		}
-
-		let keepRouting = options.keepRouting;
-		if (keepRouting === undefined) {
-			const routingPick = await vscode.window.showQuickPick(
-				[
-					{
-						label: 'Isolate HRUs only',
-						description: 'Keep selected HRUs and remove downstream routing objects.',
-						keepRouting: false
-					},
-					{
-						label: 'Keep downstream routing',
-						description: 'Trace and retain connected routing objects.',
-						keepRouting: true
-					}
-				],
-				{
-					title: 'SWAT+: HRU Subset Routing',
-					placeHolder: 'Choose how the subset should handle routing'
-				}
-			);
-			if (!routingPick) {
-				return;
-			}
-			keepRouting = routingPick.keepRouting;
-		}
-
-		// A caller (the webview panel) that supplies any switch has already chosen them.
-		let flags: HruSubsetFlags = {
-			exactHrus: options.exactHrus,
-			keepWetlandFile: options.keepWetlandFile,
-			mainCompat: options.mainCompat,
-			noOutputs: options.noOutputs
-		};
-		if (Object.values(flags).every(value => value === undefined)) {
-			const pickedFlags = await pickHruSubsetFlags(keepRouting);
-			if (!pickedFlags) {
-				return;
-			}
-			flags = pickedFlags;
-		}
-
-		let executablePath: string | undefined;
-		if (runSwat) {
-			executablePath = await pickSwatExecutable(selectedPath);
-			if (!executablePath) {
-				return;
-			}
-		}
-
-		hruProcessorOutput.clear();
-		hruProcessorOutput.appendLine(`Selected dataset: ${selectedPath}`);
-		hruProcessorOutput.appendLine(`HRU IDs: ${hruIds}`);
-		hruProcessorOutput.appendLine(`Routing: ${keepRouting ? 'keep downstream routing' : 'isolate HRUs only'}`);
-		hruProcessorOutput.appendLine(
-			`Workarounds: feeder HRUs ${keepRouting && !flags.exactHrus ? 'on' : 'off'}, `
-			+ `align hydrology.wet ${flags.keepWetlandFile ? 'off' : 'on'}, `
-			+ `main/dev compatibility ${flags.mainCompat ? 'on' : 'off'}, `
-			+ `all outputs ${flags.noOutputs ? 'off' : 'as in print.prt'}`
-		);
-
-		try {
-			const result = await vscode.window.withProgress(
-				{
-					location: vscode.ProgressLocation.Notification,
-					title: runSwat ? 'Creating HRU subset and running SWAT+' : 'Creating HRU subset',
-					cancellable: false
-				},
-				async progress => {
-					progress.report({ message: 'Processing TxtInOut files...' });
-					return runHruProcessor(
-						context,
-						{
-							datasetPath: selectedPath,
-							hruIds,
-							keepRouting,
-							runSwat,
-							executablePath,
-							...flags
-						},
-						hruProcessorOutput
-					);
-				}
-			);
-
-			for (const line of describeHruSubsetWorkarounds(result)) {
-				hruProcessorOutput.appendLine(line);
-			}
-			swatProvider.setSelectedDataset(result.output_dir);
-			await tryAutoLoadIndex(result.output_dir);
-
-			const countSummary = result.retained_counts
-				? Object.entries(result.retained_counts)
-					.map(([key, value]) => `${key}: ${value}`)
-					.join(', ')
-				: `${result.hru_ids.length} HRU${result.hru_ids.length === 1 ? '' : 's'}`;
-			const workaroundSummary = summarizeHruSubsetWorkarounds(result);
-			const message = `HRU subset created: ${path.basename(result.output_dir)} (${countSummary}).`
-				+ (workaroundSummary ? ` ${workaroundSummary}` : '');
-			const choice = await vscode.window.showInformationMessage(
-				message,
-				'Build Index',
-				'Reveal Folder',
-				'Show Log'
-			);
-
-			if (choice === 'Build Index') {
-				await vscode.commands.executeCommand('swat-dataset-selector.buildIndex');
-			} else if (choice === 'Reveal Folder') {
-				await vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(result.output_dir));
-			} else if (choice === 'Show Log') {
-				hruProcessorOutput.show();
-			}
-		} catch (err) {
-			hruProcessorOutput.show();
-			vscode.window.showErrorMessage(`HRU processor failed: ${err instanceof Error ? err.message : String(err)}`);
-		}
-	};
-
-	const processHruSubsetCmd = vscode.commands.registerCommand('swat-dataset-selector.processHruSubset', async (options?: HruSubsetCommandOptions) => {
-		await processHruSubset(options ?? {});
-	});
-
-	const processHruSubsetAndRunCmd = vscode.commands.registerCommand('swat-dataset-selector.processHruSubsetAndRun', async (options?: HruSubsetCommandOptions) => {
-		await processHruSubset({ ...(options ?? {}), runSwat: true });
 	});
 
 	const showDependencyGraph = vscode.commands.registerCommand('swat-dataset-selector.showDependencyGraph', async () => {
@@ -1578,8 +1299,6 @@ export function activate(context: vscode.ExtensionContext) {
 		closeFile,
 		closeAllDatasetFiles,
 		buildIndex,
-		processHruSubsetCmd,
-		processHruSubsetAndRunCmd,
 		showDependencyGraph,
 		runDataQualityPreflight,
 		checkInputFiles,
@@ -1597,8 +1316,7 @@ export function activate(context: vscode.ExtensionContext) {
 		editSchema,
 		describeEntityCmd,
 		searchDatasetCmd,
-		statusBarItem,
-		hruProcessorOutput
+		statusBarItem
 	);
 	} catch (err) {
 		console.error('SWAT+ Dataset Selector activation error', err);

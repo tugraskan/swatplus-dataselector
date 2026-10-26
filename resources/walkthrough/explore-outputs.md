@@ -9,19 +9,6 @@ written. Type in its filter box to narrow a long list of output files by name.
   output files, ready for plotting.
 - Right-click any output for **Explore Output File** or **Open File in Editor**.
 
-## Working on a smaller model
-
-Full watersheds are slow to iterate on. **SWAT+: Create HRU Subset** copies the
-TxtInOut folder and keeps only the HRUs you name (`1,4-6,10`), optionally preserving
-downstream routing, and makes the reduced copy the active dataset. Your original
-dataset is never modified. A reduced model can trip over bugs in SWAT+ itself, so
-the command also offers a few tracked workarounds (extra feeder HRUs, an aligned
-`hydrology.wet`, main/dev compatibility, outputs off); see
-`scripts/SWAT_WORKAROUNDS.md`.
-
-**SWAT+: Create HRU Subset and Run** does the same and immediately runs SWAT+ against
-the subset.
-
 ## Asking questions
 
 Type `@swat` in the Chat view to ask about the indexed dataset — "describe HRU 81",

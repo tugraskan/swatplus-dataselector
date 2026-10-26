@@ -20,7 +20,7 @@ schema. It is a two-layer project:
   navigation across SWAT+ input files.
 - **Python scripts (`scripts/`)** — schema extraction from the
   [`swatplus-editor`](https://github.com/swat-model/swatplus-editor) project, pandas-based
-  indexing, HRU-subset processing, and output→DataFrame conversion. These are invoked by
+  indexing, and output→DataFrame conversion. These are invoked by
   the extension and can also be run standalone.
 - **Schema (`resources/schema/`)** — the machine-readable schema the extension indexes
   and validates against, built from the SWAT+ Fortran source by
@@ -35,7 +35,6 @@ schema. It is a two-layer project:
 - **Recent Datasets**: Reopen recently used datasets from the sidebar.
 - **Dataset Folder Listing**: Show datasets from a configured parent folder such as `workdata/`.
 - **Quick Debug Launch**: Start debugging with the selected dataset as the working directory.
-- **HRU Subsets**: Create a reduced TxtInOut folder for selected HRU IDs, with optional downstream routing preservation and tracked workarounds for SWAT+ bugs that stop a subset from running.
 - **Output Exploration**: Open `.csv` / `.out` / `.txt` output files as DataFrames and generate Jupyter notebooks from them.
 - **Data Quality**: Run a preflight report of unresolved references and orphan rows, plus an input-file checker for headers, column counts, data types, and **required (non-nullable) values left empty or `null`** — with each warning annotated by the column's documented meaning and units.
 - **Seamless Integration**: Works with CMake Tools and gdb debugger configurations.
@@ -121,19 +120,11 @@ After pulling updates, reload VS Code so the latest extension bundle is active.
 
 **HRU subsets**
 
-- `SWAT+: Create HRU Subset` - Create a reduced TxtInOut folder for selected HRU IDs.
-- `SWAT+: Create HRU Subset and Run` - Create a reduced HRU subset and run SWAT+ with the selected executable.
-
-Both commands ask for the HRU IDs, whether to keep downstream routing, and which workarounds for SWAT+ bugs to apply (the sidebar panel has the same choices as checkboxes):
-
-| Option | Default | What it does |
-|---|---|---|
-| Add feeder HRUs (W1) | on, with routing | Adds one HRU for each kept channel whose inflows are only other channels, which SWAT+ `main`/`dev` cannot run. The added HRUs are listed in the output channel and the result message. |
-| Align `hydrology.wet` (W2) | on | Puts each wetland's hydrology row at the number of the HRU that uses it (rows in between are placeholders, never more rows than HRUs), because SWAT+ reads a per-HRU array at that row. |
-| SWAT+ main/dev compatibility (W3) | off | Turns water allocation off and removes `print.prt` rows only `NAM_Branch` accepts. |
-| Turn all outputs off (W4) | off | Sets every `print.prt` object row to `n`. |
-
-Every workaround is recorded, with the SWAT+ code it works around, in [`scripts/SWAT_WORKAROUNDS.md`](scripts/SWAT_WORKAROUNDS.md), so it can be removed once SWAT+ is fixed. `python scripts/hru_processor.py --check-swat-source <swatplus checkout>` reports which ones a checkout still needs.
+Creating a reduced TxtInOut folder for selected HRUs is no longer part of this extension. It lives in
+its own extension, **SWAT+ HRU Subset** ([`hru-subset/`](hru-subset/) in this repository), which has
+the same panel (HRU IDs, keep routing, the tracked SWAT+ workarounds), an HRU picker table and a
+preview of the feeder HRUs a subset will add. It can use the dataset selected here: it asks this
+extension for it through `swat-dataset-selector.getDatasetFolder`.
 
 **Outputs**
 
@@ -187,10 +178,9 @@ src/                 TypeScript extension source (~30 files)
   swatWebviewProvider  Dataset Selector sidebar webview
   *TableViewerPanel    Table / single-table data viewers
   fk*Provider          Foreign-key definition, hover, and diagnostics providers
-  hruProcessor*.ts     HRU subset generation (processor flags and result text in hruProcessorOptions.ts)
   output*              Output DataFrame explorer and notebook generation
   test/                Mocha test suites
-scripts/             Python tooling (schema extraction, pandas indexing, HRU, outputs)
+scripts/             Python tooling (schema extraction, pandas indexing, outputs)
 resources/schema/    SWAT+ schema JSON: built from source (generated), editor, metadata
 docs/                Deep-dive guides on indexing, schema, and FK relationships
 esbuild.js           Bundler config (produces dist/extension.js)

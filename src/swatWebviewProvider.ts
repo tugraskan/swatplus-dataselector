@@ -229,17 +229,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         case 'buildIndex':
                             vscode.commands.executeCommand('swat-dataset-selector.buildIndex');
                             break;
-                        case 'processHruSubset':
-                            vscode.commands.executeCommand('swat-dataset-selector.processHruSubset', {
-                                hruIds: typeof data.hruIds === 'string' ? data.hruIds : undefined,
-                                keepRouting: typeof data.keepRouting === 'boolean' ? data.keepRouting : undefined,
-                                runSwat: data.runSwat === true,
-                                exactHrus: typeof data.exactHrus === 'boolean' ? data.exactHrus : undefined,
-                                keepWetlandFile: typeof data.keepWetlandFile === 'boolean' ? data.keepWetlandFile : undefined,
-                                mainCompat: typeof data.mainCompat === 'boolean' ? data.mainCompat : undefined,
-                                noOutputs: typeof data.noOutputs === 'boolean' ? data.noOutputs : undefined
-                            });
-                            break;
                         case 'rebuildIndex':
                             vscode.commands.executeCommand('swat-dataset-selector.rebuildIndex');
                             break;
@@ -737,46 +726,12 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
         const buildIndexLabel = hasCachedIndex ? 'Rebuild Index' : 'Build Index';
         const indexingPrereqs = this.indexer.getIndexingPrerequisiteStatus();
         const canBuildIndex = hasFileCio && indexingPrereqs.ready;
-        const canProcessHruSubset = hasFileCio;
         const buildIndexUnavailableReason = !hasFileCio
             ? 'No file.cio found in selected dataset.'
             : indexingPrereqs.message;
         const buildIndexButtonTitle = canBuildIndex
             ? `Run ${buildIndexLabel} using Python indexer`
             : buildIndexUnavailableReason;
-        const hruRangeSummary = (() => {
-            if (!resolvedFileCioPath) {
-                return 'Select a dataset with file.cio to inspect HRUs.';
-            }
-
-            const hruConPath = path.join(path.dirname(resolvedFileCioPath), 'hru.con');
-            if (!fs.existsSync(hruConPath)) {
-                return 'hru.con not found in this TxtInOut folder.';
-            }
-
-            try {
-                const lines = fs.readFileSync(hruConPath, 'utf-8').split(/\r?\n/);
-                const headers = (lines[1] || '').trim().split(/\s+/);
-                const idIndex = headers.findIndex(header => header.toLowerCase() === 'id');
-                if (idIndex < 0) {
-                    return 'Could not find an ID column in hru.con.';
-                }
-
-                const ids = lines.slice(2)
-                    .map(line => line.trim())
-                    .filter(Boolean)
-                    .map(line => Number(line.split(/\s+/)[idIndex]))
-                    .filter(value => Number.isInteger(value)) as number[];
-
-                if (ids.length === 0) {
-                    return 'No HRU rows found in hru.con.';
-                }
-
-                return `HRUs ${Math.min(...ids)}-${Math.max(...ids)} (${ids.length} total)`;
-            } catch {
-                return 'Could not read hru.con.';
-            }
-        })();
         let combinedHtml = '';
         if (!this.selectedDataset) {
             combinedHtml = `<div class="section">
@@ -2176,110 +2131,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
             cursor: not-allowed;
         }
 
-        .hru-panel {
-            margin-top: 10px;
-            padding: 10px;
-            border: 1px solid var(--vscode-panel-border);
-            border-radius: 4px;
-            background-color: var(--vscode-editor-background);
-        }
-
-        .hru-panel .section-header {
-            margin-bottom: 0;
-        }
-
-        .hru-panel .section-content {
-            margin-top: 8px;
-        }
-
-        .hru-panel-toggle-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
-        }
-
-        .hru-panel-toggle-title {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-weight: 600;
-            font-size: 12px;
-            color: var(--vscode-foreground);
-        }
-
-        .hru-panel-toggle {
-            flex-shrink: 0;
-        }
-
-        .hru-panel-toggle input:disabled + .slider {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .hru-panel-title {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-weight: 600;
-            font-size: 12px;
-            color: var(--vscode-foreground);
-            margin-bottom: 4px;
-        }
-
-        .hru-panel-description {
-            font-size: 11px;
-            color: var(--vscode-foreground);
-            line-height: 1.45;
-            margin-bottom: 8px;
-        }
-
-        .hru-panel-meta {
-            font-size: 11px;
-            color: var(--vscode-descriptionForeground);
-            margin-bottom: 8px;
-            line-height: 1.4;
-        }
-
-        .hru-field-label {
-            display: block;
-            font-size: 11px;
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
-
-        .hru-input {
-            width: 100%;
-            box-sizing: border-box;
-            padding: 6px 8px;
-            border-radius: 4px;
-            border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
-            background: var(--vscode-input-background);
-            color: var(--vscode-input-foreground);
-            font-family: var(--vscode-font-family);
-            font-size: 12px;
-        }
-
-        .hru-input:disabled {
-            opacity: 0.6;
-        }
-
-        .hru-validation {
-            min-height: 16px;
-            margin-top: 4px;
-            font-size: 11px;
-            color: var(--vscode-errorForeground);
-        }
-
-        .hru-checkbox-row {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            margin-top: 6px;
-            font-size: 12px;
-            color: var(--vscode-foreground);
-        }
-
         .filter-toggle {
             display: flex;
             align-items: center;
@@ -2566,50 +2417,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 ${svgs.database}
                 ${buildIndexLabel}
             </button>
-            <div class="hru-panel">
-                <div class="hru-panel-toggle-row" title="Turn on HRU subset options">
-                    <div class="hru-panel-toggle-title">
-                        ${svgs.file}
-                        <span>HRU Subset</span>
-                    </div>
-                    <label class="toggle hru-panel-toggle" title="Show HRU subset options">
-                        <input type="checkbox" id="hruPanelToggle" ${canProcessHruSubset ? '' : 'disabled'}>
-                        <span class="slider"></span>
-                    </label>
-                </div>
-                <div class="section-content hidden" id="hru-processor-content">
-                    <div class="hru-panel-description" title="The source TxtInOut folder is copied first, then the copy is filtered. The original selected dataset is not edited.">
-                        Create a copied TxtInOut folder that keeps only selected HRUs. The new subset becomes the active dataset when processing finishes.
-                    </div>
-                    <div class="hru-panel-meta" title="Detected from hru.con in the active TxtInOut folder.">${escapeHtml(hruRangeSummary)}</div>
-                    <label class="hru-field-label" for="hruIdsInput" title="Enter one HRU ID, a comma-separated list, or inclusive ranges.">HRU IDs</label>
-                    <input class="hru-input" id="hruIdsInput" type="text" placeholder="1,4-6,10" title="Examples: 7 or 1,4-6,10" ${canProcessHruSubset ? '' : 'disabled'}>
-                    <div class="hru-validation" id="hruValidation"></div>
-                    <label class="hru-checkbox-row" title="When enabled, downstream routing objects connected to the selected HRUs are retained and renumbered.">
-                        <input type="checkbox" id="hruKeepRoutingCheckbox" ${canProcessHruSubset ? '' : 'disabled'}>
-                        <span>Keep downstream routing</span>
-                    </label>
-                    <label class="hru-checkbox-row" title="W1. For a kept channel whose inflows are all other channels, SWAT+ main/dev ch_temp reads index 0 and stops. Adds one HRU of the routing unit that feeds each such channel. Applies when downstream routing is kept.">
-                        <input type="checkbox" id="hruFeederCheckbox" checked ${canProcessHruSubset ? '' : 'disabled'}>
-                        <span>Add feeder HRUs (W1)</span>
-                    </label>
-                    <label class="hru-checkbox-row" title="W2. SWAT+ reads a per-HRU wetland array at the hydrology.wet row. Moves each wetland hydrology row to the number of the HRU that uses it.">
-                        <input type="checkbox" id="hruWetlandCheckbox" checked ${canProcessHruSubset ? '' : 'disabled'}>
-                        <span>Align hydrology.wet (W2)</span>
-                    </label>
-                    <label class="hru-checkbox-row" title="W3. Water allocation off (WATER_RIGHTS null) and print.prt rows only NAM_Branch accepts removed, so the subset runs on SWAT+ main/dev.">
-                        <input type="checkbox" id="hruMainCompatCheckbox" ${canProcessHruSubset ? '' : 'disabled'}>
-                        <span>SWAT+ main/dev compatibility (W3)</span>
-                    </label>
-                    <label class="hru-checkbox-row" title="W4. Sets every print.prt object row to n, so the subset writes no output tables.">
-                        <input type="checkbox" id="hruNoOutputsCheckbox" ${canProcessHruSubset ? '' : 'disabled'}>
-                        <span>Turn all outputs off (W4)</span>
-                    </label>
-                    <button class="action-button secondary${canProcessHruSubset ? '' : ' disabled'}" id="processHruSubsetBtn" title="${canProcessHruSubset ? 'Create a reduced TxtInOut folder for selected HRUs' : 'No file.cio found in selected dataset.'}" style="width: 100%; margin-top: 8px;" ${canProcessHruSubset ? '' : 'disabled'}>
-                        Create Subset
-                    </button>
-                </div>
-            </div>
             ${canBuildIndex ? '' : `
                 <div class="schema-version schema-version-inline">
                     <span class="schema-version-label">Index unavailable:</span>
@@ -2706,13 +2513,12 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     // The extension host rebuilds this view by reassigning webview.html,
                     // which reloads the document and would otherwise discard every bit of
                     // client-side state. setState/getState survives those reloads, so
-                    // collapsed sections, search filters, scroll offsets and a
-                    // half-typed HRU list are restored instead of reset on each refresh.
+                    // collapsed sections, search filters and scroll offsets are restored
+                    // instead of reset on each refresh.
                     const DEFAULT_UI_STATE = {
                         collapsedSections: [],
                         search: { inputs: '', outputs: '' },
                         scroll: {},
-                        hru: { open: false, ids: '', keepRouting: false, feeder: true, wetland: true, mainCompat: false, noOutputs: false },
                         selectedWindowCollapsed: false
                     };
 
@@ -2911,169 +2717,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 e.preventDefault();
                 swatHost.postMessage({ type: 'openFolder' });
             });
-
-            function validateHruIds(value) {
-                const text = String(value || '').trim();
-                if (!text) {
-                    return 'Enter at least one HRU ID.';
-                }
-                const parts = text.split(',');
-                for (const rawPart of parts) {
-                    const part = rawPart.trim();
-                    if (!part) {
-                        return 'Remove empty comma-separated entries.';
-                    }
-                    if (part.includes('-')) {
-                        const pieces = part.split('-').map(piece => piece.trim());
-                        if (pieces.length !== 2 || !pieces[0] || !pieces[1]) {
-                            return 'Invalid range: ' + part;
-                        }
-                        const start = Number(pieces[0]);
-                        const end = Number(pieces[1]);
-                        if (!Number.isInteger(start) || !Number.isInteger(end) || start <= 0 || end <= 0) {
-                            return 'Ranges must contain positive integers: ' + part;
-                        }
-                        if (start > end) {
-                            return 'Range start must be <= end: ' + part;
-                        }
-                    } else {
-                        const id = Number(part);
-                        if (!Number.isInteger(id) || id <= 0) {
-                            return 'Invalid HRU ID: ' + part;
-                        }
-                    }
-                }
-                return '';
-            }
-
-            function setHruValidation(message) {
-                const validation = $('hruValidation');
-                if (validation) {
-                    validation.textContent = message || '';
-                }
-            }
-
-            function submitHruSubset() {
-                const input = $('hruIdsInput');
-                const keepRouting = $('hruKeepRoutingCheckbox');
-                const hruIds = input ? String(input.value || '').trim() : '';
-                const validationMessage = validateHruIds(hruIds);
-                setHruValidation(validationMessage);
-                if (validationMessage) {
-                    swatHost.postMessage({ type: 'showError', message: validationMessage });
-                    return;
-                }
-                const keepRoutingChecked = keepRouting ? Boolean(keepRouting.checked) : false;
-                const feeder = $('hruFeederCheckbox');
-                const wetland = $('hruWetlandCheckbox');
-                const mainCompat = $('hruMainCompatCheckbox');
-                const noOutputs = $('hruNoOutputsCheckbox');
-                swatHost.postMessage({
-                    type: 'processHruSubset',
-                    hruIds,
-                    keepRouting: keepRoutingChecked,
-                    runSwat: false,
-                    // The checkboxes are the positive form; the processor flags turn the workaround off.
-                    exactHrus: keepRoutingChecked && feeder ? !feeder.checked : false,
-                    keepWetlandFile: wetland ? !wetland.checked : false,
-                    mainCompat: mainCompat ? Boolean(mainCompat.checked) : false,
-                    noOutputs: noOutputs ? Boolean(noOutputs.checked) : false
-                });
-            }
-
-            const hruIdsInput = $('hruIdsInput');
-            const hruKeepRoutingCheckbox = $('hruKeepRoutingCheckbox');
-            const hruFeederCheckbox = $('hruFeederCheckbox');
-            const hruWetlandCheckbox = $('hruWetlandCheckbox');
-            const hruMainCompatCheckbox = $('hruMainCompatCheckbox');
-            const hruNoOutputsCheckbox = $('hruNoOutputsCheckbox');
-
-            function saveHruState() {
-                const toggle = $('hruPanelToggle');
-                saveUiState({
-                    hru: {
-                        open: toggle ? Boolean(toggle.checked) : false,
-                        ids: hruIdsInput ? String(hruIdsInput.value || '') : '',
-                        keepRouting: hruKeepRoutingCheckbox ? Boolean(hruKeepRoutingCheckbox.checked) : false,
-                        feeder: hruFeederCheckbox ? Boolean(hruFeederCheckbox.checked) : true,
-                        wetland: hruWetlandCheckbox ? Boolean(hruWetlandCheckbox.checked) : true,
-                        mainCompat: hruMainCompatCheckbox ? Boolean(hruMainCompatCheckbox.checked) : false,
-                        noOutputs: hruNoOutputsCheckbox ? Boolean(hruNoOutputsCheckbox.checked) : false
-                    }
-                });
-            }
-
-            // Feeder HRUs only apply while downstream routing is kept.
-            function syncHruFeederState() {
-                if (hruFeederCheckbox && hruKeepRoutingCheckbox) {
-                    hruFeederCheckbox.disabled = !hruKeepRoutingCheckbox.checked || hruKeepRoutingCheckbox.disabled;
-                }
-            }
-
-            const hruWorkaroundBoxes = [
-                [hruFeederCheckbox, 'feeder'],
-                [hruWetlandCheckbox, 'wetland'],
-                [hruMainCompatCheckbox, 'mainCompat'],
-                [hruNoOutputsCheckbox, 'noOutputs']
-            ];
-            for (const [box, key] of hruWorkaroundBoxes) {
-                if (!box) {
-                    continue;
-                }
-                if (uiState.hru && typeof uiState.hru[key] === 'boolean') {
-                    box.checked = uiState.hru[key];
-                }
-                box.addEventListener('change', saveHruState);
-            }
-
-            if (hruIdsInput) {
-                // Restore a half-typed HRU list so a background refresh does not wipe it.
-                if (uiState.hru && uiState.hru.ids && !hruIdsInput.value) {
-                    hruIdsInput.value = uiState.hru.ids;
-                    setHruValidation(validateHruIds(hruIdsInput.value));
-                }
-                hruIdsInput.addEventListener('input', () => {
-                    setHruValidation(validateHruIds(hruIdsInput.value));
-                    saveHruState();
-                });
-                hruIdsInput.addEventListener('keydown', (event) => {
-                    if (event.key === 'Enter') {
-                        submitHruSubset();
-                    }
-                });
-            }
-
-            if (hruKeepRoutingCheckbox) {
-                if (uiState.hru && uiState.hru.keepRouting) {
-                    hruKeepRoutingCheckbox.checked = true;
-                }
-                hruKeepRoutingCheckbox.addEventListener('change', () => {
-                    syncHruFeederState();
-                    saveHruState();
-                });
-            }
-            syncHruFeederState();
-
-            const hruPanelToggle = $('hruPanelToggle');
-            const hruProcessorContent = $('hru-processor-content');
-            if (hruPanelToggle && hruProcessorContent) {
-                const syncHruPanel = () => {
-                    if (hruPanelToggle.checked) {
-                        hruProcessorContent.classList.remove('hidden');
-                    } else {
-                        hruProcessorContent.classList.add('hidden');
-                    }
-                };
-                // Restore the open/closed state before the first sync.
-                if (uiState.hru && uiState.hru.open && !hruPanelToggle.disabled) {
-                    hruPanelToggle.checked = true;
-                }
-                hruPanelToggle.addEventListener('change', () => {
-                    syncHruPanel();
-                    saveHruState();
-                });
-                syncHruPanel();
-            }
 
             const schemaSelect = $('schema-select');
             if (schemaSelect) {
@@ -3343,11 +2986,6 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     if (closest && closest('#healthPreflightBtn')) {
                         swatLog('SWAT webview: delegated preflight click');
                         swatHost.postMessage({ type: 'runDataQualityPreflight' });
-                        return;
-                    }
-                    if (closest && closest('#processHruSubsetBtn')) {
-                        swatLog('SWAT webview: delegated processHruSubset click');
-                        submitHruSubset();
                         return;
                     }
                     if (closest && closest('#loadIndexBtn')) {
