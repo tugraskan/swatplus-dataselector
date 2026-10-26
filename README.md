@@ -35,7 +35,7 @@ schema. It is a two-layer project:
 - **Recent Datasets**: Reopen recently used datasets from the sidebar.
 - **Dataset Folder Listing**: Show datasets from a configured parent folder such as `workdata/`.
 - **Quick Debug Launch**: Start debugging with the selected dataset as the working directory.
-- **HRU Subsets**: Create a reduced TxtInOut folder for selected HRU IDs, with optional downstream routing preservation.
+- **HRU Subsets**: Create a reduced TxtInOut folder for selected HRU IDs, with optional downstream routing preservation and tracked workarounds for SWAT+ bugs that stop a subset from running.
 - **Output Exploration**: Open `.csv` / `.out` / `.txt` output files as DataFrames and generate Jupyter notebooks from them.
 - **Data Quality**: Run a preflight report of unresolved references and orphan rows, plus an input-file checker for headers, column counts, data types, and **required (non-nullable) values left empty or `null`** — with each warning annotated by the column's documented meaning and units.
 - **Seamless Integration**: Works with CMake Tools and gdb debugger configurations.
@@ -124,6 +124,17 @@ After pulling updates, reload VS Code so the latest extension bundle is active.
 - `SWAT+: Create HRU Subset` - Create a reduced TxtInOut folder for selected HRU IDs.
 - `SWAT+: Create HRU Subset and Run` - Create a reduced HRU subset and run SWAT+ with the selected executable.
 
+Both commands ask for the HRU IDs, whether to keep downstream routing, and which workarounds for SWAT+ bugs to apply (the sidebar panel has the same choices as checkboxes):
+
+| Option | Default | What it does |
+|---|---|---|
+| Add feeder HRUs (W1) | on, with routing | Adds one HRU for each kept channel whose inflows are only other channels, which SWAT+ `main`/`dev` cannot run. The added HRUs are listed in the output channel and the result message. |
+| Compact `hydrology.wet` (W2) | on | Keeps only the wetland hydrology rows the kept HRUs use, so SWAT+ does not index past a per-HRU array. |
+| SWAT+ main/dev compatibility (W3) | off | Turns water allocation off and removes `print.prt` rows only `NAM_Branch` accepts. |
+| Turn all outputs off (W4) | off | Sets every `print.prt` object row to `n`. |
+
+Every workaround is recorded, with the SWAT+ code it works around, in [`scripts/SWAT_WORKAROUNDS.md`](scripts/SWAT_WORKAROUNDS.md), so it can be removed once SWAT+ is fixed. `python scripts/hru_processor.py --check-swat-source <swatplus checkout>` reports which ones a checkout still needs.
+
 **Outputs**
 
 - `SWAT+: Generate Output Notebooks` - Generate Jupyter notebooks for output files.
@@ -176,7 +187,7 @@ src/                 TypeScript extension source (~30 files)
   swatWebviewProvider  Dataset Selector sidebar webview
   *TableViewerPanel    Table / single-table data viewers
   fk*Provider          Foreign-key definition, hover, and diagnostics providers
-  hruProcessor.ts      HRU subset generation
+  hruProcessor*.ts     HRU subset generation (processor flags and result text in hruProcessorOptions.ts)
   output*              Output DataFrame explorer and notebook generation
   test/                Mocha test suites
 scripts/             Python tooling (schema extraction, pandas indexing, HRU, outputs)

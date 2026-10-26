@@ -233,7 +233,11 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                             vscode.commands.executeCommand('swat-dataset-selector.processHruSubset', {
                                 hruIds: typeof data.hruIds === 'string' ? data.hruIds : undefined,
                                 keepRouting: typeof data.keepRouting === 'boolean' ? data.keepRouting : undefined,
-                                runSwat: data.runSwat === true
+                                runSwat: data.runSwat === true,
+                                exactHrus: typeof data.exactHrus === 'boolean' ? data.exactHrus : undefined,
+                                keepWetlandFile: typeof data.keepWetlandFile === 'boolean' ? data.keepWetlandFile : undefined,
+                                mainCompat: typeof data.mainCompat === 'boolean' ? data.mainCompat : undefined,
+                                noOutputs: typeof data.noOutputs === 'boolean' ? data.noOutputs : undefined
                             });
                             break;
                         case 'rebuildIndex':
@@ -2585,6 +2589,22 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         <input type="checkbox" id="hruKeepRoutingCheckbox" ${canProcessHruSubset ? '' : 'disabled'}>
                         <span>Keep downstream routing</span>
                     </label>
+                    <label class="hru-checkbox-row" title="W1. For a kept channel whose inflows are all other channels, SWAT+ main/dev ch_temp reads index 0 and stops. Adds one HRU of the routing unit that feeds each such channel. Applies when downstream routing is kept.">
+                        <input type="checkbox" id="hruFeederCheckbox" checked ${canProcessHruSubset ? '' : 'disabled'}>
+                        <span>Add feeder HRUs (W1)</span>
+                    </label>
+                    <label class="hru-checkbox-row" title="W2. SWAT+ indexes a per-HRU wetland array by the hydrology.wet row. Keeps only the hydrology.wet rows the kept HRUs use.">
+                        <input type="checkbox" id="hruWetlandCheckbox" checked ${canProcessHruSubset ? '' : 'disabled'}>
+                        <span>Compact hydrology.wet (W2)</span>
+                    </label>
+                    <label class="hru-checkbox-row" title="W3. Water allocation off (WATER_RIGHTS null) and print.prt rows only NAM_Branch accepts removed, so the subset runs on SWAT+ main/dev.">
+                        <input type="checkbox" id="hruMainCompatCheckbox" ${canProcessHruSubset ? '' : 'disabled'}>
+                        <span>SWAT+ main/dev compatibility (W3)</span>
+                    </label>
+                    <label class="hru-checkbox-row" title="W4. Sets every print.prt object row to n, so the subset writes no output tables.">
+                        <input type="checkbox" id="hruNoOutputsCheckbox" ${canProcessHruSubset ? '' : 'disabled'}>
+                        <span>Turn all outputs off (W4)</span>
+                    </label>
                     <button class="action-button secondary${canProcessHruSubset ? '' : ' disabled'}" id="processHruSubsetBtn" title="${canProcessHruSubset ? 'Create a reduced TxtInOut folder for selected HRUs' : 'No file.cio found in selected dataset.'}" style="width: 100%; margin-top: 8px;" ${canProcessHruSubset ? '' : 'disabled'}>
                         Create Subset
                     </button>
@@ -2692,7 +2712,7 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                         collapsedSections: [],
                         search: { inputs: '', outputs: '' },
                         scroll: {},
-                        hru: { open: false, ids: '', keepRouting: false },
+                        hru: { open: false, ids: '', keepRouting: false, feeder: true, wetland: true, mainCompat: false, noOutputs: false },
                         selectedWindowCollapsed: false
                     };
 
@@ -2943,16 +2963,30 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     swatHost.postMessage({ type: 'showError', message: validationMessage });
                     return;
                 }
+                const keepRoutingChecked = keepRouting ? Boolean(keepRouting.checked) : false;
+                const feeder = $('hruFeederCheckbox');
+                const wetland = $('hruWetlandCheckbox');
+                const mainCompat = $('hruMainCompatCheckbox');
+                const noOutputs = $('hruNoOutputsCheckbox');
                 swatHost.postMessage({
                     type: 'processHruSubset',
                     hruIds,
-                    keepRouting: keepRouting ? Boolean(keepRouting.checked) : false,
-                    runSwat: false
+                    keepRouting: keepRoutingChecked,
+                    runSwat: false,
+                    // The checkboxes are the positive form; the processor flags turn the workaround off.
+                    exactHrus: keepRoutingChecked && feeder ? !feeder.checked : false,
+                    keepWetlandFile: wetland ? !wetland.checked : false,
+                    mainCompat: mainCompat ? Boolean(mainCompat.checked) : false,
+                    noOutputs: noOutputs ? Boolean(noOutputs.checked) : false
                 });
             }
 
             const hruIdsInput = $('hruIdsInput');
             const hruKeepRoutingCheckbox = $('hruKeepRoutingCheckbox');
+            const hruFeederCheckbox = $('hruFeederCheckbox');
+            const hruWetlandCheckbox = $('hruWetlandCheckbox');
+            const hruMainCompatCheckbox = $('hruMainCompatCheckbox');
+            const hruNoOutputsCheckbox = $('hruNoOutputsCheckbox');
 
             function saveHruState() {
                 const toggle = $('hruPanelToggle');
@@ -2960,9 +2994,36 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                     hru: {
                         open: toggle ? Boolean(toggle.checked) : false,
                         ids: hruIdsInput ? String(hruIdsInput.value || '') : '',
-                        keepRouting: hruKeepRoutingCheckbox ? Boolean(hruKeepRoutingCheckbox.checked) : false
+                        keepRouting: hruKeepRoutingCheckbox ? Boolean(hruKeepRoutingCheckbox.checked) : false,
+                        feeder: hruFeederCheckbox ? Boolean(hruFeederCheckbox.checked) : true,
+                        wetland: hruWetlandCheckbox ? Boolean(hruWetlandCheckbox.checked) : true,
+                        mainCompat: hruMainCompatCheckbox ? Boolean(hruMainCompatCheckbox.checked) : false,
+                        noOutputs: hruNoOutputsCheckbox ? Boolean(hruNoOutputsCheckbox.checked) : false
                     }
                 });
+            }
+
+            // Feeder HRUs only apply while downstream routing is kept.
+            function syncHruFeederState() {
+                if (hruFeederCheckbox && hruKeepRoutingCheckbox) {
+                    hruFeederCheckbox.disabled = !hruKeepRoutingCheckbox.checked || hruKeepRoutingCheckbox.disabled;
+                }
+            }
+
+            const hruWorkaroundBoxes = [
+                [hruFeederCheckbox, 'feeder'],
+                [hruWetlandCheckbox, 'wetland'],
+                [hruMainCompatCheckbox, 'mainCompat'],
+                [hruNoOutputsCheckbox, 'noOutputs']
+            ];
+            for (const [box, key] of hruWorkaroundBoxes) {
+                if (!box) {
+                    continue;
+                }
+                if (uiState.hru && typeof uiState.hru[key] === 'boolean') {
+                    box.checked = uiState.hru[key];
+                }
+                box.addEventListener('change', saveHruState);
             }
 
             if (hruIdsInput) {
@@ -2986,8 +3047,12 @@ export class SwatDatasetWebviewProvider implements vscode.WebviewViewProvider {
                 if (uiState.hru && uiState.hru.keepRouting) {
                     hruKeepRoutingCheckbox.checked = true;
                 }
-                hruKeepRoutingCheckbox.addEventListener('change', saveHruState);
+                hruKeepRoutingCheckbox.addEventListener('change', () => {
+                    syncHruFeederState();
+                    saveHruState();
+                });
             }
+            syncHruFeederState();
 
             const hruPanelToggle = $('hruPanelToggle');
             const hruProcessorContent = $('hru-processor-content');

@@ -4,6 +4,26 @@ All notable changes to the "swatplus-vscode-dataset-selector" extension will be 
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [Unreleased]
+
+### Added
+- HRU subsets: tracked workarounds for SWAT+ bugs, each with an id in the
+  `SWAT_WORKAROUNDS` registry (`scripts/hru_processor.py`) and in
+  `scripts/SWAT_WORKAROUNDS.md`; the result lists `workarounds_applied`.
+  - **W1 feeder HRUs** (keep routing, on; `--exact-hrus` off): adds one HRU for each
+    kept channel that would have only channel inflows, reported as `added_hru_ids`.
+  - **W2 compact `hydrology.wet`** (on; `--keep-wetland-file` off).
+  - **W3 `--main-compat`** and **W4 `--no-outputs`** (opt-in).
+  - `--check-swat-source <checkout>` reports which workarounds a SWAT+ checkout still needs.
+- The HRU subset command and the sidebar panel offer these options.
+
+### Fixed
+- HRU subsets with kept routing: `aqu_cha.lin` is filtered and renumbered with the
+  aquifer and channel maps (the full file overran SWAT+'s aquifer array); routing-unit
+  element links are followed, so selecting only upland HRUs keeps the channel network;
+  `chan-surf.lin`, `rout_unit.rtu` (DEF column) and the REGIONS files that carry
+  object numbers are renumbered.
+
 ## [0.5.1] - 2026-10-08
 
 ### Added
