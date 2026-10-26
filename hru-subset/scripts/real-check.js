@@ -4,8 +4,13 @@
 //                         [--hru-ids 1532,1538,3978] [--bad-id 99999] [--name keep3]
 //
 // The dataset is only read. Output folders are created under --out-root and are
-// named tool_ext_<name>; the failed-run folder is deleted again through the same
-// deletePartialOutput the command uses. Needs `npm run compile-tests` first.
+// named tool_split_<name>; the failed-run folder is deleted again through the same
+// deletePartialOutput the panel uses. Needs `npm run compile-tests` first.
+//
+// Besides the run itself it checks the two read-only modes the panel uses:
+// --hru-table (the HRU picker's rows; spot checks are the 02070009 HRUs named
+// below) and --plan (what the preview shows; it must equal what the run does and
+// must not create a folder).
 
 const fs = require('fs');
 const path = require('path');
@@ -13,7 +18,7 @@ const path = require('path');
 const out = path.resolve(__dirname, '..', 'out');
 const { runProcess } = require(path.join(out, 'processRunner.js'));
 const { probePython, pythonCandidateNames, resolvePython } = require(path.join(out, 'python.js'));
-const { createSubset, deletePartialOutput, inspectHruRange, ScriptError } = require(path.join(out, 'runner.js'));
+const { createSubset, deletePartialOutput, inspectHruRange, inspectHruTable, planSubset, ScriptError } = require(path.join(out, 'runner.js'));
 const { checkOutputLocation, uniqueOutputPath } = require(path.join(out, 'paths.js'));
 const { detectSubsetFolder, RESULT_FILE_NAME } = require(path.join(out, 'dataset.js'));
 const { DEFAULT_OPTIONS } = require(path.join(out, 'options.js'));
@@ -128,9 +133,40 @@ async function main() {
 	check('the bad id is outside the range (the box would refuse it)',
 		validateHruIdText(badId, range.min_hru, range.max_hru) !== undefined);
 
+	// The HRU picker's table (--hru-table).
+	const hruTable = await inspectHruTable(ctx, dataset);
+	const byId = new Map(hruTable.rows.map(row => [row.id, row]));
+	check('--hru-table --json lists every HRU', hruTable.ok === true && hruTable.rows.length === range.total_hrus, `${hruTable.rows.length} rows`);
+	const urban = byId.get(1532);
+	check('HRU 1532: urban urbn_cool, about 945.5 ha, ru1_020700090404, not a wetland',
+		!!urban && urban.plant_community === 'urbn_cool' && Math.abs(urban.area_ha - 945.5) < 0.05
+		&& urban.routing_unit === 'ru1_020700090404' && urban.wetland === false,
+		urban && `${urban.plant_community}, ${urban.area_ha} ha, ${urban.routing_unit}, wetland=${urban.wetland}`);
+	const wet1538 = byId.get(1538);
+	check('HRU 1538: wetland that receives upstream water', !!wet1538 && wet1538.wetland === true && wet1538.receives_upstream === true,
+		wet1538 && `${wet1538.wetland_name}, upstream=${wet1538.receives_upstream}`);
+	const wet1802 = byId.get(1802);
+	check('HRU 1802: wetland in ru2_020700090405', !!wet1802 && wet1802.wetland === true && wet1802.routing_unit === 'ru2_020700090405',
+		wet1802 && `${wet1802.wetland_name}, ${wet1802.routing_unit}`);
+	check('the table has a subbasin for every HRU (from ls_unit.def)',
+		hruTable.rows.every(row => row.subbasin !== null) && hruTable.subbasin_sources.ls_unit === hruTable.rows.length,
+		JSON.stringify(hruTable.subbasin_sources));
+
+	// The preview (--plan): same result as the run, nothing written, even when --output-dir is given.
+	const planOptions = { ...DEFAULT_OPTIONS, keepRouting: true };
+	const plan = await planSubset(ctx, { datasetPath: dataset, hruIds: formatHruIds(expandHruIds(hruText)), options: planOptions });
+	const planAdded = (plan.added_hru_ids || []).map(item => item.hru_id).sort((a, b) => a - b);
+	check('--plan: the feeder HRUs are the expected ones', JSON.stringify(planAdded) === JSON.stringify(expectedAdded), planAdded.join(','));
+	check('--plan: every added HRU has a reason', (plan.added_hru_ids || []).every(item => item.reason && item.reason.length > 0));
+	const planProbe = path.join(path.resolve(outRoot), `tool_split_plan_probe_${process.pid}`);
+	const planWithOutput = await runProcess(python.command, [
+		scriptPath, '--dataset', dataset, '--hru-ids', hruText, '--keep-routing', '--plan', '--output-dir', planProbe, '--json'
+	]);
+	check('--plan with --output-dir does not create the folder', planWithOutput.code === 0 && !fs.existsSync(planProbe), planProbe);
+
 	// Positive run.
 	fs.mkdirSync(outRoot, { recursive: true });
-	const output = uniqueOutputPath(path.join(outRoot, `tool_ext_${name}`), fs.existsSync);
+	const output = uniqueOutputPath(path.join(outRoot, `tool_split_${name}`), fs.existsSync);
 	const datasetFolders = [dataset, range.source_dir];
 	check('output is outside the dataset', checkOutputLocation(output, datasetFolders) === undefined, output);
 	check('the dataset is not mistaken for a subset', detectSubsetFolder(datasetFolders, fs.existsSync) === undefined);
@@ -148,6 +184,11 @@ async function main() {
 	const added = (run.result.added_hru_ids || []).map(item => item.hru_id).sort((a, b) => a - b);
 	check('added_hru_ids are the expected feeders', JSON.stringify(added) === JSON.stringify(expectedAdded), added.join(','));
 	check('every added HRU has a reason', (run.result.added_hru_ids || []).every(item => item.reason && item.reason.length > 0));
+	check('the plan and the run keep the same objects', JSON.stringify(plan.retained_counts) === JSON.stringify(run.result.retained_counts),
+		`plan ${JSON.stringify(plan.retained_counts)} / run ${JSON.stringify(run.result.retained_counts)}`);
+	check('the plan and the run add the same HRUs and apply the same workarounds',
+		JSON.stringify(plan.added_hru_ids) === JSON.stringify(run.result.added_hru_ids)
+		&& JSON.stringify(plan.workarounds_applied) === JSON.stringify(run.result.workarounds_applied));
 	const applied = run.result.workarounds_applied || [];
 	check('workarounds_applied has W1 and W2', applied.includes('W1') && applied.includes('W2'), applied.join(','));
 	check('marker file written', fs.existsSync(path.join(output, RESULT_FILE_NAME)) && !run.resultFileError, run.resultFile);
@@ -159,7 +200,7 @@ async function main() {
 	lines.push('', formatHeadline(run.result), ...formatSummaryLines(run.result).map(line => `  ${line}`), '');
 
 	// Bad id: the script's own error, one run, no second interpreter.
-	const badOutput = uniqueOutputPath(path.join(outRoot, `tool_ext_bad${badId}`), fs.existsSync);
+	const badOutput = uniqueOutputPath(path.join(outRoot, `tool_split_bad${badId}`), fs.existsSync);
 	const runsBeforeBad = scriptRuns.length;
 	let badError;
 	try {
@@ -191,7 +232,7 @@ async function main() {
 		const started = Date.now();
 		const result = await runProcess(exe, [], { cwd: output, timeoutMs: 15 * 60 * 1000 });
 		const seconds = ((Date.now() - started) / 1000).toFixed(1);
-		fs.writeFileSync(path.join(outRoot, `tool_ext_${name}_swat_stdout.log`), result.stdout + result.stderr);
+		fs.writeFileSync(path.join(outRoot, `tool_split_${name}_swat_stdout.log`), result.stdout + result.stderr);
 		check('SWAT+ finished', !result.error && result.code === 0, `exit ${result.code}, ${seconds}s`);
 		check('SWAT+ printed "Execution successfully completed"', /Execution successfully completed/.test(result.stdout + result.stderr));
 	}

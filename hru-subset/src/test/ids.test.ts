@@ -78,4 +78,14 @@ suite('HRU id parsing', () => {
         assert.strictEqual(formatHruIds([]), '');
         assert.strictEqual(formatHruIds(expandHruIds('1-3,5')), '1-3,5');
     });
+
+    test('compresses and expands a long selection both ways', () => {
+        const all = Array.from({ length: 4222 }, (_, index) => index + 1);
+        assert.strictEqual(formatHruIds(all), '1-4222');
+        assert.deepStrictEqual(expandHruIds('1-4222'), all);
+        const mixed = [1, 2, 3, 7, 9, 10, 4000, 4001, 4222];
+        assert.strictEqual(formatHruIds(mixed), '1-3,7,9-10,4000-4001,4222');
+        assert.deepStrictEqual(expandHruIds(formatHruIds(mixed)), mixed);
+        assert.strictEqual(formatHruIds([1, 2, 3, 7]), '1-3,7');
+    });
 });
