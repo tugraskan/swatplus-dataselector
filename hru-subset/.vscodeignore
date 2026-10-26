@@ -1,0 +1,18 @@
+.vscode/**
+node_modules/**
+src/**
+out/**
+scripts/**
+.gitignore
+.mocharc.json
+esbuild.js
+tsconfig.json
+eslint.config.mjs
+**/*.map
+**/*.ts
+**/__pycache__/**
+**/*.pyc
+*.vsix
+
+# Repo-only notes
+TODO.md

@@ -1,0 +1,80 @@
+{
+  "name": "swat-hru-subset",
+  "displayName": "SWAT+ HRU Subset",
+  "description": "Carve a SWAT+ dataset down to the HRUs you pick, in a new folder next to it, and run SWAT+ on the result.",
+  "version": "0.1.0",
+  "publisher": "PbsandtDev",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tugraskan/swatplus-dataselector",
+    "directory": "hru-subset"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "SWAT+",
+    "SWATPlus",
+    "hydrology",
+    "HRU"
+  ],
+  "main": "./dist/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "swatHruSubset.createSubset",
+        "title": "Create Subset…",
+        "category": "SWAT+ HRU Subset"
+      }
+    ],
+    "configuration": {
+      "title": "SWAT+ HRU Subset",
+      "properties": {
+        "swatHruSubset.pythonPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "markdownDescription": "Python interpreter used to run the subset script. Empty: the environment variable `SWATPLUS_PYTHON`, then `py`, `python`, `python3` on Windows (`python3`, `python` elsewhere). The first one that answers `--version` is used; the Microsoft Store `python3` stub is skipped. The script runs with that one interpreter only."
+        },
+        "swatHruSubset.swatExecutable": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "markdownDescription": "SWAT+ executable that **Run SWAT+** starts in a terminal, with the new subset folder as the working directory. Empty: you are asked the first time and the choice is saved here."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "copy-python": "node scripts/copy-python.js",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "compile": "npm run copy-python && npm run check-types && npm run lint && node esbuild.js",
+    "package": "npm run copy-python && npm run check-types && npm run lint && node esbuild.js --production",
+    "compile-tests": "tsc -p . --outDir out",
+    "test": "npm run compile-tests && mocha",
+    "check:real": "npm run compile-tests && node scripts/real-check.js",
+    "vscode:prepublish": "npm run package",
+    "package:vsix": "vsce package"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@types/vscode": "1.85.0",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.27.1",
+    "eslint": "^9.39.1",
+    "mocha": "^11.7.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.3"
+  }
+}

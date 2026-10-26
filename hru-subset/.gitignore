@@ -1,0 +1,6 @@
+node_modules/
+out/
+dist/
+*.vsix
+# Build output: copied from ../scripts/hru_processor.py by scripts/copy-python.js
+python/
