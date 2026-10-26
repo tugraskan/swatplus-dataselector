@@ -141,16 +141,6 @@
         "icon": "$(checklist)"
       },
       {
-        "command": "swat-dataset-selector.processHruSubset",
-        "title": "SWAT+: Create HRU Subset",
-        "icon": "$(split-horizontal)"
-      },
-      {
-        "command": "swat-dataset-selector.processHruSubsetAndRun",
-        "title": "SWAT+: Create HRU Subset and Run",
-        "icon": "$(run)"
-      },
-      {
         "command": "swat-dataset-selector.checkInputFiles",
         "title": "SWAT+: Check Input Files",
         "icon": "$(search)"
@@ -225,14 +215,6 @@
         {
           "command": "swat-dataset-selector.searchDataset",
           "when": "swatplus.hasIndex"
-        },
-        {
-          "command": "swat-dataset-selector.processHruSubset",
-          "when": "swatplus.hasDataset"
-        },
-        {
-          "command": "swat-dataset-selector.processHruSubsetAndRun",
-          "when": "swatplus.hasDataset"
         },
         {
           "command": "swat-dataset-selector.generateOutputNotebooks",
@@ -322,7 +304,7 @@
           {
             "id": "exploreOutputs",
             "title": "Explore results",
-            "description": "Open output files as DataFrames, generate notebooks, or carve out an HRU subset to iterate faster.\n[Generate Output Notebooks](command:swat-dataset-selector.generateOutputNotebooks)",
+            "description": "Open output files as DataFrames and generate notebooks.\n[Generate Output Notebooks](command:swat-dataset-selector.generateOutputNotebooks)",
             "media": {
               "markdown": "resources/walkthrough/explore-outputs.md"
             },
@@ -404,7 +386,7 @@
     "lint": "eslint src",
     "test": "vscode-test",
     "test:unit": "npm run compile-tests && mocha",
-    "test:python": "python3 -m unittest scripts.test_merge_overlays scripts.test_merge_output_families scripts.test_pandas_indexer scripts.test_generate_schema_from_layouts scripts.test_management_sch_links scripts.test_hru_processor",
+    "test:python": "python3 -m unittest scripts.test_merge_overlays scripts.test_merge_output_families scripts.test_pandas_indexer scripts.test_generate_schema_from_layouts scripts.test_management_sch_links",
     "package:vsix": "npm run package && vsce package",
     "publish:pre-release": "npm run package && vsce publish --pre-release"
   },

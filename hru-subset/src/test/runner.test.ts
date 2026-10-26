@@ -7,6 +7,8 @@ import {
     createSubset,
     deletePartialOutput,
     inspectHruRange,
+    inspectHruTable,
+    planSubset,
     RunnerContext,
     runScriptJson,
     ScriptError,
@@ -250,5 +252,35 @@ suite('Deleting a partial output', () => {
         fs.writeFileSync(file, 'x');
         assert.throws(() => deletePartialOutput(file, false, [dataset]), /not a plain folder/);
         assert.strictEqual(fs.existsSync(file), true);
+    });
+
+    test('the HRU table is asked for with --hru-table --json', async () => {
+        const table = { ok: true, source_dir: 'D', total_hrus: 1, rows: [], subbasin_rule: 'r', subbasin_sources: {}, warnings: [] };
+        const { ctx, calls } = context(() => ({ stdout: JSON.stringify(table) }));
+        assert.deepStrictEqual(await inspectHruTable(ctx, 'D'), table);
+        assert.deepStrictEqual(calls[0].args, ['/ext/python/hru_processor.py', '--dataset', 'D', '--hru-table', '--json']);
+    });
+
+    test('a plan is asked for with --plan --json, the same switches and no --output-dir', async () => {
+        const plan = { ok: true, plan: true, retained_counts: { hru: 7 }, added_hru_ids: [], workarounds_applied: [], warnings: [] };
+        const { ctx, calls } = context(() => ({ stdout: JSON.stringify(plan) }));
+        const result = await planSubset(ctx, {
+            datasetPath: 'D',
+            hruIds: '1532,1538',
+            options: { ...DEFAULT_OPTIONS, keepRouting: true, feederHrus: false }
+        });
+        assert.deepStrictEqual(result, plan);
+        assert.deepStrictEqual(calls[0].args, [
+            '/ext/python/hru_processor.py', '--dataset', 'D', '--hru-ids', '1532,1538', '--plan',
+            '--keep-routing', '--exact-hrus', '--json'
+        ]);
+        assert.strictEqual(calls.length, 1);
+    });
+
+    test("a failed plan is the script's own error, once", async () => {
+        const { ctx, calls } = context(() => ({ code: 1, stdout: JSON.stringify({ ok: false, error: NOT_FOUND }) }));
+        const error = await rejection(planSubset(ctx, { datasetPath: 'D', hruIds: '99999', options: DEFAULT_OPTIONS }));
+        assert.strictEqual(error.message, NOT_FOUND);
+        assert.strictEqual(calls.length, 1);
     });
 });

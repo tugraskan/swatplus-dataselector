@@ -9,10 +9,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { isSameOrInside } from './paths';
 import { RESULT_FILE_NAME } from './dataset';
-import { buildSubsetArgs, SubsetArgsInput } from './options';
+import { buildPlanArgs, buildSubsetArgs, SubsetArgsInput } from './options';
 import type { ProcessResult, RunProcess } from './processRunner';
 import type { PythonInterpreter } from './python';
-import type { HruRange, SubsetResult } from './summary';
+import type { HruRange, HruTable, PlanResult, SubsetResult } from './summary';
 
 export interface RunnerContext {
     scriptPath: string;
@@ -95,6 +95,16 @@ export async function runScriptJson<T>(context: RunnerContext, args: string[]): 
 /** `--hru-range --json`: how many HRUs, and the lowest and highest id. */
 export function inspectHruRange(context: RunnerContext, datasetPath: string): Promise<HruRange> {
     return runScriptJson<HruRange>(context, ['--dataset', datasetPath, '--hru-range']);
+}
+
+/** `--hru-table --json`: every HRU with what the picker shows. Read-only. */
+export function inspectHruTable(context: RunnerContext, datasetPath: string): Promise<HruTable> {
+    return runScriptJson<HruTable>(context, ['--dataset', datasetPath, '--hru-table']);
+}
+
+/** `--plan --json`: what a run would keep and add. Nothing is copied or written, and no output folder is named. */
+export function planSubset(context: RunnerContext, input: Omit<SubsetArgsInput, 'outputDir'>): Promise<PlanResult> {
+    return runScriptJson<PlanResult>(context, buildPlanArgs(input));
 }
 
 export interface SubsetRun {

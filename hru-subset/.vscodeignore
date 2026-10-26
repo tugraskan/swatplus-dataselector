@@ -7,6 +7,7 @@ scripts/**
 .mocharc.json
 esbuild.js
 tsconfig.json
+tsconfig.browser.json
 eslint.config.mjs
 **/*.map
 **/*.ts
@@ -14,5 +15,6 @@ eslint.config.mjs
 **/*.pyc
 *.vsix
 
-# Repo-only notes
+# Tests and notes that are only for the repo
+python/test_*.py
 TODO.md

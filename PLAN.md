@@ -54,7 +54,7 @@ phases — each phase is shippable on its own.
 
 | Repo | Path (this environment) | What it provides |
 |---|---|---|
-| `tugraskan/swatplus-dataselector` (this repo) | `/home/user/swatplus-dataselector` | VS Code extension for SWAT+ datasets: dataset switching, input indexing, FK navigation (Go to Definition / hover / diagnostics), table viewers, HRU subsets, output exploration |
+| `tugraskan/swatplus-dataselector` (this repo) | `/home/user/swatplus-dataselector` | VS Code extension for SWAT+ datasets: dataset switching, input indexing, FK navigation (Go to Definition / hover / diagnostics), table viewers, output exploration |
 | `tugraskan/swatplus-doc-builder` | `/workspace/swatplus-doc-builder` | Documentation generator that scans SWAT+ Fortran source (release 62.0.0) and produces reviewed, structured JSON "overlays" describing input files, procedures, modules, and output families |
 
 ### The two knowledge sources to merge
