@@ -1,0 +1,53 @@
+name: Release SWAT+ HRU Subset
+
+# Separate from release.yml's v*.*.* tags and release-pack.yml's pack-v*.*.*
+# tags -- this packages and publishes hru-subset/, the SWAT+ HRU Subset
+# extension, on its own tag prefix so the release cycles never collide.
+on:
+  push:
+    tags: ["hru-subset-v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create (e.g. hru-subset-v0.2.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hru-subset
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: hru-subset/package-lock.json
+      - run: npm ci
+      - name: Tests
+        run: npm test
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Python tests
+        run: python -m unittest discover -s python -p "test_*.py"
+      - name: Package vsix
+        # vscode:prepublish runs the type-check, lint and production bundle.
+        run: npx vsce package --no-dependencies
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: hru-subset/*.vsix
+      - name: Publish to VS Code Marketplace
+        # Same VSCE_PAT secret as release.yml -- all the extensions publish
+        # under "PbsandtDev". Until it's set (it has expired), this step
+        # fails and the GitHub Release above -- with the vsix already
+        # attached -- still succeeds.
+        run: npx vsce publish --no-dependencies -p ${{ secrets.VSCE_PAT }}

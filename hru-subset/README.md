@@ -5,7 +5,9 @@ does this one job and installs separately from
 [SWAT+ Dataset Selector](https://github.com/tugraskan/swatplus-dataselector),
 which used to have this feature built in and no longer does.
 
-> Version 0.2.0, built locally and not published to the Marketplace.
+> Version 0.2.0. It installs on its own, and it is also part of the **SWAT+ Tools**
+> extension pack, which installs it together with SWAT+ Dataset Selector and the
+> other SWAT+ extensions.
 
 ## Use
 
