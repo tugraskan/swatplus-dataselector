@@ -19,7 +19,7 @@ What this extension (0.2.0) does not do yet, and what has to happen around it.
 
 ## Still open
 
-- Consider adding this extension to the SWAT+ Tools pack (`extension-pack/`).
+- Add an `icon` (a 128 px PNG, as Dataset Selector has) for the Marketplace page.
 - The picker's subbasin rule (`python/README.md`) is written for datasets like
   02070009, where `ls_unit.def` has `sub_<code>` units. Other layouts fall back to the
   routing unit name or the weather station; check it on a dataset made another way
@@ -37,12 +37,16 @@ What this extension (0.2.0) does not do yet, and what has to happen around it.
 
 ## Publishing
 
-This extension is not published and has no release workflow (CI builds the VSIX and
-keeps it as an artifact). When it should be:
+This extension is not on the Marketplace yet. It is in the SWAT+ Tools pack
+(`extension-pack/`, version 0.4.0), so **publish this extension first**, then the pack:
+until `PbsandtDev.swat-hru-subset` exists on the Marketplace the pack has nothing to
+install for it.
 
-- The repository secret `VSCE_PAT` has expired. The publisher account is
-  tugraskanusda@gmail.com.
+- Release: push a tag `hru-subset-v<version>` (for example `hru-subset-v0.2.0`). The
+  workflow `.github/workflows/release-hru-subset.yml` runs the tests, builds the VSIX,
+  makes a GitHub Release with it and tries to publish.
+- The repository secret `VSCE_PAT` has expired, so the publish step fails and only the
+  GitHub Release is made. The publisher account is tugraskanusda@gmail.com.
 - Global Personal Access Tokens end on 2026-12-01, so do not mint another one.
   Publish with Entra ID (`vsce publish --azure-credential`) or upload the VSIX
-  by hand on the Marketplace publisher page.
-- Add an `icon` and decide on the version policy before the first publish.
+  by hand on the Marketplace publisher page (publisher `PbsandtDev`).
