@@ -38,7 +38,7 @@ function layouts(commit: string, excoColumns: string[]) {
 const CIO = ['file.cio: contract', 'simulation  time.sim', 'exco  exco.exc  null'].join('\n');
 const EXCO = ['exco.exc: contract', 'name  om_file', 'pt001  om1', 'pt002'].join('\n');
 
-/** A dataset with one of each silent failure, for the fields only `issues` carries. */
+/** A dataset with each silent failure a dataset can show, for the fields only `issues` carries. */
 function silentFailures(commit: string) {
     const column = (name: string, vartype: string, path = `db%${name}`) => ({ name, vartype, path });
     const file = (name: string, at: string, columns: unknown[]) => ({
@@ -53,7 +53,7 @@ function silentFailures(commit: string) {
             provenance: { source_commit: commit, source_describe: '62.0.1' },
             files: {
                 'parameters.bsn': file('parameters.bsn', 'basin_read_prm.f90:24', [
-                    column('evlai', 'real'), column('temp_decay', 'real'), column('cmn', 'real'), column('day_lag_mx', 'integer'),
+                    column('evlai', 'real'), column('day_lag_mx', 'integer'), column('temp_decay', 'real'), column('cmn', 'real'),
                 ]),
                 'tillage.til': file('tillage.til', 'till_parm_read.f90:47', [
                     column('tillnm', 'character(len=16)', 'tilldb%tillnm'), column('effmix', 'real'),
@@ -66,8 +66,8 @@ function silentFailures(commit: string) {
             'lum  landuse.lum  management.sch', 'init  plant.ini', 'decision_table  lum.dtl',
         ].join('\n'),
         files: {
-            'parameters.bsn': ['t', 'a b c d', '3.0 0.0null 0.1 0.00000'].join('\n'),
-            'tillage.til': ['t', 'h', 'fldcult 0.3'].join('\n'),
+            'parameters.bsn': ['t', 'a b c d', '3.0 0.00000 0.0null 0.1'].join('\n'),
+            'tillage.til': ['t', 'h', 'disc/plow 0.2', 'fldcult 0.3'].join('\n'),
             'time.sim': ['t', 'h', '0 2020 0 2020 0'].join('\n'),
             'weather-sta.cli': ['t', 'h', 's1 wgn1 a.pcp'].join('\n'),
             'pcp.cli': ['t', 'h', 'a.pcp'].join('\n'),
@@ -76,8 +76,9 @@ function silentFailures(commit: string) {
             'landuse.lum': ['t', 'h', 'alfa_lum null alfa_comm alfa_rot'].join('\n'),
             'management.sch': ['t', 'h', 'alfa_rot 0 1', 'plow'].join('\n'),
             'plant.ini': ['t', 'h', 'alfa_comm 1 1', 'alfa n 1 1 0 0 0 1'].join('\n'),
-            'lum.dtl': ['t', '1', '', 'name', 'plow 0 1 2', 'var', 'act_typ',
-                'tillage hru 0 p fldcult 0 1 null y', 'fertilise hru 0 f urea 0 1 null y'].join('\n'),
+            'lum.dtl': ['t', '1', '', 'name', 'plow 0 1 3', 'var', 'act_typ',
+                'tillage hru 0 p fldcult 0 1 null y', 'fertilise hru 0 f urea 0 1 null y',
+                'till hru 0 q chisel 0 1 null y'].join('\n'),
         },
         source: {
             'src/actions.f90': ['select case (d_tbl%act(iac)%typ)', 'case ("till", "tillage")',
@@ -173,7 +174,7 @@ suite('check_inputs over MCP - the input preflight contract', function () {
         assert.strictEqual(structured.files[1].short_rows, 2);
     });
 
-    test('every kind of issue is a result the client accepts, with the source bytes judged', async () => {
+    test('each kind of issue a dataset can show is a result the client accepts, with the source bytes judged', async () => {
         const fixture = silentFailures('3333333333333333');
         write('silent/data/file.cio', fixture.cio);
         Object.entries(fixture.files).forEach(([name, text]) => write(`silent/data/${name}`, text));
@@ -188,16 +189,17 @@ suite('check_inputs over MCP - the input preflight contract', function () {
         assert.deepStrictEqual(structured.checks.map(item => [item.name, item.state]), [
             ['value_types', 'ran'], ['decision_tables', 'ran'], ['weather_coverage', 'ran'], ['plant_starts', 'ran'],
         ]);
+        // layouts_not_for_source needs a git checkout, and has no fields of its own.
         assert.deepStrictEqual(structured.issues.map(item => item.kind).sort(), [
-            'action_never_mapped', 'action_never_run', 'bad_value', 'crop_never_planted',
-            'rain_days_missing', 'weather_ends_early',
+            'action_never_mapped', 'action_never_run', 'bad_value', 'crop_never_planted', 'decimal_in_integer',
+            'option_not_in_database', 'rain_days_missing', 'slash_ends_read', 'weather_ends_early',
         ]);
         assert.deepStrictEqual(structured.source?.actions, {
             path: path.resolve(at('silent', 'source', 'src', 'actions.f90')),
             sha256: createHash('sha256').update(fixture.source['src/actions.f90']).digest('hex'),
             bytes: Buffer.byteLength(fixture.source['src/actions.f90']),
         });
-        assert.match(text, /error: parameters\.bsn line 3 stops at value 2 \(b\)/);
+        assert.match(text, /error: parameters\.bsn line 3 stops at value 3 \(c\)/);
     });
 
     test('with no source, the action check says it did not run', async () => {
