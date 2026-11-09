@@ -4,7 +4,7 @@ All notable changes to the "swatplus-vscode-dataset-selector" extension will be 
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
-## [Unreleased]
+## [0.8.0] - 2026-11-09
 
 ### Added
 - `check_inputs` parses values by field type instead of only counting them. A
