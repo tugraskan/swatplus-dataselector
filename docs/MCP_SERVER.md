@@ -70,7 +70,7 @@ client below for those.
 | `query_rows` | `entity`, `predicates[]`, `match?`, `limit?` | Rows matching column predicates (equals/contains/gt/gte/lt/lte/in/is_empty, AND/OR) |
 | `find_orphans` | `entity`, `limit?` | Rows nothing references (unused/dead data) |
 | `check_dataset` | `dataset?`, `source?` | Preflight of `file.cio` against the source that reads it: text, plus a structured verdict (see below) |
-| `check_inputs` | `dataset?`, `layouts?` | Preflight of every file `file.cio` names against what SWAT+ reads from it: text, plus a structured verdict (see below) |
+| `check_inputs` | `dataset?`, `layouts?`, `source?` | Preflight of every file `file.cio` names against what SWAT+ reads from it, and of what no single line shows: text, plus a structured verdict (see below) |
 
 `entity` accepts an entity kind (`hru`, `aquifer`, `channel`, `reservoir`,
 `wetland`, `plant`, `soil`), a file name (`hru-data.hru`), or a table name.
@@ -167,12 +167,67 @@ continued across lines show up as `unrecognized_read`.
 ## Preflight: `check_inputs`
 
 `check_dataset` judges `file.cio` and never opens the files its rows name.
-`check_inputs` opens each of them and counts the values on every data line
-against the statement SWAT+ reads that file with. A line short of values is
-the same failure as a short `file.cio` row: the list-directed read carries on
-into the next line, and every record after it is read shifted. When the short
-line is the last one, the read reaches the end of the file instead
-(`at_end: true`).
+`check_inputs` opens each of them and walks the values on every data line
+against the statement SWAT+ reads that file with. Two things can go wrong, and
+they are different failures:
+
+- **A line short of values** is the same failure as a short `file.cio` row: the
+  list-directed read carries on into the next line, and every record after it
+  is read shifted. When the short line is the last one, the read reaches the
+  end of the file instead (`at_end: true`).
+- **A value its field cannot take** stops the read. SWAT+'s readers test only
+  for end of file, so the run goes on with no message: the fields from that one
+  on keep their code defaults, and the next read starts on the next line, so
+  the rows stay in sync. A count of values cannot see this. `parameters.bsn`
+  with `0.0null` in column 7 has the right number of values and loses the 38
+  fields from there on.
+
+Field types come from the layouts. Each form below was read with ifx 2026.1 and
+gfortran 12.2:
+
+| Field | Value | Result |
+| --- | --- | --- |
+| `real` | `1`, `1.`, `.5`, `1e2`, `1d2`, `1q2`, `1.5+2`, `NaN`, `inf` | Read |
+| `real` | Anything else, such as `0.0null`, `null`, `-` or text | Read stops on both compilers (`bad_value`) |
+| `integer` | `3` | Read |
+| `integer` | `3.0`, `3.5`, `3e0` | ifx reads the whole part; gfortran stops (`decimal_in_integer`, a warning) |
+| `integer` | Text | Read stops on both compilers (`bad_value`) |
+| any | A slash before the last field | The read ends there with no error (`slash_ends_read`) |
+
+A row that stops is never counted as short, however few values it has: the read
+never gets as far as running out. Rows that fail at the same field are one
+issue, with their count and first lines.
+
+Some fields matter only under one setting, so losing them is a `note` when that
+setting is off and an `error` when it is on: the residue fractions at the end of
+`plants.plt` (used when `carbon = 2`), `pl_class` (read when `nam1` is not 0)
+and the fields of `pesticide.pes` (used when `constituents.cs` is named).
+
+### What no single line shows
+
+| Check | Needs | Reports |
+| --- | --- | --- |
+| `decision_tables` | `lum.dtl`, `source` | `action_never_mapped`: the `actions.f90` branch reads `act_typ` or `act_app`, but `dtbl_lum_read.f90` has no `case` for that spelling, so the action uses entry 0 of its database. `action_never_run`: no branch of `actions.f90` runs it. `option_not_in_database`: the name it looks up is not in its database. |
+| `weather_coverage` | `time.sim`, a `.cli` list | `weather_ends_early`, one per variable. `rain_days_missing`: the share of rain station-days in the simulated period with no value. |
+| `plant_starts` | `plant.ini`, `landuse.lum`, `hru-data.hru` | `crop_never_planted`: a crop that starts as `n` and that no schedule or decision table plants, with its land uses and HRU count. |
+
+Action names are never hard-coded: both lists are the `case` labels of the
+`select case` on the action type in the source that will run, and each action's
+database comes from what `dtbl_lum_read.f90` compares it with, found in the
+layouts by its Fortran path. Names are compared at the length SWAT+ stores them.
+An action that reads no lookup needs no mapping, so `rot_reset` is not flagged.
+A problem in a table no schedule names is a `note`, because that table never runs.
+
+The missing-rain share counts by station, because that is what the model
+receives. It counts days flagged as missing (-97 or below), days outside the
+record and gaps inside it, and says which is which: SWAT+ generates the first
+two and reads a gap as no rain. A station on the generator (`sim`) is not
+missing a record.
+
+`plant_starts` counts a `plnt` operation, a schedule's `pl_hv_*` crop and a
+`plant` action. `mons` and `pheno_reset` start a `moisture_gro` crop without a
+planting, so such a crop is not flagged. Scenario tables (`scen_lu.dtl`) are not
+read.
 
 ### Expectations
 
@@ -188,33 +243,43 @@ The layouts come from one SWAT+ source, named in `expectations.swatplus`
    swatplus-layouts --facts facts.json --out layouts.json
    ```
 
-2. Otherwise the shipped `swatplus-generated-schema.json`, which is built from
+2. Otherwise, when `source` (or the server's `--source`) names a checkout, the
+   server runs those two commands itself. The result lands under the system
+   temporary directory, not in the checkout, and a later call is a no-op unless
+   the source changed.
+
+3. Otherwise the shipped `swatplus-generated-schema.json`, which is built from
    one SWAT+ release.
 
 Input files change shape between SWAT+ versions (`plants.plt`, `exco.exc`), so
 a verdict says something certain only about the version it was judged
-against. A client compares `expectations.swatplus.commit` with the source it
-runs.
+against. When `source` is a git checkout at another commit than the layouts,
+the result carries a `layouts_not_for_source` warning and cannot be a `pass`.
 
 ### Result
 
-`check_version: "dataselector-input-preflight/1"`, with a strict
-`outputSchema` as for `check_dataset`.
+`check_version: "dataselector-input-preflight/2"`, with a strict
+`outputSchema` as for `check_dataset`. Version 2 adds `source`, `checks`,
+`issues`, `files[].bad_value_rows` and the `bad_value` outcome. A row that stops
+at a value it cannot take is no longer counted as short.
 
 | `status` | Meaning |
 | --- | --- |
-| `pass` | Every named file was checked and every data line counted (`coverage.complete`), and none is short. |
-| `fail` | At least one data line is short, whatever the coverage. |
-| `inconclusive` | Nothing short was found, but not every file or line could be judged. **Never a pass.** |
+| `pass` | Every named file was checked, every data line judged and every check that applies run on the source's layouts (`coverage.complete`), with no short line and no `error` issue. Warnings and notes may remain. |
+| `fail` | At least one data line is short, or an issue is an `error`, whatever the coverage. |
+| `inconclusive` | Nothing failed, but not every file, line or check could be judged. **Never a pass.** |
 | `error` | The check could not run: `no_dataset`, `dataset_file_missing`, `read_failed` or `no_expectations`. |
 
 | Field | Content |
 | --- | --- |
 | `dataset` | The dataset directory and the identity of the `file.cio` bytes read. |
 | `expectations` | `origin` (`layouts` or `schema`), `swatplus`, and the `path` and `sha256` of the expectations file. |
+| `source` | The tree named with `source`: `dir`, `commit` (from git, when it can tell), and the identity of the `dtbl_lum_read.f90` and `actions.f90` bytes read. `null` with no source. |
 | `coverage` | `complete`; `named_files`, `checked_files`, `unchecked_files`; `unjudged_rows` and up to 50 of them in `unjudged`. |
-| `files` | One entry per distinct file named on a `file.cio` row: the `label` and `cio_line` that name it, `outcome` (`match`, `short` or `unchecked`), the unchecked `reason`, the identity of the bytes judged, `read_at`, `needed`, `rows_checked`, `rows_unjudged` and `short_rows`. |
+| `checks` | Each check: `name`, `state` (`ran`, `partial`, `not_applicable` or `skipped`) and a `reason`. `partial` and `skipped` rule out a pass. |
+| `files` | One entry per distinct file named on a `file.cio` row: the `label` and `cio_line` that name it, `outcome` (`match`, `short`, `bad_value` or `unchecked`), the unchecked `reason`, the identity of the bytes judged, `read_at`, `needed`, `rows_checked`, `rows_unjudged`, `short_rows` and `bad_value_rows`. |
 | `findings` | Each short line, up to 20 per file and 200 in all: `file`, `line`, `at_end`, `found`, `needed`, `missing_columns`, `read_at`. The `short_rows` counts always cover every line. |
+| `issues` | Everything else, most severe first, up to 200: `kind`, `severity` (`error`, `warning` or `note`), `file`, `line`, `message`, and the fields of its kind. A read that stops gives `rows`, `lines`, `column`, `field`, `path`, `vartype`, `header`, `value`, `lost_columns` and `read_at`. |
 
 ### What is not judged
 
@@ -226,8 +291,14 @@ runs.
 - **Files named but absent** (`missing`) or unreadable (`unreadable`).
 - **Lines whose values whitespace cannot count**: a quoted value
   (`quoted_values`), or a short line with a comma, slash or repeat count
-  (`list_directed_syntax`). Blank lines and `#` lines are skipped, as the
-  editor's diagnostics skip them.
+  (`list_directed_syntax`). Values before a comma or repeat count are still
+  type-checked. Blank lines and `#` lines are skipped, as the editor's
+  diagnostics skip them.
+- **Readers that do not swallow a read error.** The wording assumes the reader
+  tests only for end of file, as SWAT+'s do. A reader that stops on any error
+  would crash or stop reading instead; the row still fails.
+- **Weather read through a path.** Files named by a `pcp_path` row are not
+  found in the dataset folder, so `weather_coverage` is `partial`.
 
 ## Building the server
 
@@ -294,8 +365,8 @@ python3 scripts/pandas_indexer.py \
 | `--output-schema <path>` | shipped `swatplus-output-schema.json` | Output-column docs |
 | `--metadata <path>` | shipped `txtinout-metadata.json` | Metadata for the indexer (with `--dataset`) |
 | `--scripts <dir>` | bundled `scripts/` | Location of `pandas_indexer.py` (with `--dataset`) |
-| `--source <dir>` | — | SWAT+ source tree whose `src/` `check_dataset` reads expectations from |
-| `--layouts <path>` | shipped `swatplus-generated-schema.json` | Tamandua `swatplus-layouts` JSON that `check_inputs` reads expectations from |
+| `--source <dir>` | — | SWAT+ source tree whose `src/` `check_dataset` reads expectations from, and `check_inputs` reads action names and, with no layouts given, layouts from |
+| `--layouts <path>` | exported from `--source`, else shipped `swatplus-generated-schema.json` | Tamandua `swatplus-layouts` JSON that `check_inputs` reads expectations from |
 
 ## Configuring an MCP client
 

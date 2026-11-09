@@ -3,11 +3,21 @@
  *
  * `check_dataset` judges `file.cio` itself and never opens the files its rows
  * name. This check opens each of them and, where the read layout is known,
- * counts the values on every data line. SWAT+ reads its input tables
- * list-directed, so a line with fewer values than the read statement takes
- * makes the read carry on into the next line, and every record after it is
- * read shifted -- the failure `check_dataset` catches in `file.cio`, in the
- * files where the model's data actually lives.
+ * walks the values on every data line against the fields SWAT+ reads. Input
+ * tables are read list-directed, which fails in two different ways:
+ *
+ * - A line with fewer values than the read takes makes the read carry on into
+ *   the next line, and every record after it is read shifted -- the failure
+ *   `check_dataset` catches in `file.cio`, in the files where the model's data
+ *   actually lives.
+ * - A value that cannot be read as its field's type is a read error. SWAT+'s
+ *   readers test only for end of file, so the run goes on: the record's later
+ *   fields keep their code defaults and the next read starts on the next line.
+ *   Nothing is reported, and the row count still looks right.
+ *
+ * `inputCrossChecks.ts` adds what no single line shows: decision-table actions
+ * against the source that runs them, weather records against `time.sim`, and
+ * crops that start dormant against what plants them.
  *
  * The layouts come from one SWAT+ source, named in the result: a Tamandua
  * `swatplus-layouts` file built from the checkout that will read the dataset,
@@ -19,13 +29,16 @@
  */
 
 import { CioFileIdentity, parseCioRows } from './cioCheck';
+import { InputSourceFacts, runCrossChecks } from './inputCrossChecks';
 
-export const INPUT_PREFLIGHT_VERSION = 'dataselector-input-preflight/1';
+export const INPUT_PREFLIGHT_VERSION = 'dataselector-input-preflight/2';
 
 /** Findings listed per file and in all; the counts always cover every row. */
 export const MAX_FINDINGS_PER_FILE = 20;
 export const MAX_FINDINGS = 200;
 export const MAX_UNJUDGED_ROWS = 50;
+/** Line numbers kept for rows that fail the same way. */
+export const MAX_ISSUE_LINES = 5;
 
 export const INPUT_UNCHECKED_REASONS = [
     // Named on a file.cio row but not in the dataset.
@@ -46,8 +59,40 @@ export const INPUT_UNJUDGED_REASONS = [
 ] as const;
 export type InputUnjudgedReason = typeof INPUT_UNJUDGED_REASONS[number];
 
-export const INPUT_FILE_OUTCOMES = ['match', 'short', 'unchecked'] as const;
+export const INPUT_FILE_OUTCOMES = ['match', 'short', 'bad_value', 'unchecked'] as const;
 export type InputFileOutcome = typeof INPUT_FILE_OUTCOMES[number];
+
+export const INPUT_ISSUE_KINDS = [
+    // A value that cannot be read as its field's type: the read stops there.
+    'bad_value',
+    // A slash in a read position ends the read without an error.
+    'slash_ends_read',
+    // A decimal in an integer field: gfortran stops there, ifx reads on.
+    'decimal_in_integer',
+    // lum.dtl: the action's run branch reads a lookup dtbl_lum_read.f90 never makes.
+    'action_never_mapped',
+    // lum.dtl: no branch of actions.f90 runs the action.
+    'action_never_run',
+    // lum.dtl: the name the action looks up is not in its database.
+    'option_not_in_database',
+    'weather_ends_early',
+    'rain_days_missing',
+    'crop_never_planted',
+    // The layouts judged are not those of the source that will run.
+    'layouts_not_for_source',
+] as const;
+export type InputIssueKind = typeof INPUT_ISSUE_KINDS[number];
+
+/** `error` makes the verdict `fail`; `warning` and `note` never do. */
+export const INPUT_ISSUE_SEVERITIES = ['error', 'warning', 'note'] as const;
+export type InputIssueSeverity = typeof INPUT_ISSUE_SEVERITIES[number];
+
+export const INPUT_CHECK_NAMES = ['value_types', 'decision_tables', 'weather_coverage', 'plant_starts'] as const;
+export type InputCheckName = typeof INPUT_CHECK_NAMES[number];
+
+/** `not_applicable`: the dataset has nothing to check; `skipped` and `partial` rule out a pass. */
+export const INPUT_CHECK_STATES = ['ran', 'partial', 'not_applicable', 'skipped'] as const;
+export type InputCheckState = typeof INPUT_CHECK_STATES[number];
 
 export const INPUT_PREFLIGHT_ERROR_CODES = [
     'no_dataset',
@@ -57,13 +102,27 @@ export const INPUT_PREFLIGHT_ERROR_CODES = [
 ] as const;
 export type InputPreflightErrorCode = typeof INPUT_PREFLIGHT_ERROR_CODES[number];
 
-/** What SWAT+ reads from one input file, for counting the values on its lines. */
+export type InputFieldType = 'real' | 'integer' | 'character' | 'logical' | 'unknown';
+
+/** One value of a record: what the read stores it in, and as what. */
+export interface InputField {
+    name: string;
+    path: string | null;
+    vartype: string | null;
+    type: InputFieldType;
+    /** Declared length of a character field: longer values are cut to it. */
+    length: number | null;
+}
+
+/** What SWAT+ reads from one input file, for walking the values on its lines. */
 export interface InputReadLayout {
     file: string;
     /** The statement that reads each record: `exco_db_read.f90:56`. */
     readAt: string;
     /** The values SWAT+ reads, in order, up to any run-time-sized group. */
     columns: string[];
+    /** Each of `columns` as a field; `unknown` where the accepted reads disagree on its type. */
+    fields: InputField[];
     /** The fewest values a record may have: the smallest accepted width. */
     needed: number;
     /** Lines SWAT+ skips before data. */
@@ -81,9 +140,19 @@ export interface InputExpectationSource {
     swatplus: { commit: string | null; describe: string | null };
 }
 
+/** Where a variable SWAT+ compares against is read from. */
+export interface InputColumnRef {
+    file: string;
+    index: number;
+    /** False for a variable read from a line of another kind: its values are not one per row. */
+    perRow: boolean;
+}
+
 export interface InputExpectations extends InputExpectationSource {
     /** Keyed by lower-case file name. */
     layouts: Map<string, InputReadLayout>;
+    /** Keyed by lower-case Fortran path (`tilldb%tillnm`). */
+    paths: Map<string, InputColumnRef>;
 }
 
 export interface InputFileVerdict {
@@ -101,6 +170,8 @@ export interface InputFileVerdict {
     /** Data lines whose value count could not be judged (see `coverage.unjudged`). */
     rows_unjudged: number;
     short_rows: number;
+    /** Data lines whose read stops at a value it cannot take. They are not short: the next read starts on the next line. */
+    bad_value_rows: number;
 }
 
 export interface InputFinding {
@@ -121,8 +192,66 @@ export interface InputUnjudgedRow {
     reason: InputUnjudgedReason;
 }
 
+/** Something SWAT+ will do without saying so. Rows that fail the same way are one issue. */
+export interface InputIssue {
+    kind: InputIssueKind;
+    severity: InputIssueSeverity;
+    file: string;
+    line: number | null;
+    message: string;
+    // Values a read stops at.
+    rows?: number;
+    lines?: number[];
+    column?: number;
+    field?: string;
+    path?: string | null;
+    vartype?: string | null;
+    header?: string | null;
+    value?: string;
+    lost_columns?: string[];
+    read_at?: string;
+    // lum.dtl actions.
+    action?: string;
+    option?: string;
+    database?: string;
+    tables?: string[];
+    tables_in_use?: string[];
+    // Weather against time.sim.
+    variable?: string;
+    stations?: number;
+    files?: number;
+    files_ending_early?: number;
+    last_record?: { year: number; day: number };
+    sim_end?: { year: number; day: number };
+    days_short?: number;
+    missing_days?: number;
+    total_days?: number;
+    missing_share?: number;
+    flagged_days?: number;
+    days_before_records?: number;
+    days_after_records?: number;
+    gap_days?: number;
+    // Crops nothing plants.
+    crop?: string;
+    community?: string;
+    land_uses?: string[];
+    schedules?: string[];
+    hrus?: number;
+}
+
+/** One of the checks beyond counting values: whether it ran, and why not. */
+export interface InputCheckRun {
+    name: InputCheckName;
+    state: InputCheckState;
+    reason: string | null;
+}
+
 export interface InputPreflightCoverage {
-    /** True only when every named file was checked and every one of its data lines judged. */
+    /**
+     * True only when every named file was checked, every one of its data
+     * lines judged, every check that applies ran, and the layouts are the
+     * source's.
+     */
     complete: boolean;
     named_files: number;
     checked_files: number;
@@ -135,18 +264,28 @@ export interface InputPreflightCoverage {
 export interface InputPreflight {
     check_version: typeof INPUT_PREFLIGHT_VERSION;
     /**
-     * `pass` only with complete coverage and no short row; `fail` whenever a
-     * short row is found, coverage or not; `inconclusive` otherwise. `error`
-     * means the check could not run at all.
+     * `pass` only with complete coverage, no short row and no `error` issue;
+     * `fail` whenever a short row or an `error` issue is found, coverage or
+     * not; `inconclusive` otherwise. `error` means the check could not run at
+     * all.
      */
     status: 'pass' | 'fail' | 'inconclusive' | 'error';
     summary: string;
     error: { code: InputPreflightErrorCode; message: string } | null;
     dataset: { dir: string | null; file_cio: CioFileIdentity | null };
     expectations: (InputExpectationSource & { path: string | null; sha256: string | null }) | null;
+    /** The source tree the decision tables were judged against, with the bytes read. */
+    source: {
+        dir: string;
+        commit: string | null;
+        dtbl_lum_read: CioFileIdentity | null;
+        actions: CioFileIdentity | null;
+    } | null;
     coverage: InputPreflightCoverage;
+    checks: InputCheckRun[];
     files: InputFileVerdict[];
     findings: InputFinding[];
+    issues: InputIssue[];
 }
 
 export interface NamedFile {
@@ -172,10 +311,28 @@ export function namedFiles(cioText: string): NamedFile[] {
     return named;
 }
 
+/** A Fortran declaration as a field: `character(len=16)` is a character field of length 16. */
+export function fieldOf(name: string, path: string | null, vartype: string | null): InputField {
+    const declared = (vartype ?? '').trim().toLowerCase();
+    const length = /^character\s*\(\s*(?:len\s*=\s*)?(\d+)\s*\)/.exec(declared);
+    let type: InputFieldType = 'unknown';
+    if (declared.startsWith('real') || declared.startsWith('double')) {
+        type = 'real';
+    } else if (declared.startsWith('integer')) {
+        type = 'integer';
+    } else if (declared.startsWith('character')) {
+        type = 'character';
+    } else if (declared.startsWith('logical')) {
+        type = 'logical';
+    }
+    return { name, path, vartype, type, length: length ? Number(length[1]) : null };
+}
+
 function readLayout(
     file: string,
     readAt: string,
     columns: string[],
+    fields: InputField[],
     widths: number[],
     skippedLines: number,
     rows: InputReadLayout['rows'],
@@ -185,6 +342,7 @@ function readLayout(
         file,
         readAt,
         columns,
+        fields,
         needed: Math.min(...accepted, columns.length || Infinity),
         skippedLines,
         rows,
@@ -198,23 +356,30 @@ function readLayout(
 export function expectationsFromSchema(schema: any): InputExpectations {
     const tables: Record<string, any> = schema?.tables ?? {};
     const layouts = new Map<string, InputReadLayout>();
+    const paths = new Map<string, InputColumnRef>();
     for (const table of Object.values(tables)) {
         const layout = table?.swat_layout;
         if (table?.origin !== 'tamandua' || !layout) {
             continue;
         }
+        const file = String(table.file_name);
         const columns: string[] = [];
+        const fields: InputField[] = [];
         for (const column of table.columns ?? []) {
             if (column.read_by_swat === false || column.swat?.repeat) {
                 break;
             }
             columns.push(String(column.name));
+            const path = column.swat?.path ? String(column.swat.path) : null;
+            fields.push(fieldOf(String(column.swat?.name ?? column.name), path, column.swat?.vartype ?? null));
+            if (path && !paths.has(path.toLowerCase())) {
+                paths.set(path.toLowerCase(), { file, index: columns.length - 1, perRow: true });
+            }
         }
         const widths = Array.isArray(layout.record_widths) ? [...layout.record_widths].map(Number) : [];
         const rows = layout.rows === 'single' || layout.rows === 'sections' ? layout.rows : 'records';
-        const file = String(table.file_name);
         layouts.set(file.toLowerCase(), readLayout(
-            file, String(layout.read_at ?? ''), columns, widths, Number(table.data_starts_after ?? 0), rows,
+            file, String(layout.read_at ?? ''), columns, fields, widths, Number(table.data_starts_after ?? 0), rows,
         ));
     }
     const swatplus = schema?.generated_from?.swatplus ?? {};
@@ -225,6 +390,7 @@ export function expectationsFromSchema(schema: any): InputExpectations {
             describe: swatplus.describe ?? schema?.source?.generated_on ?? null,
         },
         layouts,
+        paths,
     };
 }
 
@@ -235,22 +401,40 @@ export function expectationsFromSchema(schema: any): InputExpectations {
  */
 export function expectationsFromLayouts(layoutsJson: any): InputExpectations {
     const layouts = new Map<string, InputReadLayout>();
+    const paths = new Map<string, InputColumnRef>();
     for (const entry of Object.values<any>(layoutsJson?.files ?? {})) {
         const records: any[] = Array.isArray(entry?.records) ? entry.records : [];
         const main = records.find(record => record?.role === 'main');
         if (!entry?.filename_is_default || !main || !main.complete) {
             continue;
         }
+        const accepted = records.filter(record => record?.role === 'main' || record?.role === 'alternative');
         const columns: string[] = [];
+        const fields: InputField[] = [];
         for (const column of main.columns ?? []) {
             if (column?.repeat) {
                 break;
             }
+            const index = columns.length;
             columns.push(String(column.name));
+            const field = fieldOf(String(column.name), column.path ? String(column.path) : null, column.vartype ?? null);
+            // A value either accepted read can take is no error, so the type counts only if they agree.
+            const types = new Set(accepted
+                .map(record => (record.columns ?? [])[index])
+                .filter(Boolean)
+                .map((other: any) => fieldOf('', null, other.vartype ?? null).type));
+            fields.push(types.size === 1 ? field : { ...field, type: 'unknown' });
         }
-        const widths = [...new Set(records
-            .filter(record => (record?.role === 'main' || record?.role === 'alternative')
-                && !(record.columns ?? []).some((column: any) => column?.repeat))
+        for (const record of records) {
+            (record.columns ?? []).forEach((column: any, index: number) => {
+                const key = column?.path ? String(column.path).toLowerCase() : '';
+                if (key && !paths.has(key)) {
+                    paths.set(key, { file: String(entry.file), index, perRow: accepted.includes(record) });
+                }
+            });
+        }
+        const widths = [...new Set(accepted
+            .filter(record => !(record.columns ?? []).some((column: any) => column?.repeat))
             .map(record => (record.columns ?? []).length))].sort((a, b) => a - b);
         let rows: InputReadLayout['rows'];
         // Lines of another kind, or records nested under each main one, are
@@ -262,7 +446,7 @@ export function expectationsFromLayouts(layoutsJson: any): InputExpectations {
         }
         const file = String(entry.file);
         layouts.set(file.toLowerCase(), readLayout(
-            file, String(main.at ?? ''), columns, widths, Number(entry.data_starts_after ?? 0), rows,
+            file, String(main.at ?? ''), columns, fields, widths, Number(entry.data_starts_after ?? 0), rows,
         ));
     }
     const provenance = layoutsJson?.provenance ?? {};
@@ -270,6 +454,7 @@ export function expectationsFromLayouts(layoutsJson: any): InputExpectations {
         origin: 'layouts',
         swatplus: { commit: provenance.source_commit ?? null, describe: provenance.source_describe ?? null },
         layouts,
+        paths,
     };
 }
 
@@ -286,21 +471,97 @@ export function expectationsFrom(json: any): InputExpectations | undefined {
 
 const QUOTE = /['"]/;
 const UNCOUNTED = /[,/]|^\d+\*/;
+// A comma or repeat count changes which field later values belong to; a slash ends the read.
+const REMAPPED = /,|^\d+\*/;
+// Forms ifx and gfortran both read as a real; 1.5+2 is 1.5e2. Everything else stops the read.
+const REAL = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eEdDqQ][+-]?\d+|[+-]\d+)?$/;
+const REAL_WORD = /^[+-]?(?:nan|inf|infinity)$/i;
+const INTEGER = /^[+-]?\d+$/;
+
+/** Rows of one file that fail at the same field: one thing to fix, however many rows. */
+export interface StoppedRows {
+    kind: 'bad_value' | 'slash_ends_read' | 'decimal_in_integer';
+    /** Index into the layout's fields of the value that fails. */
+    index: number;
+    rows: number;
+    lines: number[];
+    value: string;
+}
 
 export interface FileJudgement {
     rowsChecked: number;
     shortRows: number;
     findings: InputFinding[];
     unjudged: InputUnjudgedRow[];
+    /** Rows whose read stops early, and rows that read differently by compiler. */
+    stopped: StoppedRows[];
+    /** The file's own header line, for naming a column the way its author does. */
+    header: string[];
+}
+
+function rejectsValue(token: string, field: InputField): 'bad_value' | 'decimal_in_integer' | null {
+    if (field.type === 'real') {
+        return REAL.test(token) || REAL_WORD.test(token) ? null : 'bad_value';
+    }
+    if (field.type === 'integer') {
+        if (INTEGER.test(token)) {
+            return null;
+        }
+        return REAL.test(token) ? 'decimal_in_integer' : 'bad_value';
+    }
+    return null;
+}
+
+/** Where the list-directed read of one line stops, and any integer field given a decimal. */
+function walkValues(tokens: string[], fields: InputField[]) {
+    let decimal: { index: number; value: string } | null = null;
+    const count = Math.min(tokens.length, fields.length);
+    for (let index = 0; index < count; index += 1) {
+        const token = tokens[index];
+        if (REMAPPED.test(token)) {
+            break;
+        }
+        // The read takes what comes before a slash, then ends without an error.
+        const slash = token.indexOf('/');
+        const value = slash < 0 ? token : token.slice(0, slash);
+        const rejected = value ? rejectsValue(value, fields[index]) : null;
+        if (rejected === 'bad_value') {
+            return { stop: { kind: rejected, index, value: token } as const, decimal };
+        }
+        if (rejected) {
+            decimal ??= { index, value: token };
+        }
+        // In the last field only the rest of that value is lost, and SWAT+ reads no further anyway.
+        if (slash >= 0 && (value === '' || index + 1 < fields.length)) {
+            return { stop: { kind: 'slash_ends_read', index, value: token } as const, decimal };
+        }
+    }
+    return { stop: null, decimal };
+}
+
+function tally(stopped: StoppedRows[], kind: StoppedRows['kind'], index: number, value: string, line: number): void {
+    let group = stopped.find(item => item.kind === kind && item.index === index);
+    if (!group) {
+        group = { kind, index, rows: 0, lines: [], value };
+        stopped.push(group);
+    }
+    group.rows += 1;
+    if (group.lines.length < MAX_ISSUE_LINES) {
+        group.lines.push(line);
+    }
 }
 
 /**
- * Count the values on every data line of one file against its layout. Blank
+ * Walk the values on every data line of one file against its layout. Blank
  * lines and `#` lines are skipped, as the editor's diagnostics skip them.
+ *
+ * A value that stops the read decides the line: the read never gets as far as
+ * running out of values, so such a line is not short, however few it has.
  */
 export function judgeFile(text: string, layout: InputReadLayout): FileJudgement {
     const lines = text.split(/\r?\n/);
-    const judgement: FileJudgement = { rowsChecked: 0, shortRows: 0, findings: [], unjudged: [] };
+    const header = layout.skippedLines > 0 ? (lines[layout.skippedLines - 1] ?? '').trim().split(/\s+/) : [];
+    const judgement: FileJudgement = { rowsChecked: 0, shortRows: 0, findings: [], unjudged: [], stopped: [], header };
     let firstData = true;
     for (let index = layout.skippedLines; index < lines.length; index += 1) {
         const line = lines[index].trim();
@@ -314,6 +575,15 @@ export function judgeFile(text: string, layout: InputReadLayout): FileJudgement 
         const tokens = line.split(/\s+/);
         if (QUOTE.test(line)) {
             judgement.unjudged.push({ file: layout.file, line: index + 1, reason: 'quoted_values' });
+            continue;
+        }
+        const { stop, decimal } = walkValues(tokens, layout.fields);
+        if (decimal) {
+            tally(judgement.stopped, 'decimal_in_integer', decimal.index, decimal.value, index + 1);
+        }
+        if (stop) {
+            judgement.rowsChecked += 1;
+            tally(judgement.stopped, stop.kind, stop.index, stop.value, index + 1);
             continue;
         }
         if (tokens.length >= layout.needed) {
@@ -360,6 +630,153 @@ export interface InputCheckContext {
     fileCio: CioFileIdentity;
     expectations: InputExpectations;
     expectationFile: { path: string | null; sha256: string | null };
+    /** The SWAT+ source that will run, when the caller named one. */
+    source?: InputSourceFacts;
+}
+
+/** A dataset's settings that decide whether a field is used. */
+interface DatasetSettings {
+    /** A value in codes.bsn, by the variable it is read into. */
+    code: (path: string) => string | null;
+    named: (file: string) => boolean;
+}
+
+/** Fields SWAT+ uses only under one setting, so losing them is harmless without it. */
+interface ConditionalFields {
+    file: string;
+    /** Tested against each lost field's Fortran path. */
+    fields: RegExp;
+    /** The setting as it stands here, as a label and value; `null`: unknown. */
+    setting: (dataset: DatasetSettings) => string | null;
+    matters: (setting: string) => boolean;
+    when: string;
+}
+
+// plant_parm_read.f90 overwrites the residue fractions with constants unless cswat
+// is 2, and reads pl_class only when nam1 is not 0. Only constituents.cs puts a
+// pesticide in cs_db%pest_num, which is how a run reaches pestdb.
+const CONDITIONAL_FIELDS: ConditionalFields[] = [
+    {
+        file: 'plants.plt', fields: /%res_part_fracs%/, when: 'carbon = 2',
+        setting: ({ code }) => { const value = code('bsn_cc%cswat'); return value === null ? null : `carbon = ${value}`; },
+        matters: setting => setting === 'carbon = 2',
+    },
+    {
+        file: 'plants.plt', fields: /^pl_class$/, when: 'nam1 is not 0',
+        setting: ({ code }) => { const value = code('bsn_cc%nam1'); return value === null ? null : `nam1 = ${value}`; },
+        matters: setting => setting !== 'nam1 = 0',
+    },
+    {
+        file: 'pesticide.pes', fields: /^pestdb%/, when: 'constituents.cs names pesticides',
+        setting: ({ named }) => `constituents.cs is ${named('constituents.cs') ? '' : 'not '}named`,
+        matters: setting => setting === 'constituents.cs is named',
+    },
+];
+
+/** How much a read's lost fields matter here, and the words that say so. */
+function lossEffect(file: string, lost: InputField[], dataset: DatasetSettings) {
+    const entries = lost.map(field => CONDITIONAL_FIELDS.find(entry =>
+        entry.file === file.toLowerCase() && entry.fields.test(field.path ?? field.name)));
+    if (lost.length === 0 || entries.some(entry => !entry)) {
+        return { severity: 'error' as InputIssueSeverity, text: '' };
+    }
+    let severity: InputIssueSeverity = 'note';
+    const settings: string[] = [];
+    for (const entry of new Set(entries as ConditionalFields[])) {
+        const setting = entry.setting(dataset);
+        if (setting === null) {
+            severity = severity === 'error' ? severity : 'warning';
+        } else if (entry.matters(setting)) {
+            severity = 'error';
+        }
+        settings.push(`${entry.when} (here ${setting ?? 'unknown'})`);
+    }
+    return { severity, text: ` They matter only when ${settings.join(' or ')}.` };
+}
+
+function plural(count: number, one: string, many: string): string {
+    return count === 1 ? one : many;
+}
+
+/** Rows that stop at one field, as one issue: the file, row, column, field and what is lost. */
+function stoppedIssue(
+    group: StoppedRows,
+    layout: InputReadLayout,
+    judged: FileJudgement,
+    dataset: DatasetSettings,
+): InputIssue {
+    const field = layout.fields[group.index];
+    const column = group.index + 1;
+    const header = judged.header[group.index] ?? null;
+    const first = group.lines[0];
+    const who = group.rows === 1 ? `${layout.file} line ${first}` : `${group.rows} rows of ${layout.file} (first at line ${first})`;
+    const at = `value ${column}${header ? ` (${header})` : ''}`;
+    const shown = JSON.stringify(group.value);
+    const example = group.rows === 1 ? shown : `such as ${shown}`;
+    // A slash keeps the value before it.
+    const keeps = group.kind === 'slash_ends_read' && !group.value.startsWith('/') ? 1 : 0;
+    const lost = layout.fields.slice(group.index + keeps);
+    const names = lost.map(item => item.name);
+    const nameList = names.length > 6 ? `${names.slice(0, 6).join(', ')} and ${names.length - 6} more` : names.join(', ');
+    const detail = {
+        kind: group.kind,
+        file: layout.file,
+        line: first,
+        rows: group.rows,
+        lines: group.lines,
+        column,
+        field: field.name,
+        path: field.path,
+        vartype: field.vartype,
+        header,
+        value: group.value,
+        lost_columns: names,
+        read_at: layout.readAt,
+    };
+    if (group.kind === 'decimal_in_integer') {
+        return {
+            ...detail,
+            severity: 'warning',
+            message: `${who} ${plural(group.rows, 'has', 'have')} a decimal at ${at}: ${example} in the integer `
+                + `${field.name} (${layout.readAt}). ifx reads on and keeps the whole part; gfortran stops the read `
+                + `there, so ${nameList} keep their code defaults under gfortran only.`,
+        };
+    }
+    const cause = group.kind === 'bad_value'
+        ? `${example} cannot be read as the ${field.type} ${field.name}`
+        : `the slash in ${example} ends the read`;
+    const effect = lossEffect(layout.file, lost, dataset);
+    return {
+        ...detail,
+        severity: effect.severity,
+        message: `${who} ${plural(group.rows, 'stops', 'stop')} at ${at}: ${cause} (${layout.readAt}). `
+            + (layout.rows === 'records' ? 'The rows stay in sync: the next read starts on the next line. ' : '')
+            + `With no message, ${nameList} keep their code defaults.${effect.text}`,
+    };
+}
+
+function sameCommit(left: string, right: string): boolean {
+    const length = Math.min(left.length, right.length);
+    return length >= 7 && left.slice(0, length).toLowerCase() === right.slice(0, length).toLowerCase();
+}
+
+/** The issue when the layouts are not those of the source that will run. */
+function layoutsIssue(context: InputCheckContext): InputIssue | null {
+    const running = context.source?.commit;
+    const judged = context.expectations.swatplus.commit;
+    if (!running || !judged || sameCommit(running, judged)) {
+        return null;
+    }
+    return {
+        kind: 'layouts_not_for_source',
+        severity: 'warning',
+        file: context.expectationFile.path ?? 'layouts',
+        line: null,
+        message: `The layouts are from ${versionLabel(context.expectations)}, not the source that will run `
+            + `(${running.slice(0, 12)}): input files change shape between versions, so these verdicts may not hold. `
+            + (context.source?.layoutsNote ? `${context.source.layoutsNote}. ` : '')
+            + 'Pass layouts built from that source (swatplus-build, then swatplus-layouts).',
+    };
 }
 
 function versionLabel(source: InputExpectationSource): string {
@@ -377,8 +794,26 @@ export function preflightInputs(
     const files: InputFileVerdict[] = [];
     const findings: InputFinding[] = [];
     const unjudged: InputUnjudgedRow[] = [];
+    const issues: InputIssue[] = [];
     let unjudgedRows = 0;
-    for (const named of namedFiles(cioText)) {
+    const cioFiles = namedFiles(cioText);
+
+    const codes = cioFiles.find(item => item.file.toLowerCase() === 'codes.bsn');
+    const codesFile = codes ? read(codes.file) : null;
+    const dataset: DatasetSettings = {
+        code: path => {
+            const ref = context.expectations.paths.get(path);
+            const layout = context.expectations.layouts.get('codes.bsn');
+            if (!ref || !layout || codesFile?.kind !== 'text') {
+                return null;
+            }
+            const row = codesFile.text.split(/\r?\n/).slice(layout.skippedLines).find(line => line.trim());
+            return row?.trim().split(/\s+/)[ref.index] ?? null;
+        },
+        named: file => cioFiles.some(item => item.file.toLowerCase() === file),
+    };
+
+    for (const named of cioFiles) {
         const verdict: InputFileVerdict = {
             label: named.label,
             cio_line: named.line,
@@ -391,6 +826,7 @@ export function preflightInputs(
             rows_checked: 0,
             rows_unjudged: 0,
             short_rows: 0,
+            bad_value_rows: 0,
         };
         files.push(verdict);
         const layout = context.expectations.layouts.get(named.file.toLowerCase());
@@ -415,7 +851,11 @@ export function preflightInputs(
             continue;
         }
         const judgement = judgeFile(found.text, layout);
-        verdict.outcome = judgement.shortRows > 0 ? 'short' : 'match';
+        verdict.bad_value_rows = judgement.stopped
+            .filter(group => group.kind !== 'decimal_in_integer')
+            .reduce((sum, group) => sum + group.rows, 0);
+        verdict.outcome = judgement.shortRows > 0 ? 'short' : verdict.bad_value_rows > 0 ? 'bad_value' : 'match';
+        issues.push(...judgement.stopped.map(group => stoppedIssue(group, layout, judgement, dataset)));
         verdict.rows_checked = judgement.rowsChecked;
         verdict.rows_unjudged = judgement.unjudged.length;
         verdict.short_rows = judgement.shortRows;
@@ -431,10 +871,22 @@ export function preflightInputs(
             }
         }
     }
+    const cross = runCrossChecks(cioFiles, read, context);
+    issues.push(...cross.issues);
+    const checks: InputCheckRun[] = [{ name: 'value_types', state: 'ran', reason: null }, ...cross.checks];
+    const mismatch = layoutsIssue(context);
+    if (mismatch) {
+        issues.push(mismatch);
+    }
+    const order = INPUT_ISSUE_SEVERITIES;
+    issues.sort((left, right) => order.indexOf(left.severity) - order.indexOf(right.severity));
     const checked = files.filter(item => item.outcome !== 'unchecked');
-    const complete = checked.length === files.length && unjudgedRows === 0;
+    const unfinished = checks.some(item => item.state === 'skipped' || item.state === 'partial');
+    const complete = checked.length === files.length && unjudgedRows === 0 && !unfinished && !mismatch;
     const short = files.filter(item => item.outcome === 'short');
-    const status: InputPreflight['status'] = short.length > 0 ? 'fail' : complete ? 'pass' : 'inconclusive';
+    const failing = short.length > 0 || issues.some(item => item.severity === 'error');
+    const status: InputPreflight['status'] = failing ? 'fail' : complete ? 'pass' : 'inconclusive';
+    const source = context.source;
     const result: InputPreflight = {
         check_version: INPUT_PREFLIGHT_VERSION,
         status,
@@ -447,6 +899,12 @@ export function preflightInputs(
             path: context.expectationFile.path,
             sha256: context.expectationFile.sha256,
         },
+        source: source ? {
+            dir: source.dir,
+            commit: source.commit,
+            dtbl_lum_read: source.dtblLumRead?.identity ?? null,
+            actions: source.actions?.identity ?? null,
+        } : null,
         coverage: {
             complete,
             named_files: files.length,
@@ -455,8 +913,10 @@ export function preflightInputs(
             unjudged_rows: unjudgedRows,
             unjudged,
         },
+        checks,
         files,
         findings,
+        issues: issues.slice(0, MAX_FINDINGS),
     };
     result.summary = summarize(result);
     return result;
@@ -473,6 +933,19 @@ function summarize(result: InputPreflight): string {
             + short.map(item => `${item.file} (${item.short_rows})`).join(', '));
     } else if (coverage.checked_files) {
         parts.push('no checked row is short of values');
+    }
+    const stopped = result.files.filter(item => item.bad_value_rows > 0);
+    if (stopped.length) {
+        parts.push(`${stopped.length} with values that stop the read: `
+            + stopped.map(item => `${item.file} (${item.bad_value_rows})`).join(', '));
+    }
+    const count = (severity: InputIssueSeverity) => result.issues.filter(item => item.severity === severity).length;
+    if (result.issues.length) {
+        parts.push(`issues: ${count('error')} error(s), ${count('warning')} warning(s), ${count('note')} note(s)`);
+    }
+    const unrun = result.checks.filter(item => item.state === 'skipped' || item.state === 'partial');
+    if (unrun.length) {
+        parts.push(`not fully run: ${unrun.map(item => item.name).join(', ')}`);
     }
     if (coverage.unchecked_files) {
         const reasons = new Map<string, number>();
@@ -503,6 +976,7 @@ export function inputPreflightError(
         error: { code, message },
         dataset: { dir: datasetDir, file_cio: fileCio },
         expectations: null,
+        source: null,
         coverage: {
             complete: false,
             named_files: 0,
@@ -511,12 +985,14 @@ export function inputPreflightError(
             unjudged_rows: 0,
             unjudged: [],
         },
+        checks: [],
         files: [],
         findings: [],
+        issues: [],
     };
 }
 
-/** The text form: the verdict, each short row, and what was not checked. */
+/** The text form: the verdict, each short row and issue, and what was not checked. */
 export function describeInputPreflight(result: InputPreflight): string {
     if (result.status === 'error') {
         return result.summary;
@@ -533,9 +1009,17 @@ export function describeInputPreflight(result: InputPreflight): string {
     if (total > listed) {
         lines.push(`- ... and ${total - listed} more short row(s)`);
     }
+    for (const item of result.issues) {
+        lines.push(`- ${item.severity}: ${item.message}`);
+    }
+    for (const item of result.checks) {
+        if (item.state === 'skipped' || item.state === 'partial') {
+            lines.push(`- ${item.name} ${item.state === 'skipped' ? 'did not run' : 'ran in part'}: ${item.reason}`);
+        }
+    }
     if (result.status !== 'pass') {
-        lines.push('A pass needs every named file checked and every data line counted; '
-            + 'files with no read layout, and lines with quotes, commas, slashes or repeat counts, are not judged.');
+        lines.push('A pass needs every named file checked, every data line counted and every check that applies run; '
+            + 'files with no read layout, and lines with quotes, commas or repeat counts, are not judged.');
     }
     return lines.join('\n');
 }

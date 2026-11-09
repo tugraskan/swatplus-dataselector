@@ -53,8 +53,14 @@ import {
     describeCioPreflight,
     preflightCio,
 } from './cioCheck';
+import { InputSourceFacts } from './inputCrossChecks';
+import { CommandSpec, pythonCandidates, tamanduaCommands } from '../schemaSourceCore';
 import {
+    INPUT_CHECK_NAMES,
+    INPUT_CHECK_STATES,
     INPUT_FILE_OUTCOMES,
+    INPUT_ISSUE_KINDS,
+    INPUT_ISSUE_SEVERITIES,
     INPUT_PREFLIGHT_ERROR_CODES,
     INPUT_PREFLIGHT_VERSION,
     INPUT_UNCHECKED_REASONS,
@@ -275,6 +281,12 @@ const inputPreflightOutput = z.strictObject({
         path: z.string().nullable(),
         sha256: z.string().nullable(),
     }).nullable(),
+    source: z.strictObject({
+        dir: z.string(),
+        commit: z.string().nullable(),
+        dtbl_lum_read: cioFileIdentity.nullable(),
+        actions: cioFileIdentity.nullable(),
+    }).nullable(),
     coverage: z.strictObject({
         complete: z.boolean(),
         named_files: z.number().int().nonnegative(),
@@ -287,6 +299,11 @@ const inputPreflightOutput = z.strictObject({
             reason: z.enum(INPUT_UNJUDGED_REASONS),
         })),
     }),
+    checks: z.array(z.strictObject({
+        name: z.enum(INPUT_CHECK_NAMES),
+        state: z.enum(INPUT_CHECK_STATES),
+        reason: z.string().nullable(),
+    })),
     files: z.array(z.strictObject({
         label: z.string(),
         cio_line: z.number().int(),
@@ -299,6 +316,7 @@ const inputPreflightOutput = z.strictObject({
         rows_checked: z.number().int().nonnegative(),
         rows_unjudged: z.number().int().nonnegative(),
         short_rows: z.number().int().nonnegative(),
+        bad_value_rows: z.number().int().nonnegative(),
     })),
     findings: z.array(z.strictObject({
         file: z.string(),
@@ -310,6 +328,47 @@ const inputPreflightOutput = z.strictObject({
         read_at: z.string(),
         message: z.string(),
     })),
+    issues: z.array(z.strictObject({
+        kind: z.enum(INPUT_ISSUE_KINDS),
+        severity: z.enum(INPUT_ISSUE_SEVERITIES),
+        file: z.string(),
+        line: z.number().int().nullable(),
+        message: z.string(),
+        rows: z.number().int().optional(),
+        lines: z.array(z.number().int()).optional(),
+        column: z.number().int().optional(),
+        field: z.string().optional(),
+        path: z.string().nullable().optional(),
+        vartype: z.string().nullable().optional(),
+        header: z.string().nullable().optional(),
+        value: z.string().optional(),
+        lost_columns: z.array(z.string()).optional(),
+        read_at: z.string().optional(),
+        action: z.string().optional(),
+        option: z.string().optional(),
+        database: z.string().optional(),
+        tables: z.array(z.string()).optional(),
+        tables_in_use: z.array(z.string()).optional(),
+        variable: z.string().optional(),
+        stations: z.number().int().optional(),
+        files: z.number().int().optional(),
+        files_ending_early: z.number().int().optional(),
+        last_record: z.strictObject({ year: z.number().int(), day: z.number().int() }).optional(),
+        sim_end: z.strictObject({ year: z.number().int(), day: z.number().int() }).optional(),
+        days_short: z.number().int().optional(),
+        missing_days: z.number().int().optional(),
+        total_days: z.number().int().optional(),
+        missing_share: z.number().optional(),
+        flagged_days: z.number().int().optional(),
+        days_before_records: z.number().int().optional(),
+        days_after_records: z.number().int().optional(),
+        gap_days: z.number().int().optional(),
+        crop: z.string().optional(),
+        community: z.string().optional(),
+        land_uses: z.array(z.string()).optional(),
+        schedules: z.array(z.string()).optional(),
+        hrus: z.number().int().optional(),
+    })),
 });
 
 function inputPreflightResult(result: InputPreflight) {
@@ -318,6 +377,59 @@ function inputPreflightResult(result: InputPreflight) {
         structuredContent: { ...result },
         ...(result.status === 'error' ? { isError: true } : {}),
     };
+}
+
+/** The tree's own commit. A build's private copy may sit inside some other repository, whose HEAD says nothing about it. */
+function sourceCommit(sourceDir: string): string | null {
+    const head = spawnSync('git', ['-C', sourceDir, 'rev-parse', '--show-toplevel', 'HEAD'], { encoding: 'utf-8' });
+    const [top, commit] = head.status === 0 ? head.stdout.trim().split(/\r?\n/) : [];
+    try {
+        return top && commit && fs.realpathSync(top) === fs.realpathSync(sourceDir) ? commit : null;
+    } catch {
+        return null;
+    }
+}
+
+/** What the decision-table check needs of a source tree, with the bytes read and their commit. */
+function readInputSource(sourceDir: string): InputSourceFacts {
+    const read = (name: string) => {
+        const file = path.join(sourceDir, 'src', name);
+        try {
+            const bytes = fs.readFileSync(file);
+            return { text: bytes.toString('utf-8'), identity: fileIdentity(file, bytes) };
+        } catch {
+            return null;
+        }
+    };
+    return {
+        dir: sourceDir,
+        commit: sourceCommit(sourceDir),
+        dtblLumRead: read('dtbl_lum_read.f90'),
+        actions: read('actions.f90'),
+    };
+}
+
+/** Tamandua's layouts of a source tree, or why there are none. A no-op in milliseconds when the facts are current. */
+function exportSourceLayouts(sourceDir: string): { path: string } | { why: string } {
+    const key = createHash('sha1').update(path.resolve(sourceDir)).digest('hex').slice(0, 12);
+    const folder = path.join(os.tmpdir(), `swatplus-input-layouts-${key}`);
+    const facts = path.join(folder, 'swatplus-facts.json');
+    const out = path.join(folder, 'swatplus-layouts.json');
+    const pythons = pythonCandidates(process.env, process.platform);
+    const runFirst = (commands: CommandSpec[]) => commands.some(({ command, args }) =>
+        spawnSync(command, args, { encoding: 'utf-8', timeout: 180_000, shell: false }).status === 0);
+    try {
+        fs.mkdirSync(folder, { recursive: true });
+    } catch (err) {
+        return { why: err instanceof Error ? err.message : String(err) };
+    }
+    if (!runFirst(tamanduaCommands('swatplus-build', ['--source', sourceDir, '--facts', facts, '--no-rhs', '--quiet'], pythons))) {
+        return { why: 'Tamandua could not index it (swatplus-build)' };
+    }
+    if (!runFirst(tamanduaCommands('swatplus-layouts', ['--facts', facts, '--out', out], pythons))) {
+        return { why: 'Tamandua could not list its layouts (swatplus-layouts)' };
+    }
+    return { path: out };
 }
 
 /** A named file, found case-insensitively as SWAT+ finds it on Windows. */
@@ -619,16 +731,19 @@ function main(): void {
         ));
     });
 
-    // Expectations are read once per file and kept: a layouts file is large.
+    // Expectations are read once per version of a file and kept: a layouts file is large.
     const expectationCache = new Map<string, { expectations: InputExpectations; sha256: string }>();
     const loadExpectations = (file: string): { expectations: InputExpectations; sha256: string } | string => {
-        const cached = expectationCache.get(file);
-        if (cached) {
-            return cached;
-        }
         let bytes: Buffer;
         let parsed: unknown;
+        let cacheKey: string;
         try {
+            const { mtimeMs, size } = fs.statSync(file);
+            cacheKey = `${file}|${mtimeMs}|${size}`;
+            const cached = expectationCache.get(cacheKey);
+            if (cached) {
+                return cached;
+            }
             bytes = fs.readFileSync(file);
             parsed = JSON.parse(bytes.toString('utf-8'));
         } catch (err) {
@@ -639,31 +754,39 @@ function main(): void {
             return `${file} is neither a swatplus-layouts file nor a generated schema.`;
         }
         const loaded = { expectations, sha256: createHash('sha256').update(bytes).digest('hex') };
-        expectationCache.set(file, loaded);
+        expectationCache.set(cacheKey, loaded);
         return loaded;
     };
 
     server.registerTool('check_inputs', {
         title: 'Check the files file.cio names against what SWAT+ reads',
-        description: 'Open every file the dataset\'s file.cio names and count the values on '
+        description: 'Open every file the dataset\'s file.cio names and walk the values on '
             + 'each data line against the read statement SWAT+ uses for that file. A line '
             + 'short of values makes the list-directed read carry on into the next line, so '
-            + 'every record after it is read shifted. check_dataset judges file.cio itself; '
-            + 'this judges the files it points to. Expectations come from one SWAT+ source, '
-            + 'named in expectations.swatplus: a Tamandua swatplus-layouts file built from '
-            + 'the checkout that will run (`layouts`), or by default the schema this server '
-            + 'ships. Files with no read layout, renamed files, and lines with quotes, '
-            + 'commas, slashes or repeat counts are reported as not judged; a pass needs '
-            + 'every named file checked.',
+            + 'every record after it is read shifted. A value that cannot be read as its '
+            + 'field\'s type stops the read: the rest of that record silently keeps its code '
+            + 'defaults. Then checks what no single line shows: lum.dtl actions against the '
+            + 'source that maps and runs them, weather records against time.sim, and crops '
+            + 'that start as n with nothing to plant them; see `issues`. check_dataset judges '
+            + 'file.cio itself; this judges the files it points to. Expectations come from one '
+            + 'SWAT+ source, named in expectations.swatplus: `layouts`, else layouts exported '
+            + 'from `source` with Tamandua, else the schema this server ships. Files with no '
+            + 'read layout, renamed files, and lines with quotes, commas or repeat counts are '
+            + 'reported as not judged; a pass needs every named file checked and every check '
+            + 'that applies run.',
         inputSchema: {
             dataset: z.string().optional()
                 .describe('Dataset directory; defaults to the active dataset'),
             layouts: z.string().optional()
                 .describe('Tamandua swatplus-layouts JSON for the SWAT+ source that will read '
-                    + 'the dataset; defaults to the server\'s --layouts, then its shipped schema'),
+                    + 'the dataset; defaults to the server\'s --layouts, then layouts exported '
+                    + 'from `source`, then its shipped schema'),
+            source: z.string().optional()
+                .describe('SWAT+ source tree that will read the dataset, for lum.dtl action names '
+                    + 'and, with no layouts given, the layouts; defaults to the server\'s --source'),
         },
         outputSchema: inputPreflightOutput,
-    }, async ({ dataset, layouts }) => {
+    }, async ({ dataset, layouts, source }) => {
         const datasetDir = dataset ?? state.datasetDir;
         if (!datasetDir) {
             return inputPreflightResult(inputPreflightError('no_dataset',
@@ -684,7 +807,15 @@ function main(): void {
                 `Cannot check: ${err instanceof Error ? err.message : String(err)}`, datasetDir));
         }
         const fileCio = fileIdentity(cioPath, cio);
-        const expectationPath = layouts ?? args.layouts ?? defaultSchemaPath('swatplus-generated-schema.json');
+        const sourceDir = source ?? args.source;
+        const sourceFacts = sourceDir ? readInputSource(sourceDir) : undefined;
+        // The layouts of the version that will run; the shipped schema is one release, named in the result.
+        const exported = !layouts && !args.layouts && sourceDir ? exportSourceLayouts(sourceDir) : undefined;
+        if (sourceFacts && exported && 'why' in exported) {
+            sourceFacts.layoutsNote = exported.why;
+        }
+        const expectationPath = layouts ?? args.layouts
+            ?? (exported && 'path' in exported ? exported.path : defaultSchemaPath('swatplus-generated-schema.json'));
         const loaded = loadExpectations(expectationPath);
         if (typeof loaded === 'string') {
             return inputPreflightResult(inputPreflightError('no_expectations', loaded, datasetDir, fileCio));
@@ -697,6 +828,7 @@ function main(): void {
                 fileCio,
                 expectations: loaded.expectations,
                 expectationFile: { path: path.resolve(expectationPath), sha256: loaded.sha256 },
+                source: sourceFacts,
             },
         ));
     });

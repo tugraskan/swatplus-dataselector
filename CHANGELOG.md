@@ -4,6 +4,30 @@ All notable changes to the "swatplus-vscode-dataset-selector" extension will be 
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [Unreleased]
+
+### Added
+- `check_inputs` parses values by field type instead of only counting them. A
+  value its field cannot take stops the list-directed read and the rest of the
+  record silently keeps its code defaults, so `0.0null` in `parameters.bsn` is now
+  reported with its row, column, field and the fields lost.
+- `check_inputs` checks `lum.dtl` against the source that will run: an action that
+  runs but is never mapped, one nothing runs, and a name missing from its database.
+  Action names come from `dtbl_lum_read.f90` and `actions.f90`, through a new
+  `source` argument (default: the server's `--source`).
+- `check_inputs` warns when weather files end before `time.sim`, reports the share
+  of missing rain days in the simulated period, and warns about a crop that starts
+  as `n` in `plant.ini` when nothing plants it.
+- With `source` and no layouts, `check_inputs` exports that checkout's layouts with
+  Tamandua. Layouts from another commit than the source now rule out a pass.
+
+### Changed
+- The `check_inputs` contract is `dataselector-input-preflight/2`, adding `source`,
+  `checks`, `issues`, `files[].bad_value_rows` and the `bad_value` outcome.
+- A row whose read stops at a value is no longer reported as short: the read never
+  reaches the next line, so the rows stay in sync. `plants.plt` written for an older
+  SWAT+ is reported that way, as a note unless `carbon = 2`.
+
 ## [0.7.0] - 2026-10-26
 
 ### Removed
