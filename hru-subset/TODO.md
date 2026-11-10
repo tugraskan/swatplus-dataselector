@@ -45,8 +45,8 @@ install for it.
 - Release: push a tag `hru-subset-v<version>` (for example `hru-subset-v0.2.0`). The
   workflow `.github/workflows/release-hru-subset.yml` runs the tests, builds the VSIX,
   makes a GitHub Release with it and tries to publish.
-- The repository secret `VSCE_PAT` has expired, so the publish step fails and only the
-  GitHub Release is made. The publisher account is tugraskanusda@gmail.com.
-- Global Personal Access Tokens end on 2026-12-01, so do not mint another one.
-  Publish with Entra ID (`vsce publish --azure-credential`) or upload the VSIX
-  by hand on the Marketplace publisher page (publisher `PbsandtDev`).
+- The publish job uses Marketplace Trusted Publishing, so no token is needed. It
+  needs a policy on the Marketplace publisher page (publisher `PbsandtDev`, account
+  tugraskanusda@gmail.com) naming `tugraskan/swatplus-dataselector` and the workflow
+  `release-hru-subset.yml`. Without it the publish job fails and only the GitHub
+  Release is made; the VSIX can then be uploaded by hand on that page.

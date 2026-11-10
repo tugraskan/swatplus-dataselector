@@ -37,8 +37,28 @@ jobs:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           generate_release_notes: true
           files: extension-pack/*.vsix
+      - name: Keep the vsix for the publish job
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: extension-pack/*.vsix
+          if-no-files-found: error
+
+  publish:
+    # Trusted Publishing, as in release.yml: it needs its own policy on the
+    # "PbsandtDev" publisher naming this workflow file (release-pack.yml).
+    # Only this job can request an OIDC token. If it fails, the GitHub Release
+    # above -- with the vsix attached -- is already made.
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: vsix
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - name: Publish to VS Code Marketplace
-        # Same VSCE_PAT secret as release.yml -- both publish under
-        # "PbsandtDev". Until it's set, this step fails and the GitHub
-        # Release above -- with the vsix already attached -- still succeeds.
-        run: npx vsce publish -p ${{ secrets.VSCE_PAT }}
+        run: npx --yes @vscode/vsce@4.1.0 publish --oidc --packagePath *.vsix

@@ -48,9 +48,34 @@ jobs:
             release-assets/swatplus-output-schema.json
             release-assets/swatplus-generated-schema.json
             release-assets/*.vsix
+      - name: Keep the vsix for the publish job
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: release-assets/*.vsix
+          if-no-files-found: error
+
+  publish:
+    # Publishes to the VS Code Marketplace with Trusted Publishing: the job's
+    # GitHub OIDC token is exchanged for a 15-minute Marketplace credential, so
+    # no token is stored and nothing expires. It needs a Trusted Publishing
+    # policy on the "PbsandtDev" publisher naming this repository and this
+    # workflow file (release.yml), with no environment. It is its own job so
+    # that only it can request an OIDC token: npm ci and the build above never
+    # run with that right. If it fails, the GitHub Release above -- with the
+    # vsix attached -- is already made.
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: vsix
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - name: Publish to VS Code Marketplace
-        # Needs a VSCE_PAT repo secret (Marketplace: Manage, for the
-        # "PbsandtDev" publisher). Until it's set, this step fails and the
-        # GitHub Release above -- with the vsix already attached -- still
-        # succeeds.
-        run: npx vsce publish -p ${{ secrets.VSCE_PAT }}
+        # The vsix attached to the release, not a rebuild. vsce 4.1.0 is the
+        # first stable release with the Marketplace's final OIDC exchange.
+        run: npx --yes @vscode/vsce@4.1.0 publish --oidc --packagePath *.vsix
