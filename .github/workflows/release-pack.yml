@@ -45,14 +45,12 @@ jobs:
           if-no-files-found: error
 
   publish:
-    # Trusted Publishing, as in release.yml: it needs its own policy on the
-    # "PbsandtDev" publisher naming this workflow file (release-pack.yml).
-    # Only this job can request an OIDC token. If it fails, the GitHub Release
-    # above -- with the vsix attached -- is already made.
+    # Publishes with the VSCE_PAT secret, as in release.yml. Only this job sees
+    # the token. If it fails, the GitHub Release above -- with the vsix
+    # attached -- is already made.
     needs: release
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
+    permissions: {}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -61,4 +59,6 @@ jobs:
         with:
           node-version: 22
       - name: Publish to VS Code Marketplace
-        run: npx --yes @vscode/vsce@4.1.0 publish --oidc --packagePath *.vsix
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx --yes @vscode/vsce@4.1.0 publish --packagePath *.vsix

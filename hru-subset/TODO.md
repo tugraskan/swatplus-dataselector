@@ -45,8 +45,8 @@ install for it.
 - Release: push a tag `hru-subset-v<version>` (for example `hru-subset-v0.2.0`). The
   workflow `.github/workflows/release-hru-subset.yml` runs the tests, builds the VSIX,
   makes a GitHub Release with it and tries to publish.
-- The publish job uses Marketplace Trusted Publishing, so no token is needed. It
-  needs a policy on the Marketplace publisher page (publisher `PbsandtDev`, account
-  tugraskanusda@gmail.com) naming `tugraskan/swatplus-dataselector` and the workflow
-  `release-hru-subset.yml`. Without it the publish job fails and only the GitHub
-  Release is made; the VSIX can then be uploaded by hand on that page.
+- The publish job uses the repository's `VSCE_PAT` secret, the one-year Azure
+  DevOps token (Marketplace: Manage) that `release.yml` uses too, made by the
+  account that owns publisher `PbsandtDev` (tugraskanusda@gmail.com). If it has
+  expired the publish job fails and only the GitHub Release is made; the VSIX
+  can then be uploaded by hand on the publisher page.

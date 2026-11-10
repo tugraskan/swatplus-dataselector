@@ -56,18 +56,18 @@ jobs:
           if-no-files-found: error
 
   publish:
-    # Publishes to the VS Code Marketplace with Trusted Publishing: the job's
-    # GitHub OIDC token is exchanged for a 15-minute Marketplace credential, so
-    # no token is stored and nothing expires. It needs a Trusted Publishing
-    # policy on the "PbsandtDev" publisher naming this repository and this
-    # workflow file (release.yml), with no environment. It is its own job so
-    # that only it can request an OIDC token: npm ci and the build above never
-    # run with that right. If it fails, the GitHub Release above -- with the
-    # vsix attached -- is already made.
+    # Publishes with the VSCE_PAT secret: an Azure DevOps token scoped to one
+    # organization, with Marketplace (Manage) scope, made by the account that
+    # owns the "PbsandtDev" publisher. It lasts at most a year; when it
+    # expires, make a new one and set it with `gh secret set VSCE_PAT`.
+    # (Trusted Publishing was tried, but the Marketplace refused the token
+    # exchange for this publisher.)
+    # It is its own job so that npm ci and the build above never see the
+    # token. If it fails, the GitHub Release above -- with the vsix attached
+    # -- is already made.
     needs: release
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
+    permissions: {}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -76,6 +76,8 @@ jobs:
         with:
           node-version: 22
       - name: Publish to VS Code Marketplace
-        # The vsix attached to the release, not a rebuild. vsce 4.1.0 is the
-        # first stable release with the Marketplace's final OIDC exchange.
-        run: npx --yes @vscode/vsce@4.1.0 publish --oidc --packagePath *.vsix
+        # The vsix attached to the release, not a rebuild. vsce reads the
+        # token from VSCE_PAT.
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx --yes @vscode/vsce@4.1.0 publish --packagePath *.vsix
