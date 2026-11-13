@@ -4,7 +4,7 @@ All notable changes to the "swatplus-vscode-dataset-selector" extension will be 
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
-## [Unreleased]
+## [0.8.1] - 2026-11-13
 
 ### Fixed
 - `check_dataset` can now pass a deck read by SWAT+ dev. Dev reads the `file.cio` basin
