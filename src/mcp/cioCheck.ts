@@ -229,6 +229,11 @@ export interface CioCheckContext {
 const CLEAN_HEADLINE =
     'file.cio matches what the code reads; no row is short of values.';
 
+const SHORT_ROW_ADVICE =
+    'Add the missing value to that row -- "null" where the dataset ' +
+    'genuinely has no such file, or the filename otherwise, with ' +
+    'the file itself present alongside.';
+
 function shortRowLines(errors: readonly CioFinding[]): string[] {
     const lines = [
         `${errors.length} row(s) in file.cio are short of values. This ` +
@@ -252,11 +257,29 @@ function shortRowLines(errors: readonly CioFinding[]): string[] {
         }
     }
     lines.push('');
-    lines.push(
-        'Add the missing value to that row -- "null" where the dataset ' +
-            'genuinely has no such file, or the filename otherwise, with ' +
-            'the file itself present alongside.'
-    );
+    lines.push(SHORT_ROW_ADVICE);
+    return lines;
+}
+
+function bufferedShortLines(errors: readonly CioPreflightFinding[]): string[] {
+    const lines = [
+        `${errors.length} row(s) in file.cio have fewer values than any read the ` +
+            'code makes of them. The code takes each of these lines whole and ' +
+            'reads its values from that copy, so a short line does not spill into ' +
+            'the next one; every read of it fails instead.',
+        '',
+    ];
+    for (const item of errors) {
+        lines.push(`  ${item.message}`);
+        for (const field of item.missing_fields) {
+            lines.push(
+                `      missing: ${field.name}` +
+                    (field.fallback ? ` (the code's default is "${field.fallback}")` : '')
+            );
+        }
+    }
+    lines.push('');
+    lines.push(SHORT_ROW_ADVICE);
     return lines;
 }
 
@@ -311,12 +334,19 @@ export const CIO_PREFLIGHT_VERSION = 'dataselector-cio-preflight/1';
  *
  * - `list_directed`: `read (107,*,...) name, <variable>`. One row whose
  *   values fill a derived type; a short row spans into the next line.
- * - `whole_record`: `read (107,'(A)',...) <buffer>`. Exactly one line, taken
- *   as text, so it can be neither short nor shift anything.
+ * - `buffered`: `read (107,'(A)',...) <buffer>`, then one or more
+ *   `read (<buffer>,*,...) name, <items>`. Exactly one line, whose values are
+ *   then read list-directed from that copy of it. A short line cannot reach
+ *   the next one: the read of the buffer fails instead, and the code tries
+ *   its next form, if it has one. Each form is one of {@link CioRead.forms}.
+ * - `whole_record`: `read (107,'(A)',...) <buffer>`, or a call that does
+ *   only that with unit 107. Exactly one line, taken as text, so it can be
+ *   neither short nor shift anything.
  * - `unrecognized`: any other form. How many lines it takes is unknown, so
  *   nothing after it can be placed.
  */
-export type CioReadKind = 'list_directed' | 'whole_record' | 'unrecognized';
+export const CIO_READ_KINDS = ['list_directed', 'buffered', 'whole_record', 'unrecognized'] as const;
+export type CioReadKind = typeof CIO_READ_KINDS[number];
 
 /** Why part of the check could not be done. Each one makes coverage incomplete. */
 export const CIO_GAP_REASONS = [
@@ -325,9 +355,12 @@ export const CIO_GAP_REASONS = [
     'no_row_reads',
     'unrecognized_read',
     'whole_record_not_trailing',
-    // A list-directed row whose value count input_file_module.f90 does not give.
+    'unrecognized_buffer_read',
+    'unrecognized_call',
+    // A row whose value count input_file_module.f90 does not give.
     'undeclared_variable',
     'undeclared_type',
+    'undeclared_field',
     'unsupported_declaration',
     'no_fields',
     // file.cio content this check does not count.
@@ -342,6 +375,7 @@ export const CIO_FINDING_KINDS = [
     'short_row',
     'missing_section',
     'surplus_values',
+    'fallback_form',
     'extra_row',
 ] as const;
 export type CioFindingKind = typeof CIO_FINDING_KINDS[number];
@@ -370,17 +404,38 @@ export const CIO_PREFLIGHT_ERROR_CODES = [
 ] as const;
 export type CioPreflightErrorCode = typeof CIO_PREFLIGHT_ERROR_CODES[number];
 
+/** One read the code makes of a buffered line, and the fields it fills. */
+export interface CioReadForm {
+    /** 1-based line of `read (<buffer>,*,...)` in `readcio_read.f90`. */
+    sourceLine: number;
+    fields: CioField[];
+}
+
 /** One read of a `file.cio` line, in the order the code makes it. */
 export interface CioRead {
     /** 1-based position among the lines after the title. */
     position: number;
     kind: CioReadKind;
-    /** What is read into: `in_basin`, or a whole-record read's buffer. */
+    /**
+     * What is read into: `in_basin`, a whole-record read's buffer, or the call
+     * that reads the line.
+     */
     variable: string;
-    /** 1-based line of the statement in `readcio_read.f90`. */
+    /** 1-based line of the statement that takes the line, in `readcio_read.f90`. */
     sourceLine: number;
-    /** A list-directed read whose type resolved. */
+    /**
+     * A list-directed or buffered read whose fields resolved. For a buffered
+     * read these are the fields of its first form.
+     */
     expectation?: CioExpectation;
+    /**
+     * A buffered read's forms, in the order the code tries them: the first is
+     * what it reads the line as, each later one runs only when the one before
+     * it fails.
+     */
+    forms?: CioReadForm[];
+    /** A buffered read whose last form is followed by `if (<iostat> /= 0) exit`. */
+    exitsOnFailure?: boolean;
     /** A list-directed read whose value count could not be read. */
     unresolved?: { reason: CioGapReason; detail: string };
     /** A read this check does not model. */
@@ -456,14 +511,66 @@ export function parseInputTypeShapes(moduleSource: string): Map<string, CioTypeS
     return shapes;
 }
 
-interface ReadStatement {
+/** One statement of free-form Fortran, without comments. */
+interface FortranStatement {
+    /** 1-based line the statement starts on. */
     line: number;
-    /** The control list without spaces, lower-cased: `107,*,iostat=eof`. */
-    control: string;
-    /** What is read into, as written. */
-    items: string;
-    /** Whether `read` starts the statement rather than following an `if (...)`. */
-    leading: boolean;
+    code: string;
+    /** How many `if ... then`, `do` and `select` blocks it runs inside. */
+    depth: number;
+}
+
+const OPENS_BLOCK = /^(?:\w+\s*:\s*)?(?:if\s*\(.*\)\s*then|do\b|select\s*(?:case|type)\b)/i;
+const CLOSES_BLOCK = /^(?:end\s*(?:if|do|select)|enddo|endif)\b/i;
+/** Where one routine's statements end and another's begin. */
+const SCOPE_BOUNDARY = /^(?:contains\b|end\s*(?:subroutine|function|program|module)\b|end$|(?:(?:recursive|pure|elemental|impure|module)\s+)*(?:subroutine|function)\s+\w+)/i;
+
+/**
+ * The source as statements. A statement continued with `&` is one statement,
+ * on the line it starts on, so a read whose item list runs over two lines is
+ * read whole rather than cut off.
+ */
+function fortranStatements(source: string): FortranStatement[] {
+    const statements: FortranStatement[] = [];
+    const lines = source.split(/\r?\n/);
+    let pending: FortranStatement | undefined;
+    for (let index = 0; index < lines.length; index += 1) {
+        let code = stripFortranComment(lines[index]);
+        if (pending) {
+            if (code.trim() === '') {
+                // A comment or blank line among continuation lines.
+                continue;
+            }
+            code = code.replace(/^\s*&/, '');
+        }
+        const continued = /&\s*$/.test(code);
+        code = code.replace(/&\s*$/, '');
+        if (pending) {
+            pending.code += ' ' + code;
+        } else {
+            pending = { line: index + 1, code, depth: 0 };
+        }
+        if (!continued) {
+            statements.push(pending);
+            pending = undefined;
+        }
+    }
+    if (pending) {
+        statements.push(pending);
+    }
+
+    let depth = 0;
+    for (const statement of statements) {
+        const code = statement.code.trim();
+        if (CLOSES_BLOCK.test(code)) {
+            depth = Math.max(0, depth - 1);
+        }
+        statement.depth = depth;
+        if (OPENS_BLOCK.test(code)) {
+            depth += 1;
+        }
+    }
+    return statements;
 }
 
 /** Index of the parenthesis closing the one opened before `from`, or -1. */
@@ -490,37 +597,158 @@ function closingParenthesis(code: string, from: number): number {
     return -1;
 }
 
-/** Every `read` of unit 107, in source order, comments excluded. */
-function unit107Reads(readcioSource: string): ReadStatement[] {
-    const statements: ReadStatement[] = [];
-    readcioSource.split(/\r?\n/).forEach((raw, index) => {
-        const code = stripFortranComment(raw);
-        for (const match of code.matchAll(/\bread\s*\(/gi)) {
-            const start = match.index ?? 0;
-            const open = start + match[0].length;
-            const close = closingParenthesis(code, open);
-            // An unclosed control list continues on the next line; keeping it
-            // with an unusable item list makes it unrecognised, not unseen.
-            const control = code
-                .slice(open, close < 0 ? undefined : close)
-                .replace(/\s+/g, '')
-                .toLowerCase();
-            if (!/^(?:unit=)?107(?:,|$)/.test(control)) {
-                continue;
+/** `a, b(1, 2), "c,d"` -> `a`, `b(1, 2)`, `"c,d"`. */
+function splitTopLevel(text: string): string[] {
+    const parts: string[] = [];
+    let depth = 0;
+    let quote = '';
+    let start = 0;
+    for (let index = 0; index < text.length; index += 1) {
+        const char = text[index];
+        if (quote) {
+            if (char === quote) {
+                quote = '';
             }
-            statements.push({
-                line: index + 1,
-                control,
-                items: close < 0 ? '&' : code.slice(close + 1).trim(),
-                leading: code.slice(0, start).trim() === '',
-            });
+        } else if (char === '"' || char === "'") {
+            quote = char;
+        } else if (char === '(') {
+            depth += 1;
+        } else if (char === ')') {
+            depth -= 1;
+        } else if (char === ',' && depth === 0) {
+            parts.push(text.slice(start, index).trim());
+            start = index + 1;
         }
-    });
-    return statements;
+    }
+    parts.push(text.slice(start).trim());
+    return parts.filter((part, index) => part !== '' || index < parts.length - 1);
+}
+
+interface ReadStatement {
+    kind: 'read';
+    line: number;
+    /** Index of its statement in {@link fortranStatements}. */
+    statement: number;
+    /** Offset in the statement, to keep two on one line in order. */
+    offset: number;
+    /** The control list without spaces, lower-cased: `107,*,iostat=eof`. */
+    control: string;
+    /** What is read from, lower-cased: `107`, or a buffer's name. */
+    unit: string;
+    /** What is read into, as written. */
+    items: string;
+    /** Whether `read` starts the statement rather than following an `if (...)`. */
+    leading: boolean;
+}
+
+interface CallStatement {
+    kind: 'call';
+    line: number;
+    statement: number;
+    offset: number;
+    name: string;
+    /** The actual arguments, as written. */
+    args: string[];
+    leading: boolean;
+}
+
+/** Every `read` and `call` in a statement, in the order they appear. */
+function transfersIn(statement: FortranStatement, index: number): (ReadStatement | CallStatement)[] {
+    const { code, line } = statement;
+    const found: (ReadStatement | CallStatement)[] = [];
+    for (const match of code.matchAll(/\bread\s*\(/gi)) {
+        const start = match.index ?? 0;
+        const open = start + match[0].length;
+        const close = closingParenthesis(code, open);
+        // An unclosed control list keeps an unusable item list, which makes
+        // it unrecognised rather than unseen.
+        const control = code
+            .slice(open, close < 0 ? undefined : close)
+            .replace(/\s+/g, '')
+            .toLowerCase();
+        found.push({
+            kind: 'read',
+            line,
+            statement: index,
+            offset: start,
+            control,
+            unit: /^(?:unit=)?(\w*)/.exec(control)?.[1] ?? '',
+            items: close < 0 ? '&' : code.slice(close + 1).trim(),
+            leading: code.slice(0, start).trim() === '',
+        });
+    }
+    for (const match of code.matchAll(/\bcall\s+(\w+)\s*\(/gi)) {
+        const start = match.index ?? 0;
+        const open = start + match[0].length;
+        const close = closingParenthesis(code, open);
+        found.push({
+            kind: 'call',
+            line,
+            statement: index,
+            offset: start,
+            name: match[1],
+            args: splitTopLevel(code.slice(open, close < 0 ? undefined : close)),
+            leading: code.slice(0, start).trim() === '',
+        });
+    }
+    return found.sort((a, b) => a.offset - b.offset);
 }
 
 const LIST_DIRECTED_CONTROL = /^107,\*(?:,iostat=\w+)?$/;
 const WHOLE_RECORD_CONTROL = /^107,(?:fmt=)?(['"])\(a\)\1(?:,iostat=\w+)?$/;
+
+function escapeRegExp(text: string): string {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** `if (<iostat> /= 0) <then | exit>`, the test that sends a failed read on. */
+function failureTest(iostat: string, then: 'then' | 'exit'): RegExp {
+    return new RegExp(
+        `^if\\s*\\(\\s*${escapeRegExp(iostat)}\\s*(?:/=|\\.ne\\.)\\s*0\\s*\\)\\s*${then}$`, 'i');
+}
+
+type TypeResolution =
+    | { typeName: string; shape: CioTypeShape }
+    | { reason: CioGapReason; detail: string };
+
+function resolveType(
+    variable: string,
+    variables: Map<string, string>,
+    shapes: Map<string, CioTypeShape>
+): TypeResolution {
+    const typeName = variables.get(variable);
+    const shape = typeName ? shapes.get(typeName) : undefined;
+    if (!typeName) {
+        return {
+            reason: 'undeclared_variable',
+            detail: `${variable} is not declared as a derived type in input_file_module.f90`,
+        };
+    }
+    if (!shape) {
+        return {
+            reason: 'undeclared_type',
+            detail: `${variable} is a ${typeName}, and no plain \`type ${typeName}\` block declares it`,
+        };
+    }
+    return { typeName, shape };
+}
+
+/** The fields a whole derived type takes, or why they cannot be counted. */
+function wholeTypeFields(
+    typeName: string,
+    shape: CioTypeShape
+): { fields: CioField[] } | { reason: CioGapReason; detail: string } {
+    if (shape.unsupported.length > 0) {
+        return {
+            reason: 'unsupported_declaration',
+            detail: `type ${typeName} has a line this check does not count: "${shape.unsupported[0]}"`,
+        };
+    }
+    if (shape.fields.length === 0) {
+        return { reason: 'no_fields', detail: `type ${typeName} declares no character fields` };
+    }
+    return { fields: shape.fields };
+}
 
 function resolveRow(
     position: number,
@@ -530,32 +758,154 @@ function resolveRow(
     shapes: Map<string, CioTypeShape>
 ): CioRead {
     const read: CioRead = { position, kind: 'list_directed', variable, sourceLine };
-    const typeName = variables.get(variable);
-    const shape = typeName ? shapes.get(typeName) : undefined;
-    if (!typeName) {
-        read.unresolved = {
-            reason: 'undeclared_variable',
-            detail: `${variable} is not declared as a derived type in input_file_module.f90`,
-        };
-    } else if (!shape) {
-        read.unresolved = {
-            reason: 'undeclared_type',
-            detail: `${variable} is a ${typeName}, and no plain \`type ${typeName}\` block declares it`,
-        };
-    } else if (shape.unsupported.length > 0) {
-        read.unresolved = {
-            reason: 'unsupported_declaration',
-            detail: `type ${typeName} has a line this check does not count: "${shape.unsupported[0]}"`,
-        };
-    } else if (shape.fields.length === 0) {
-        read.unresolved = {
-            reason: 'no_fields',
-            detail: `type ${typeName} declares no character fields`,
-        };
+    const type = resolveType(variable, variables, shapes);
+    if ('reason' in type) {
+        read.unresolved = type;
+        return read;
+    }
+    const fields = wholeTypeFields(type.typeName, type.shape);
+    if ('reason' in fields) {
+        read.unresolved = fields;
     } else {
-        read.expectation = { variable, typeName, fields: shape.fields };
+        read.expectation = { variable, typeName: type.typeName, fields: fields.fields };
     }
     return read;
+}
+
+type FormResolution =
+    | { variable: string; typeName: string; fields: CioField[] }
+    | { unresolved: { reason: CioGapReason; detail: string }; variable: string }
+    | { unrecognized: string };
+
+/**
+ * What one read of a buffer fills, after its leading `name`: one variable,
+ * whole (`in_basin`) or field by field (`in_basin%codes_bas, ...`).
+ */
+function resolveForm(
+    items: string,
+    variables: Map<string, string>,
+    shapes: Map<string, CioTypeShape>
+): FormResolution {
+    let variable: string | undefined;
+    let typeName = '';
+    const fields: CioField[] = [];
+    for (const item of splitTopLevel(items).map((part) => part.replace(/\s+/g, ''))) {
+        const parts = /^(\w+)(?:%(\w+))?$/.exec(item);
+        if (!parts) {
+            return { unrecognized: `"${item}" is not a variable or one of its fields` };
+        }
+        if (variable !== undefined && parts[1].toLowerCase() !== variable.toLowerCase()) {
+            return { unrecognized: `it reads into both ${variable} and ${parts[1]}` };
+        }
+        variable = parts[1];
+        const type = resolveType(variable, variables, shapes);
+        if ('reason' in type) {
+            return { unresolved: type, variable };
+        }
+        typeName = type.typeName;
+        const component = parts[2];
+        if (component === undefined) {
+            const whole = wholeTypeFields(type.typeName, type.shape);
+            if ('reason' in whole) {
+                return { unresolved: whole, variable };
+            }
+            fields.push(...whole.fields);
+            continue;
+        }
+        const field = type.shape.fields.find((candidate) =>
+            candidate.name.toLowerCase() === component.toLowerCase());
+        if (field) {
+            fields.push(field);
+            continue;
+        }
+        const named = new RegExp(`\\b${escapeRegExp(component)}\\b`, 'i');
+        const odd = type.shape.unsupported.find((line) => named.test(line));
+        return {
+            variable,
+            unresolved: odd
+                ? {
+                    reason: 'unsupported_declaration',
+                    detail: `type ${type.typeName} declares ${component} in a form this check does not count: "${odd}"`,
+                }
+                : {
+                    reason: 'undeclared_field',
+                    detail: `type ${type.typeName} declares no field ${component}`,
+                },
+        };
+    }
+    if (variable === undefined) {
+        return { unrecognized: 'it reads nothing after name' };
+    }
+    return { variable, typeName, fields };
+}
+
+/** A line read whole into a buffer, and the reads of that buffer after it. */
+interface OpenBuffer {
+    read: CioRead;
+    /** The buffer's name, lower-cased. */
+    name: string;
+    statement: number;
+    depth: number;
+    forms: { line: number; statement: number; iostat: string | null; items: string }[];
+    /** Why the reads of the buffer are not modelled, once known. */
+    problem?: string;
+    /** Line of the first statement that may change the buffer after it is read. */
+    changedAt?: number;
+}
+
+/**
+ * Why `call <name>(..., 107, ...)` is not one whole-line read, or null when it is.
+ *
+ * Recognised only when the routine is contained in the same file and its one
+ * use of the unit is a `read (<unit>,'(A)',...) <variable>` that every call
+ * reaches once: nothing before it can skip or repeat it (no `if`, `do`,
+ * `select`, `return`, `exit`, `cycle`, `go to`, `stop` or `call`), and the
+ * unit is used for nothing else.
+ */
+function notOneWholeLine(statements: FortranStatement[], call: CallStatement, unitArg: number): string | null {
+    const header = new RegExp(
+        `^(?:(?:recursive|pure|elemental|impure|module)\\s+)*subroutine\\s+${escapeRegExp(call.name)}\\s*(?:\\(([^)]*)\\))?\\s*$`, 'i');
+    const start = statements.findIndex((statement) => header.test(statement.code.trim()));
+    if (start < 0) {
+        return `readcio_read.f90 does not contain subroutine ${call.name}`;
+    }
+    const dummies = (header.exec(statements[start].code.trim())?.[1] ?? '')
+        .split(',').map((dummy) => dummy.trim().toLowerCase());
+    const keyword = /^(\w+)\s*=/.exec(call.args[unitArg])?.[1]?.toLowerCase();
+    const unit = keyword ?? dummies[unitArg];
+    if (!unit || !dummies.includes(unit)) {
+        return `unit 107 does not reach one of ${call.name}'s arguments`;
+    }
+    const uses = new RegExp(`\\b${escapeRegExp(unit)}\\b`, 'i');
+    const wholeLine = new RegExp(`^${escapeRegExp(unit)},(?:fmt=)?(['"])\\(a\\)\\1(?:,iostat=\\w+)?$`);
+    const control = /^(?:\w+\s*:\s*)?(?:if|do|select|return|exit|cycle|go\s*to|stop|call|where|forall)\b/i;
+    let reads = 0;
+    let controlFlowBefore = false;
+    for (let index = start + 1; index < statements.length; index += 1) {
+        const code = statements[index].code.trim();
+        if (/^end(?:\s*subroutine\b|$)/i.test(code)) {
+            break;
+        }
+        if (uses.test(code)) {
+            const transfers = transfersIn(statements[index], index);
+            const read = transfers.length === 1 && transfers[0].kind === 'read' ? transfers[0] : undefined;
+            if (code.includes('::')) {
+                // Its declaration.
+            } else if (read && read.unit === unit && read.leading
+                && wholeLine.test(read.control) && /^\w+$/.test(read.items)) {
+                reads += 1;
+                if (controlFlowBefore) {
+                    return `${call.name} can skip or repeat its read of the unit (line ${statements[index].line})`;
+                }
+            } else {
+                return `${call.name} uses the unit other than in one whole-line read (line ${statements[index].line})`;
+            }
+        }
+        if (reads === 0 && control.test(code)) {
+            controlFlowBefore = true;
+        }
+    }
+    return reads === 1 ? null : `${call.name} reads the unit ${reads} times`;
 }
 
 /**
@@ -564,60 +914,246 @@ function resolveRow(
  * Unlike {@link buildExpectations}, nothing is dropped: a row whose type does
  * not resolve keeps its place, unresolved, so the rows after it are still
  * compared with what the code reads into them.
+ *
+ * A line read whole into a buffer and then read list-directed from it --
+ * the way SWAT+ reads the basin row so that an older two-value row still
+ * reads -- is one `buffered` read. Each read of the buffer is a form: the
+ * first is what the code reads the line as, and a later one counts only as
+ * the fallback it is, run when the one before it fails. Any other use of
+ * the buffer is not guessed at.
  */
 export function buildCioLayout(readcioSource: string, moduleSource: string): CioLayout {
     const shapes = parseInputTypeShapes(moduleSource);
     const variables = parseVariableTypes(moduleSource);
+    const statements = fortranStatements(readcioSource);
     const layout: CioLayout = { reads: [] };
     const seen = new Set<string>();
+    // Set once a read repeats: the read loop coming round again, as in
+    // parseReadOrder. Until then a line read again into the same buffer is
+    // another line, as SWAT+ reads line_buffer for the basin row and again
+    // for the output path.
+    let repeating = false;
+    let buffer: OpenBuffer | undefined;
+    const lastLineInto = new Map<string, OpenBuffer>();
 
-    for (const statement of unit107Reads(readcioSource)) {
-        const key = `${statement.control}|${statement.items.replace(/\s+/g, '').toLowerCase()}`;
+    const unrecognized = (read: CioRead, reason: CioGapReason, detail: string) => {
+        read.kind = 'unrecognized';
+        delete read.expectation;
+        delete read.unresolved;
+        delete read.forms;
+        delete read.exitsOnFailure;
+        read.unsupported = { reason, detail };
+    };
+
+    const closeBuffer = () => {
+        const open = buffer;
+        buffer = undefined;
+        if (!open || (open.forms.length === 0 && !open.problem)) {
+            // Read whole and used some other way: a whole-record read.
+            return;
+        }
+        const { read } = open;
+        if (open.problem) {
+            unrecognized(read, 'unrecognized_buffer_read', open.problem);
+            return;
+        }
+        const resolved = open.forms.map((form) => resolveForm(form.items, variables, shapes));
+        const odd = resolved.findIndex((form) => 'unrecognized' in form);
+        if (odd >= 0) {
+            const why = (resolved[odd] as { unrecognized: string }).unrecognized;
+            unrecognized(read, 'unrecognized_buffer_read',
+                `the read of ${open.name} at line ${open.forms[odd].line} is not counted: ${why}`);
+            return;
+        }
+        const named = resolved as Exclude<FormResolution, { unrecognized: string }>[];
+        const variable = named[0].variable;
+        const other = named.findIndex((form) => form.variable.toLowerCase() !== variable.toLowerCase());
+        if (other >= 0) {
+            unrecognized(read, 'unrecognized_buffer_read',
+                `the reads of ${open.name} fill ${variable} at line ${open.forms[0].line} ` +
+                    `and ${named[other].variable} at line ${open.forms[other].line}`);
+            return;
+        }
+        read.kind = 'buffered';
+        read.variable = variable;
+        const gap = named.find((form) => 'unresolved' in form);
+        if (gap && 'unresolved' in gap) {
+            read.unresolved = gap.unresolved;
+            return;
+        }
+        const forms = named as { variable: string; typeName: string; fields: CioField[] }[];
+        read.forms = forms.map((form, index) => ({
+            sourceLine: open.forms[index].line,
+            fields: form.fields,
+        }));
+        read.expectation = { variable, typeName: forms[0].typeName, fields: forms[0].fields };
+        const last = open.forms[open.forms.length - 1];
+        const after = statements[last.statement + 1]?.code.trim() ?? '';
+        read.exitsOnFailure = last.iostat !== null && failureTest(last.iostat, 'exit').test(after);
+    };
+
+    const readOfBuffer = (read: ReadStatement) => {
+        if (repeating) {
+            return;
+        }
+        if (!buffer || buffer.name !== read.unit) {
+            // Read after later lines of file.cio were taken: not modelled.
+            const earlier = lastLineInto.get(read.unit);
+            if (earlier && earlier.read.kind !== 'unrecognized') {
+                unrecognized(earlier.read, 'unrecognized_buffer_read',
+                    `${read.unit} is read at line ${read.line}, after the code has read further lines of file.cio`);
+            }
+            return;
+        }
+        const open = buffer;
+        if (open.problem) {
+            return;
+        }
+        const form = new RegExp(`^${escapeRegExp(open.name)},\\*(?:,iostat=(\\w+))?$`).exec(read.control);
+        const items = /^name\s*,\s*(.+)$/i.exec(read.items);
+        const at = `the read of ${open.name} at line ${read.line}`;
+        if (open.changedAt !== undefined) {
+            open.problem = `${open.name} may be changed at line ${open.changedAt}, before ${at}`;
+        } else if (!form) {
+            open.problem = `${at} is not a list-directed read of the whole buffer`;
+        } else if (!read.leading) {
+            open.problem = `${at} is inside another statement`;
+        } else if (!items) {
+            open.problem = `${at} does not read name and then the row's values`;
+        } else if (open.forms.length === 0) {
+            if (statements[read.statement].depth !== open.depth) {
+                open.problem = `${at} is inside a block that the line read at line ${open.read.sourceLine} is not`;
+            }
+        } else {
+            const previous = open.forms[open.forms.length - 1];
+            const guard = statements[read.statement - 1]?.code.trim() ?? '';
+            if (previous.iostat === null || !failureTest(previous.iostat, 'then').test(guard)) {
+                open.problem = `${at} does not run only when the read at line ${previous.line} fails`;
+            }
+        }
+        if (!open.problem && form && items) {
+            open.forms.push({
+                line: read.line,
+                statement: read.statement,
+                iostat: form[1] ?? null,
+                items: items[1],
+            });
+        }
+    };
+
+    const readOf107 = (statement: FortranStatement, read: ReadStatement) => {
+        closeBuffer();
+        const key = `${read.control}|${read.items.replace(/\s+/g, '').toLowerCase()}`;
         const first = seen.size === 0;
-        if (seen.has(key)) {
-            // The read loop coming round again, as in parseReadOrder.
-            continue;
+        const single = /^(\w+)$/.exec(read.items);
+        const wholeLine = read.leading && WHOLE_RECORD_CONTROL.test(read.control) && single;
+        if (seen.has(key) && (repeating || !wholeLine)) {
+            repeating = true;
+            return;
         }
         seen.add(key);
 
-        const single = /^(\w+)$/.exec(statement.items);
-        if (first && statement.leading && statement.control === '107,*' && single) {
-            layout.titleLine = statement.line;
-            continue;
+        if (first && read.leading && read.control === '107,*' && single) {
+            layout.titleLine = read.line;
+            return;
         }
         const position = layout.reads.length + 1;
-        const row = /^name\s*,\s*(\w+)$/i.exec(statement.items);
-        if (statement.leading && LIST_DIRECTED_CONTROL.test(statement.control) && row) {
-            layout.reads.push(resolveRow(position, row[1], statement.line, variables, shapes));
-        } else if (statement.leading && WHOLE_RECORD_CONTROL.test(statement.control) && single) {
-            layout.reads.push({
-                position,
-                kind: 'whole_record',
-                variable: single[1],
-                sourceLine: statement.line,
-            });
+        const row = /^name\s*,\s*(\w+)$/i.exec(read.items);
+        if (read.leading && LIST_DIRECTED_CONTROL.test(read.control) && row) {
+            layout.reads.push(resolveRow(position, row[1], read.line, variables, shapes));
+        } else if (wholeLine && single) {
+            const whole: CioRead = { position, kind: 'whole_record', variable: single[1], sourceLine: read.line };
+            layout.reads.push(whole);
+            buffer = {
+                read: whole,
+                name: single[1].toLowerCase(),
+                statement: read.statement,
+                depth: statement.depth,
+                forms: [],
+            };
+            lastLineInto.set(buffer.name, buffer);
         } else {
             layout.reads.push({
                 position,
                 kind: 'unrecognized',
-                variable: statement.items,
-                sourceLine: statement.line,
+                variable: read.items,
+                sourceLine: read.line,
                 unsupported: {
                     reason: 'unrecognized_read',
-                    detail: `read (${statement.control}) ${statement.items}` +
-                        (statement.leading ? '' : ' (inside another statement)'),
+                    detail: `read (${read.control}) ${read.items}` +
+                        (read.leading ? '' : ' (inside another statement)'),
                 },
             });
         }
-    }
+    };
 
-    // A whole-record read takes the next line even when it is blank, where a
-    // list-directed read skips blank lines. Before a list-directed read that
-    // difference could move every row after it, so only a trailing one is
-    // placed.
+    const callWith107 = (call: CallStatement, unitArg: number) => {
+        closeBuffer();
+        const text = `${call.name}(${call.args.join(', ')})`;
+        const key = `call|${text.replace(/\s+/g, '').toLowerCase()}`;
+        if (seen.has(key)) {
+            repeating = true;
+            return;
+        }
+        seen.add(key);
+        const position = layout.reads.length + 1;
+        const why = call.leading
+            ? notOneWholeLine(statements, call, unitArg)
+            : 'the call is inside another statement';
+        if (why === null) {
+            layout.reads.push({ position, kind: 'whole_record', variable: text, sourceLine: call.line });
+        } else {
+            layout.reads.push({
+                position,
+                kind: 'unrecognized',
+                variable: text,
+                sourceLine: call.line,
+                unsupported: {
+                    reason: 'unrecognized_call',
+                    detail: `call ${text} passes unit 107 to a routine this check does not follow: ${why}`,
+                },
+            });
+        }
+    };
+
+    statements.forEach((statement, index) => {
+        const code = statement.code.trim();
+        if (SCOPE_BOUNDARY.test(code)) {
+            closeBuffer();
+        }
+        const transfers = transfersIn(statement, index);
+        for (const transfer of transfers) {
+            if (transfer.kind === 'read') {
+                if (transfer.unit === '107') {
+                    readOf107(statement, transfer);
+                } else if (lastLineInto.has(transfer.unit)) {
+                    readOfBuffer(transfer);
+                } else if (buffer && new RegExp(`\\b${escapeRegExp(buffer.name)}\\b`, 'i').test(transfer.items)) {
+                    buffer.changedAt ??= transfer.line;
+                }
+            } else {
+                const unitArg = transfer.args.findIndex((arg) => /^(?:\w+=)?107$/.test(arg.replace(/\s+/g, '')));
+                if (unitArg >= 0) {
+                    callWith107(transfer, unitArg);
+                } else if (buffer && transfer.args.some((arg) =>
+                    new RegExp(`\\b${escapeRegExp(buffer!.name)}\\b`, 'i').test(arg))) {
+                    buffer.changedAt ??= transfer.line;
+                }
+            }
+        }
+        if (buffer && transfers.length === 0
+            && new RegExp(`^${escapeRegExp(buffer.name)}\\s*(?:\\([^)]*\\))?\\s*=(?!=)`, 'i').test(code)) {
+            buffer.changedAt ??= statement.line;
+        }
+    });
+    closeBuffer();
+
+    // A whole-record read takes the next line and its content is not judged.
+    // After the last row that is harmless; before a row, the code may use
+    // that line in a way this check does not see, so it is not placed.
     const lastRow = Math.max(
         0,
-        ...layout.reads.filter((read) => read.kind === 'list_directed').map((read) => read.position)
+        ...layout.reads.filter(isRowRead).map((read) => read.position)
     );
     for (const read of layout.reads) {
         if (read.kind === 'whole_record' && read.position < lastRow) {
@@ -629,6 +1165,12 @@ export function buildCioLayout(readcioSource: string, moduleSource: string): Cio
         }
     }
     return layout;
+}
+
+/** A read whose values the check counts: a row of `file.cio`. */
+function isRowRead(read: { kind: CioReadKind } | { read_kind: CioReadKind }): boolean {
+    const kind = 'kind' in read ? read.kind : read.read_kind;
+    return kind === 'list_directed' || kind === 'buffered';
 }
 
 export interface CioFileIdentity {
@@ -669,9 +1211,12 @@ export interface CioUnjudgedRead {
 }
 
 export interface CioPreflightCoverage {
-    /** True only when every list-directed row could be judged. */
+    /** True only when every row could be judged. */
     complete: boolean;
-    /** Rows the code reads list-directed: the ones this check judges. */
+    /**
+     * Rows whose values the code reads list-directed, from file.cio or from a
+     * buffered copy of the line: the ones this check judges.
+     */
     expected_sections: number;
     /** Of those, rows whose value count the source gives. */
     resolved_sections: number;
@@ -690,12 +1235,23 @@ export interface CioPreflightSection {
     read_kind: CioReadKind;
     source_line: number;
     type_name: string | null;
+    /**
+     * Values the read takes. For a buffered read, those of the form that took
+     * the row, or of its first form when none did.
+     */
     expected: number | null;
     /** The row's first token. Diagnostic only: the code reads it and discards it. */
     label: string | null;
     line: number | null;
     found: number | null;
     outcome: CioSectionOutcome;
+    /**
+     * For a buffered read, which of its forms took the row: 1 for the first,
+     * which is what the code reads the line as, 2 or more for a fallback (a
+     * `fallback_form` note says which). Null when no form took it, and for
+     * every other kind of read.
+     */
+    form: number | null;
 }
 
 export interface CioPreflightFinding {
@@ -774,6 +1330,93 @@ function gap(
     return { where, reason, position: null, variable: null, line: null, ...at, detail };
 }
 
+function missingFields(fields: readonly CioField[]): CioPreflightFinding['missing_fields'] {
+    return fields.map((field) => ({ name: field.name, fallback: field.fallback ?? null }));
+}
+
+/** The one line a buffered read takes, blank or not. A blank line has no label. */
+function bufferedRow(text: string, line: number): CioRow {
+    const tokens = text.trim().split(/\s+/).filter(Boolean);
+    return { label: tokens[0] ?? '', values: tokens.slice(1), line };
+}
+
+/**
+ * Judges the line a buffered read takes. Each form takes the line when it
+ * has at least as many values as the form reads, so the form that takes it
+ * is the first one, in the code's order, that it has enough values for.
+ *
+ * Returns true when no form takes it and the code then stops reading
+ * `file.cio`, so nothing after it is read at all.
+ */
+function judgeBuffered(
+    read: CioRead,
+    forms: readonly CioReadForm[],
+    row: CioRow,
+    section: CioPreflightSection,
+    findings: CioPreflightFinding[],
+    assumed: boolean
+): boolean {
+    const [first] = forms;
+    const found = row.values.length;
+    const name = row.label || null;
+    const at = (form: CioReadForm) => `readcio_read.f90:${form.sourceLine}`;
+    const details = {
+        position: read.position,
+        line: row.line,
+        label: name,
+        variable: read.variable,
+        type_name: read.expectation?.typeName ?? null,
+        expected: first.fields.length,
+        found,
+        position_assumed: assumed,
+    };
+    const taken = row.label === '' ? -1 : forms.findIndex((form) => form.fields.length <= found);
+    if (taken < 0) {
+        section.outcome = 'short';
+        const fallbacks = forms.slice(1).map((form) => form.fields.length);
+        const or = fallbacks.length > 0
+            ? ` (or ${fallbacks.join(' or ')} in the code's fallback read${fallbacks.length > 1 ? 's' : ''})`
+            : '';
+        const what = row.label === ''
+            ? `line ${row.line} is blank where the code reads ${read.variable}, which takes ${first.fields.length} value(s)${or}`
+            : `line ${row.line}: ${row.label} expects ${first.fields.length} value(s)${or}, found ${found}`;
+        const then = read.exitsOnFailure
+            ? '; every read of it fails and readcio_read stops reading file.cio there, ' +
+                'so every section after it keeps the code\'s default'
+            : '; every read the code makes of it fails';
+        findings.push(finding('short_row', 'error', what + then, {
+            ...details,
+            missing_fields: missingFields(first.fields.slice(found)),
+        }));
+        return read.exitsOnFailure === true;
+    }
+    const form = forms[taken];
+    section.form = taken + 1;
+    section.expected = form.fields.length;
+    section.outcome = found > form.fields.length ? 'surplus' : 'match';
+    if (taken > 0) {
+        const kept = first.fields.filter((field) =>
+            !form.fields.some((other) => other.name === field.name));
+        const named = kept.map((field) => field.name + (field.fallback ? ` ("${field.fallback}")` : ''));
+        findings.push(finding('fallback_form', 'note',
+            `line ${row.line}: ${row.label} has ${found} value(s), so the code reads it with its ` +
+                `fallback read (${at(form)}) rather than its first (${at(first)})` +
+                (kept.length > 0
+                    ? `; ${named.join(', ')} keep${kept.length === 1 ? 's' : ''} the code's default`
+                    : ''), {
+                ...details,
+                expected: form.fields.length,
+                missing_fields: missingFields(kept),
+            }));
+    }
+    if (found > form.fields.length) {
+        findings.push(finding('surplus_values', 'note',
+            `line ${row.line}: ${row.label} reads ${form.fields.length}, has ${found}`,
+            { ...details, expected: form.fields.length }));
+    }
+    return false;
+}
+
 /**
  * Judges `file.cio` against every read the code makes, position by position.
  *
@@ -793,7 +1436,7 @@ export function preflightCio(
     if (records.length > 0 && records[records.length - 1] === '') {
         records.pop();
     }
-    const rowReads = layout.reads.filter((read) => read.kind === 'list_directed');
+    const rowReads = layout.reads.filter(isRowRead);
     const unresolved: CioCoverageGap[] = [];
     const unsupported: CioCoverageGap[] = [];
     const unjudged: CioUnjudgedRead[] = [];
@@ -834,7 +1477,6 @@ export function preflightCio(
 
     let placed = layout.titleLine !== undefined && (empty || records[0].trim() !== '');
     let assumed = false;
-    let rowIndex = 0;
     let lastLine = 1;
     for (const read of layout.reads) {
         const expectation = read.expectation;
@@ -849,6 +1491,7 @@ export function preflightCio(
             line: null,
             found: null,
             outcome: 'not_checked',
+            form: null,
         };
         sections.push(section);
         if (!placed) {
@@ -859,19 +1502,23 @@ export function preflightCio(
             placed = false;
             continue;
         }
+        // A whole-record or buffered read takes the very next line, blank or
+        // not; a list-directed one skips blank lines to the next row.
+        const nextLine = lastLine + 1 <= records.length ? lastLine + 1 : null;
         if (read.kind === 'whole_record') {
-            const line = lastLine + 1 <= records.length ? lastLine + 1 : null;
-            if (line !== null) {
-                lastLine = line;
-                section.line = line;
-                section.label = records[line - 1].trim().split(/\s+/)[0] || null;
+            if (nextLine !== null) {
+                lastLine = nextLine;
+                section.line = nextLine;
+                section.label = records[nextLine - 1].trim().split(/\s+/)[0] || null;
             }
             section.outcome = 'unjudged';
-            unjudged.push({ position: read.position, variable: read.variable, source_line: read.sourceLine, line });
+            unjudged.push({ position: read.position, variable: read.variable, source_line: read.sourceLine, line: nextLine });
             continue;
         }
 
-        const row = rows[rowIndex];
+        const row: CioRow | undefined = read.kind === 'buffered'
+            ? nextLine === null ? undefined : bufferedRow(records[nextLine - 1], nextLine)
+            : rows.find((candidate) => candidate.line > lastLine);
         if (!row) {
             section.outcome = 'missing';
             if (!bodyMissing) {
@@ -890,23 +1537,32 @@ export function preflightCio(
             }
             continue;
         }
-        rowIndex += 1;
         lastLine = row.line;
-        section.label = row.label;
+        section.label = row.label || null;
         section.line = row.line;
         section.found = row.values.length;
+        // A buffered read takes exactly its own line, so a row it cannot count
+        // moves nothing after it.
+        const certain = read.kind === 'buffered';
 
         if ([row.label, ...row.values].some((token) => UNCOUNTED_SYNTAX.test(token))) {
             section.outcome = 'uncounted';
             unsupported.push(gap('dataset', 'uncounted_syntax',
                 `line ${row.line} uses list-directed syntax (a comma, slash, quote or repeat count) ` +
                     'that this check does not count', { position: read.position, variable: read.variable, line: row.line }));
-            assumed = true;
+            assumed ||= !certain;
             continue;
         }
         if (!expectation) {
             section.outcome = 'unresolved';
-            assumed = true;
+            assumed ||= !certain;
+            continue;
+        }
+        if (read.kind === 'buffered' && read.forms) {
+            if (judgeBuffered(read, read.forms, row, section, findings, assumed)) {
+                // The code reads nothing more, so nothing after it is placed.
+                placed = false;
+            }
             continue;
         }
 
@@ -929,10 +1585,7 @@ export function preflightCio(
             findings.push(finding('short_row', 'error',
                 `line ${row.line}: ${row.label} expects ${expected} value(s), found ${found}`, {
                     ...details,
-                    missing_fields: expectation.fields.slice(found).map((field) => ({
-                        name: field.name,
-                        fallback: field.fallback ?? null,
-                    })),
+                    missing_fields: missingFields(expectation.fields.slice(found)),
                 }));
         } else {
             section.outcome = 'surplus';
@@ -949,7 +1602,7 @@ export function preflightCio(
         }
     }
 
-    const counted = sections.filter((section) => section.read_kind === 'list_directed');
+    const counted = sections.filter(isRowRead);
     const coverage: CioPreflightCoverage = {
         complete: unresolved.length === 0 && unsupported.length === 0 && rowReads.length > 0,
         expected_sections: rowReads.length,
@@ -1058,10 +1711,15 @@ export function describeCioPreflight(result: CioPreflight): string {
         return result.error.message;
     }
     const of = (kind: CioFindingKind) => result.findings.filter((item) => item.kind === kind);
+    const buffered = new Set(result.sections
+        .filter((section) => section.read_kind === 'buffered')
+        .map((section) => section.position));
     const emptyBody = [...of('empty_file'), ...of('no_rows')][0];
-    const short = of('short_row').map(asCioFinding);
+    const short = of('short_row').filter((item) => !buffered.has(item.position ?? 0)).map(asCioFinding);
+    const shortBuffered = of('short_row').filter((item) => buffered.has(item.position ?? 0));
     const missing = of('missing_section');
     const surplus = of('surplus_values').map(asCioFinding);
+    const fallback = of('fallback_form');
     const extra = of('extra_row');
     const { coverage } = result;
     const gaps = [...coverage.unresolved, ...coverage.unsupported];
@@ -1076,6 +1734,12 @@ export function describeCioPreflight(result: CioPreflight): string {
     }
     if (short.length > 0) {
         lines.push(...shortRowLines(short));
+    }
+    if (shortBuffered.length > 0) {
+        if (lines.length > 0) {
+            lines.push('');
+        }
+        lines.push(...bufferedShortLines(shortBuffered));
     }
     if (missing.length > 0) {
         if (lines.length > 0) {
@@ -1130,6 +1794,16 @@ export function describeCioPreflight(result: CioPreflight): string {
 
     if (surplus.length > 0) {
         lines.push('', ...surplusLines(surplus));
+    }
+    if (fallback.length > 0) {
+        lines.push('');
+        lines.push(
+            `${fallback.length} row(s) are read by the code's fallback form. This is ` +
+                'harmless: the code reads the line again with fewer values, as it ' +
+                'reads a file.cio written for an older SWAT+, and the fields that ' +
+                'form does not read keep the code\'s defaults.'
+        );
+        lines.push(...fallback.map((item) => `  ${item.message}`));
     }
     if (extra.length > 0) {
         lines.push('');

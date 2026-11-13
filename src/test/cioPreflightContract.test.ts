@@ -42,6 +42,17 @@ const MODULE = [
     '      end module input_file_module',
 ].join('\n');
 
+/** The basin row read as SWAT+ dev reads it: whole, then from that copy, with a fallback. */
+const READCIO_BUFFERED = READCIO.replace('        read (107,*,iostat=eof) name, in_basin', [
+    "        read (107,'(a)',iostat=eof) line_buffer",
+    '        read (line_buffer,*,iostat=eof_basin) name, in_basin%codes_bas, &',
+    '                                              in_basin%carbon_bsn',
+    '        if (eof_basin /= 0) then',
+    '          read (line_buffer,*,iostat=eof_basin) name, in_basin%codes_bas',
+    '          if (eof_basin /= 0) exit',
+    '        end if',
+].join('\n'));
+
 const GOOD = ['file.cio: contract', 'simulation  time.sim', 'basin  codes.bsn  carbon.bsn'].join('\n');
 const SHORT = ['file.cio: contract', 'simulation  time.sim', 'basin  codes.bsn'].join('\n');
 
@@ -69,6 +80,8 @@ suite('check_dataset over MCP - the preflight contract', function () {
         write('mystery/src/readcio_read.f90', READCIO.replace('name, in_basin', 'name, in_mystery'));
         write('mystery/src/input_file_module.f90', MODULE);
         write('halfsource/src/readcio_read.f90', READCIO);
+        write('buffered/src/readcio_read.f90', READCIO_BUFFERED);
+        write('buffered/src/input_file_module.f90', MODULE);
         write('good/file.cio', GOOD);
         write('short/file.cio', SHORT);
         fs.mkdirSync(at('nocio'));
@@ -131,6 +144,24 @@ suite('check_dataset over MCP - the preflight contract', function () {
         assert.match(text, /1 row\(s\) in file\.cio are short of values/);
         assert.strictEqual(structured.status, 'fail');
         assert.deepStrictEqual(structured.findings.map((item) => [item.kind, item.variable]), [['short_row', 'in_basin']]);
+    });
+
+    test('a buffered row and its fallback form fit the advertised schema', async () => {
+        // The client validates structuredContent against the output schema, so
+        // the read kind, the form and the fallback note must all be declared.
+        const main = await check({ dataset: at('good'), source: at('buffered') });
+        assert.strictEqual(main.structured.check_version, CIO_PREFLIGHT_VERSION);
+        assert.strictEqual(main.structured.status, 'pass');
+        assert.deepStrictEqual(main.structured.sections.map((item) => [item.read_kind, item.form]),
+            [['list_directed', null], ['buffered', 1]]);
+
+        const fallback = await check({ dataset: at('short'), source: at('buffered') });
+        assert.ok(!fallback.result.isError);
+        assert.strictEqual(fallback.structured.status, 'pass');
+        assert.deepStrictEqual(fallback.structured.findings.map((item) => [item.kind, item.severity]),
+            [['fallback_form', 'note']]);
+        assert.strictEqual(fallback.structured.sections[1].form, 2);
+        assert.match(fallback.text, /read by the code's fallback form/);
     });
 
     test('an unresolved expectation is inconclusive, with its gap', async () => {

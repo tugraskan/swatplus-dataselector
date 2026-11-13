@@ -502,12 +502,270 @@ suite('file.cio preflight - labels, order and extra rows', () => {
         assert.strictEqual(present.coverage.unjudged[0].line, 6);
     });
 
-    test('a whole-line read between rows is not placed', () => {
-        const readcio = READCIO.replace('        read (107,*,iostat=eof) name, in_con',
+    test('a whole-line read between rows is that row when its buffer is then read', () => {
+        // The old rule left every whole-line read before a row unplaced, which
+        // made the check inconclusive for every deck SWAT+ dev reads: dev reads
+        // the basin row this way. A line read whole and then read from is the
+        // row; a line read whole and used some other way still is not placed.
+        const result = preflight(GOOD_CIO, READCIO_DEV);
+        assert.strictEqual(result.status, 'pass');
+        assert.deepStrictEqual(result.sections.map(s => s.read_kind),
+            ['list_directed', 'buffered', 'list_directed', 'list_directed', 'whole_record']);
+    });
+});
+
+/** Replaces text that must be there, so a fixture cannot silently stay the same. */
+function edit(text: string, from: string, to: string): string {
+    assert.ok(text.includes(from), `fixture lacks: ${from}`);
+    return text.replace(from, to);
+}
+
+/**
+ * The basin row as SWAT+ dev reads it (readcio_read.f90 since #254): the line
+ * whole into a buffer, then its values from that copy -- three, or the older
+ * two when that fails -- and the same buffer again for the output path.
+ */
+const READCIO_DEV = edit(edit(READCIO,
+    '        read (107,*,iostat=eof) name, in_basin\n',
+    [
+        "        read (107,'(a)',iostat=eof) line_buffer",
+        '        if (eof < 0) exit',
+        '        read (line_buffer,*,iostat=eof_basin) name, in_basin%codes_bas, in_basin%parms_bas,  &',
+        '                                              in_basin%carbon_bsn',
+        '        if (eof_basin /= 0) then',
+        '          read (line_buffer,*,iostat=eof_basin) name, in_basin%codes_bas, in_basin%parms_bas',
+        '          if (eof_basin /= 0) exit',
+        '        end if',
+        '',
+    ].join('\n')),
+    '     end do',
+    "        read (107,'(A)',iostat=eof) line_buffer\n     end do");
+
+/** Source line of a statement in a fixture, for asserting where a read is. */
+function lineOf(source: string, statement: string): number {
+    const index = source.split('\n').findIndex(line => line.includes(statement));
+    assert.ok(index >= 0, `fixture lacks: ${statement}`);
+    return index + 1;
+}
+
+const CLIMATE_ROW = 'climate           weather-sta.cli   pcp.cli';
+const BASIN_ROW = 'basin             codes.bsn         parameters.bsn    carbon.bsn';
+
+suite('file.cio preflight - a line read whole, then read from', () => {
+    test('the main form: the row is judged against the first read of its buffer', () => {
+        const result = preflight(GOOD_CIO, READCIO_DEV);
+        assert.strictEqual(result.status, 'pass');
+        assert.strictEqual(result.coverage.complete, true);
+        assert.strictEqual(result.coverage.expected_sections, 4);
+        assert.strictEqual(result.coverage.checked_sections, 4);
+        assert.deepStrictEqual(result.findings, []);
+        assert.deepStrictEqual(result.sections[1], {
+            position: 2,
+            variable: 'in_basin',
+            read_kind: 'buffered',
+            source_line: lineOf(READCIO_DEV, "read (107,'(a)'"),
+            type_name: 'input_basin',
+            expected: 3,
+            label: 'basin',
+            line: 3,
+            found: 3,
+            outcome: 'match',
+            form: 1,
+        });
+        // Rows read list-directed have no form.
+        assert.ok(result.sections.filter(s => s.read_kind !== 'buffered').every(s => s.form === null));
+        // The output path is read into the same buffer, after every row.
+        assert.deepStrictEqual(result.coverage.unjudged.map(u => [u.variable, u.line]), [['line_buffer', null]]);
+    });
+
+    test('the forms are the reads of the buffer, in the order the code tries them', () => {
+        const basin = buildCioLayout(READCIO_DEV, MODULE).reads[1];
+        assert.strictEqual(basin.kind, 'buffered');
+        assert.deepStrictEqual(basin.forms?.map(f => [f.sourceLine, f.fields.map(x => x.name)]), [
+            [lineOf(READCIO_DEV, 'in_basin%parms_bas,  &'), ['codes_bas', 'parms_bas', 'carbon_bsn']],
+            // Indented deeper than the first form: inside its failure test.
+            [lineOf(READCIO_DEV, '          read (line_buffer'), ['codes_bas', 'parms_bas']],
+        ]);
+        assert.strictEqual(basin.exitsOnFailure, true);
+    });
+
+    test('the fallback form: a row the code falls back on passes, and says which form took it', () => {
+        // SHORT_CIO is the two-value basin row that fails list-directed reading.
+        assert.strictEqual(preflight(SHORT_CIO).status, 'fail');
+
+        const result = preflight(SHORT_CIO, READCIO_DEV);
+        assert.strictEqual(result.status, 'pass');
+        assert.strictEqual(result.coverage.complete, true);
+        assert.deepStrictEqual(kinds(result), ['fallback_form']);
+        const [note] = result.findings;
+        assert.strictEqual(note.severity, 'note');
+        assert.strictEqual(note.variable, 'in_basin');
+        assert.strictEqual(note.expected, 2);
+        assert.strictEqual(note.found, 2);
+        assert.deepStrictEqual(note.missing_fields, [{ name: 'carbon_bsn', fallback: 'carbon.bsn' }]);
+        assert.match(note.message, /fallback read \(readcio_read\.f90:\d+\) rather than its first/);
+        assert.deepStrictEqual([result.sections[1].form, result.sections[1].expected, result.sections[1].outcome],
+            [2, 2, 'match']);
+
+        const text = describeCioPreflight(result);
+        assert.match(text, /matches what the code reads/);
+        assert.match(text, /1 row\(s\) are read by the code's fallback form\. This is harmless/);
+        assert.match(text, /carbon_bsn \("carbon\.bsn"\) keeps the code's default/);
+    });
+
+    test('a row neither form takes fails, and the code reads nothing after it', () => {
+        const result = preflight(edit(GOOD_CIO, BASIN_ROW, 'basin             codes.bsn'), READCIO_DEV);
+        assert.strictEqual(result.status, 'fail');
+        assert.deepStrictEqual(kinds(result), ['short_row']);
+        const [short] = result.findings;
+        assert.deepStrictEqual([short.position, short.variable, short.line, short.expected, short.found],
+            [2, 'in_basin', 3, 3, 1]);
+        assert.deepStrictEqual(short.missing_fields.map(f => f.name), ['parms_bas', 'carbon_bsn']);
+        assert.strictEqual(short.position_assumed, false);
+        assert.match(short.message, /\(or 2 in the code's fallback read\), found 1; .*stops reading file\.cio there/);
+        assert.deepStrictEqual(result.sections.map(s => [s.outcome, s.form]),
+            [['match', null], ['short', null], ['not_checked', null], ['not_checked', null], ['not_checked', null]]);
+
+        // The explanation is not the list-directed one: nothing was shifted.
+        const text = describeCioPreflight(result);
+        assert.match(text, /fewer values than any read the code makes of them/);
+        assert.doesNotMatch(text, /shifted by one/);
+        assert.match(text, /missing: carbon_bsn \(the code's default is "carbon\.bsn"\)/);
+    });
+
+    test('a short row cannot spill into the next line, so the rows after it stay put', () => {
+        // Without the exit, the code goes on reading: the climate row is still
+        // the next line, not the leftovers of a short basin row.
+        const readcio = edit(READCIO_DEV, '          if (eof_basin /= 0) exit\n', '');
+        const result = preflight(edit(GOOD_CIO, BASIN_ROW, 'basin             codes.bsn'), readcio);
+        assert.strictEqual(result.status, 'fail');
+        assert.deepStrictEqual(kinds(result), ['short_row']);
+        assert.doesNotMatch(result.findings[0].message, /stops reading/);
+        assert.deepStrictEqual(result.sections.slice(1, 4).map(s => [s.variable, s.line, s.outcome]), [
+            ['in_basin', 3, 'short'],
+            ['in_cli', 4, 'match'],
+            ['in_con', 5, 'match'],
+        ]);
+    });
+
+    test('a blank line where the buffer is read is that row, not skipped', () => {
+        // A list-directed read skips the blank line; the whole-line read takes it.
+        const blank = edit(GOOD_CIO, BASIN_ROW, '\n' + BASIN_ROW);
+        assert.strictEqual(preflight(blank).status, 'pass');
+
+        const result = preflight(blank, READCIO_DEV);
+        assert.strictEqual(result.status, 'fail');
+        assert.deepStrictEqual(kinds(result), ['short_row']);
+        assert.deepStrictEqual([result.findings[0].line, result.findings[0].label, result.findings[0].found], [3, null, 0]);
+        assert.match(result.findings[0].message, /^line 3 is blank where the code reads in_basin/);
+    });
+
+    test('a buffer with no read of it after it is not placed', () => {
+        // A line read whole and used some other way is nothing this check can
+        // count, so a row after it cannot be placed either.
+        const readcio = edit(READCIO, '        read (107,*,iostat=eof) name, in_con',
             "        read (107,'(A)',iostat=eof) line_buffer\n        read (107,*,iostat=eof) name, in_con");
         const result = preflight(GOOD_CIO, readcio);
         assert.strictEqual(result.status, 'inconclusive');
         assert.deepStrictEqual(result.coverage.unsupported.map(g => g.reason), ['whole_record_not_trailing']);
+        assert.strictEqual(result.sections[3].read_kind, 'unrecognized');
+    });
+
+    test('a second read of the buffer that is not a fallback is not guessed at', () => {
+        // Unguarded, the second read runs whatever the first did: not a form.
+        const readcio = edit(edit(READCIO_DEV, '        if (eof_basin /= 0) then\n', ''), '        end if\n', '');
+        const result = preflight(GOOD_CIO, readcio);
+        assert.strictEqual(result.status, 'inconclusive');
+        assert.deepStrictEqual(result.coverage.unsupported.map(g => g.reason), ['unrecognized_buffer_read']);
+        assert.match(result.coverage.unsupported[0].detail, /does not run only when the read at line \d+ fails/);
+        assert.deepStrictEqual(result.sections.map(s => s.outcome),
+            ['match', 'unrecognized', 'not_checked', 'not_checked', 'not_checked']);
+    });
+
+    test('a buffer changed before it is read is not guessed at', () => {
+        const readcio = edit(READCIO_DEV, '        if (eof < 0) exit\n        read (line_buffer',
+            '        if (eof < 0) exit\n        line_buffer = adjustl(line_buffer)\n        read (line_buffer');
+        const result = preflight(GOOD_CIO, readcio);
+        assert.strictEqual(result.status, 'inconclusive');
+        assert.deepStrictEqual(result.coverage.unsupported.map(g => g.reason), ['unrecognized_buffer_read']);
+    });
+
+    test('a read of the buffer into something the module does not declare is unresolved, not shifted', () => {
+        const readcio = edit(READCIO_DEV, 'in_basin%carbon_bsn', 'in_basin%carbon');
+        const result = preflight(edit(GOOD_CIO, CLIMATE_ROW, 'climate           weather-sta.cli'), readcio);
+        // The buffered row keeps its line, so the short row after it fails
+        // where it is, with no doubt about its position.
+        assert.strictEqual(result.status, 'fail');
+        assert.deepStrictEqual(result.coverage.unresolved.map(g => [g.reason, g.variable]), [['undeclared_field', 'in_basin']]);
+        assert.deepStrictEqual(result.findings.map(f => [f.kind, f.variable, f.position_assumed]),
+            [['short_row', 'in_cli', false]]);
+    });
+
+    test('reading the same buffer for a later line is not the loop coming round again', () => {
+        const layout = buildCioLayout(READCIO_DEV, MODULE);
+        assert.deepStrictEqual(layout.reads.map(r => [r.kind, r.variable, r.sourceLine]), [
+            ['list_directed', 'in_sim', lineOf(READCIO_DEV, 'name, in_sim')],
+            ['buffered', 'in_basin', lineOf(READCIO_DEV, "read (107,'(a)'")],
+            ['list_directed', 'in_cli', lineOf(READCIO_DEV, 'name, in_cli')],
+            ['list_directed', 'in_con', lineOf(READCIO_DEV, 'name, in_con')],
+            ['whole_record', 'line_buffer', lineOf(READCIO_DEV, "read (107,'(A)'")],
+        ]);
+        // A source that really does repeat still collapses to one pass.
+        assert.strictEqual(buildCioLayout(READCIO_DEV + READCIO_DEV, MODULE).reads.length, 5);
+    });
+});
+
+/** Dev's weather paths: each line read whole by a routine the call hands unit 107 to. */
+const READ_CIO_PATH = [
+    '      contains',
+    '      subroutine read_cio_path (iunit, label, path, ios)',
+    '      integer, intent (in) :: iunit',
+    '      character (len=*), intent (in) :: label',
+    '      character (len=*), intent (inout) :: path',
+    '      integer, intent (out) :: ios',
+    '      character (len=1024) :: line',
+    "      read (iunit,'(a)',iostat=ios) line",
+    '      if (ios /= 0) return',
+    '      path = adjustl(line)',
+    '      end subroutine read_cio_path',
+].join('\n');
+
+const READCIO_PATHS = edit(READCIO_DEV,
+    "        read (107,'(A)',iostat=eof) line_buffer\n",
+    '        call read_cio_path (107, "pcp_path", in_path_pcp%pcp, eof)\n' +
+        '        if (eof < 0) exit\n' +
+        "        read (107,'(A)',iostat=eof) line_buffer\n"
+).replace('      end subroutine readcio_read', READ_CIO_PATH + '\n      end subroutine readcio_read');
+
+suite('file.cio preflight - a line read by a call', () => {
+    const WITH_PATHS = GOOD_CIO + '\npcp_path          null\nout_path          C:/runs/out';
+
+    test('a call that only reads one whole line is placed like any whole-line read', () => {
+        const result = preflight(WITH_PATHS, READCIO_PATHS);
+        assert.strictEqual(result.status, 'pass');
+        assert.deepStrictEqual(result.findings, []);
+        assert.deepStrictEqual(result.coverage.unjudged.map(u => [u.variable, u.line]), [
+            ['read_cio_path(107, "pcp_path", in_path_pcp%pcp, eof)', 6],
+            ['line_buffer', 7],
+        ]);
+    });
+
+    test('a call the check cannot follow is not invisible', () => {
+        // Before calls were followed, this read was not seen at all and the
+        // output path read was placed on the pcp_path line.
+        const cases: [string, string][] = [
+            ['another file', READCIO_PATHS.replace(READ_CIO_PATH, '')],
+            ['more than one line', edit(READCIO_PATHS, "      if (ios /= 0) return\n",
+                "      if (ios /= 0) return\n      read (iunit,'(a)',iostat=ios) line\n")],
+            ['a list-directed read', edit(READCIO_PATHS, "read (iunit,'(a)',iostat=ios) line", 'read (iunit,*,iostat=ios) label, path')],
+            ['a read it may skip', edit(READCIO_PATHS, "      read (iunit,'(a)',iostat=ios) line",
+                "      if (len(path) == 0) return\n      read (iunit,'(a)',iostat=ios) line")],
+        ];
+        for (const [name, readcio] of cases) {
+            const result = preflight(WITH_PATHS, readcio);
+            assert.strictEqual(result.status, 'inconclusive', name);
+            assert.deepStrictEqual(result.coverage.unsupported.map(g => g.reason), ['unrecognized_call'], name);
+        }
     });
 });
 

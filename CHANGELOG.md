@@ -4,6 +4,29 @@ All notable changes to the "swatplus-vscode-dataset-selector" extension will be 
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [Unreleased]
+
+### Fixed
+- `check_dataset` can now pass a deck read by SWAT+ dev. Dev reads the `file.cio` basin
+  row whole into a buffer and then reads its values from it, with a two-value fallback
+  for older decks; the check left that line unplaced, so every dev deck came back
+  `inconclusive`. Such a row is now a `buffered` read: judged against the first read
+  of the buffer, passing with a `fallback_form` note when only the fallback takes it,
+  and failing when neither does. A buffer the code uses any other way is still not
+  placed.
+- `check_dataset` follows a call that hands unit 107 to a routine in
+  `readcio_read.f90`, as dev does for the five weather-path lines. One that reads
+  exactly one whole line is placed like any whole-line read; any other is
+  `unrecognized_call` rather than unseen, which had put the output-path read on the
+  wrong line.
+- A statement continued with `&` is read as one statement.
+
+### Changed
+- The `check_dataset` result adds `sections[].form`, the `buffered` read kind, the
+  `fallback_form` note and the gap reasons `unrecognized_buffer_read`,
+  `unrecognized_call` and `undeclared_field`. Nothing existing changes meaning, so
+  the contract stays `dataselector-cio-preflight/1`.
+
 ## [0.8.0] - 2026-11-09
 
 ### Added
