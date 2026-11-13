@@ -97,7 +97,7 @@ The text content is what the tool has always returned. Every result also has
 
 | `status` | Meaning |
 | --- | --- |
-| `pass` | Every list-directed row was judged (`coverage.complete`), and none is short or missing. |
+| `pass` | Every row was judged (`coverage.complete`), and none is short or missing. |
 | `fail` | An error is established: a short row, a missing section, an empty file, or a title with no rows. This holds even when coverage is incomplete. |
 | `inconclusive` | No error was found, but not every row could be judged. **Never a pass.** |
 | `error` | The check could not run. The result has `isError: true` and `error.code` is set. |
@@ -112,8 +112,8 @@ complete coverage.
 | `dataset` | The dataset directory, plus the `path`, `sha256` and `bytes` of the `file.cio` bytes that were judged. |
 | `source` | The source directory, plus the identity of `readcio_read.f90` and `input_file_module.f90`. |
 | `coverage` | `complete`; four counts (`expected_sections` the code reads, `resolved_sections` with a known value count, `checked_sections` compared with the file, `observed_sections` non-blank rows after the title); and the lists `unresolved`, `unsupported` and `unjudged`. |
-| `sections` | One entry per read, in read order: `position`, `variable`, `read_kind`, `source_line`, `type_name`, `expected`, `label`, `line`, `found`, `outcome`. |
-| `findings` | `short_row`, `missing_section`, `empty_file` and `no_rows` are errors. `surplus_values` and `extra_row` are notes. A short row lists its `missing_fields` with the code's default filenames. |
+| `sections` | One entry per read, in read order: `position`, `variable`, `read_kind` (`list_directed`, `buffered`, `whole_record` or `unrecognized`), `source_line`, `type_name`, `expected`, `label`, `line`, `found`, `outcome`, and `form`: for a `buffered` read, which of its forms took the row (1 is the first; `null` when none did, and for every other kind). |
+| `findings` | `short_row`, `missing_section`, `empty_file` and `no_rows` are errors. `surplus_values`, `fallback_form` and `extra_row` are notes. A short row lists its `missing_fields` with the code's default filenames; a `fallback_form` note lists the fields that keep their defaults. |
 | `error` | `null`, or `{code, message}` with code `no_dataset`, `no_source`, `dataset_file_missing`, `source_file_missing` or `read_failed`. |
 
 ### What is judged
@@ -137,6 +137,30 @@ complete coverage.
 - **Labels are diagnostic only.** The code reads each row's first token into
   `name` and discards it, so a relabelled row still passes. A swapped row is
   judged where the code reads it, not where its label suggests.
+- **A line read whole and then read from is that row** (`buffered`). SWAT+
+  dev reads the basin row this way:
+
+  ```fortran
+  read (107,'(a)',iostat=eof) line_buffer
+  read (line_buffer,*,iostat=eof_basin) name, in_basin%codes_bas, in_basin%parms_bas, in_basin%carbon_bsn
+  if (eof_basin /= 0) then
+    read (line_buffer,*,iostat=eof_basin) name, in_basin%codes_bas, in_basin%parms_bas
+    if (eof_basin /= 0) exit
+  end if
+  ```
+
+  Each read of the buffer is a form, and the row is judged against the first.
+  A row only a later form takes passes with a `fallback_form` note naming the
+  fields that keep the code's defaults; `sections[].form` says which form took
+  it. A row no form takes is a `short_row`. Unlike a list-directed row it
+  cannot spill into the next line, so it moves nothing after it; when the
+  code `exit`s on that failure, as above, nothing after it is read or judged.
+  The buffered read takes the very next line, even a blank one.
+
+  A later form counts only directly inside `if (<iostat of the one before> /= 0) then`,
+  and every form must read `name` and then fields of one variable. Any other
+  use of the buffer -- an unguarded second read, the buffer changed before it
+  is read, a read of part of it -- is `unrecognized_buffer_read`.
 
 ### What makes coverage incomplete
 
@@ -146,10 +170,13 @@ result `inconclusive`, unless an error elsewhere already makes it `fail`.
 | Where | `reason` | Why |
 | --- | --- | --- |
 | source | `undeclared_variable`, `undeclared_type` | The variable or its `type … end type` block is not found. |
+| source | `undeclared_field` | A read of a buffer names a field (`in_basin%x`) its type does not declare. |
 | source | `unsupported_declaration` | The type holds something other than one `character(len=N) :: name [= "default"]` per line. |
 | source | `no_fields` | The type declares no fields. |
 | source | `unrecognized_read` | A read of unit 107 in another form. Nothing after it is placed. |
-| source | `whole_record_not_trailing` | A `'(A)'` read before a list-directed row. |
+| source | `unrecognized_buffer_read` | A line read whole into a buffer that is then used in a way this check does not model (see above). Nothing after it is placed. |
+| source | `unrecognized_call` | A call hands unit 107 to a routine that is not in `readcio_read.f90`, or does more than read one whole line. Nothing after it is placed. |
+| source | `whole_record_not_trailing` | A `'(A)'` read, with no read of its buffer after it, before a row. |
 | source | `no_title_read`, `no_row_reads` | `readcio_read.f90` no longer has the shape this check reads. |
 | dataset | `uncounted_syntax` | A row uses a comma, slash, quote or repeat count, which list-directed input counts differently from whitespace. |
 | dataset | `blank_first_line` | It is unclear which line the title read consumes. |
@@ -158,11 +185,14 @@ A trailing `read (107,'(A)',…)` reads one whole line as text. Current SWAT+
 uses one for the output path after the weather paths. It is counted for
 position and listed under `coverage.unjudged` with the `file.cio` line it
 takes (or `null` when there is none), but its content is not judged. It cannot
-be short and cannot shift anything after it.
+be short and cannot shift anything after it. So is a call that hands unit 107
+to a routine in `readcio_read.f90` whose one use of it is a single whole-line
+read that every call reaches: SWAT+ dev reads each weather path that way, with
+`call read_cio_path (107, "pcp_path", …)`.
 
-The check models a straight sequence of `read (107, …)` statements. Reads
-behind a condition, a unit other than the literal `107`, or a statement
-continued across lines show up as `unrecognized_read`.
+The check models a straight sequence of `read (107, …)` statements and those
+calls, joining continuation lines. Reads behind a condition (`if (…) read …`)
+or of a unit other than the literal `107` show up as `unrecognized_read`.
 
 ## Preflight: `check_inputs`
 

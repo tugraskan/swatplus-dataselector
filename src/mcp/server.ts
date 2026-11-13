@@ -44,6 +44,7 @@ import {
     CIO_GAP_REASONS,
     CIO_PREFLIGHT_ERROR_CODES,
     CIO_PREFLIGHT_VERSION,
+    CIO_READ_KINDS,
     CIO_SECTION_OUTCOMES,
     CioFileIdentity,
     CioPreflight,
@@ -232,7 +233,7 @@ const cioPreflightOutput = z.strictObject({
     sections: z.array(z.strictObject({
         position: z.number().int(),
         variable: z.string(),
-        read_kind: z.enum(['list_directed', 'whole_record', 'unrecognized']),
+        read_kind: z.enum(CIO_READ_KINDS),
         source_line: z.number().int(),
         type_name: z.string().nullable(),
         expected: z.number().int().nullable(),
@@ -240,6 +241,7 @@ const cioPreflightOutput = z.strictObject({
         line: z.number().int().nullable(),
         found: z.number().int().nullable(),
         outcome: z.enum(CIO_SECTION_OUTCOMES),
+        form: z.number().int().positive().nullable(),
     })),
     findings: z.array(z.strictObject({
         kind: z.enum(CIO_FINDING_KINDS),
