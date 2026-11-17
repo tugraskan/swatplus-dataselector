@@ -36,6 +36,49 @@ export interface InputSourceFacts {
     actions: { text: string; identity: CioFileIdentity } | null;
     /** Why no layouts could be exported from this tree, when that was tried. */
     layoutsNote?: string;
+    /** Why the path given as the source is not a SWAT+ source tree. Set, the decision tables go unchecked, loudly. */
+    problem?: string;
+}
+
+/** Where the routines the checks read live in a SWAT+ tree. */
+export interface SourceTree {
+    /** The checkout root, the folder holding `src/`: what Tamandua and git are given. */
+    root: string;
+    /** The folder holding `dtbl_lum_read.f90` and `actions.f90`. */
+    src: string;
+}
+
+/** Path helpers, passed in so this stays free of the file system. */
+export interface SourcePaths {
+    isFile: (file: string) => boolean;
+    isDir: (dir: string) => boolean;
+    join: (...parts: string[]) => string;
+    dirname: (dir: string) => string;
+    basename: (dir: string) => string;
+}
+
+/**
+ * The source tree a path names: the checkout root, or its `src/` folder (a
+ * caller who has just read `src/actions.f90` will often pass that). Anything
+ * else is a problem to report, never a check quietly skipped.
+ */
+export function resolveSourceTree(dir: string, paths: SourcePaths): SourceTree | { problem: string } {
+    const reader = 'dtbl_lum_read.f90';
+    if (!paths.isDir(dir)) {
+        return { problem: `the source "${dir}" does not exist or is not a folder` };
+    }
+    if (paths.isFile(paths.join(dir, 'src', reader))) {
+        return { root: dir, src: paths.join(dir, 'src') };
+    }
+    if (paths.isFile(paths.join(dir, reader))) {
+        const parent = paths.dirname(dir);
+        const isSrc = paths.basename(dir).toLowerCase() === 'src';
+        return { root: isSrc ? parent : dir, src: dir };
+    }
+    return {
+        problem: `the source "${dir}" is not a SWAT+ source tree: neither src/${reader} nor ${reader} is in it. `
+            + 'Pass the checkout root (the folder that holds src/) or its src folder',
+    };
 }
 
 interface DataRow {
@@ -319,6 +362,28 @@ function databaseNames(path: string, expectations: InputExpectations, text: File
     return { file: ref.file, names };
 }
 
+/** What a row of an action database is, for messages: a tillage row is an implement. */
+const ENTRY_WORDS: Record<string, string> = {
+    'tillage.til': 'implement',
+    'fertilizer.frt': 'fertilizer',
+    'pesticide.pes': 'pesticide',
+    'harv.ops': 'harvest operation',
+    'irr.ops': 'irrigation operation',
+    'chem_app.ops': 'application method',
+    'graze.ops': 'grazing operation',
+    'fire.ops': 'fire operation',
+    'sweep.ops': 'sweep operation',
+};
+
+/** `line 9` or `lines 9, 12, 14`: every line, so a reader can go to each row. */
+function linesLabel(lines: number[], limit = 40): string {
+    if (lines.length === 1) {
+        return `line ${lines[0]}`;
+    }
+    const shown = lines.slice(0, limit).join(', ');
+    return `lines ${shown}${lines.length > limit ? ` and ${lines.length - limit} more` : ''}`;
+}
+
 function decisionTableCheck(
     tablesText: string | null,
     tables: DecisionTable[] | null,
@@ -338,6 +403,9 @@ function decisionTableCheck(
         return unrun(name, 'skipped', 'lum.dtl does not have the shape dtbl_lum_read.f90 reads');
     }
     const source = context.source;
+    if (source?.problem) {
+        return unrun(name, 'skipped', source.problem);
+    }
     if (!source?.dtblLumRead || !source.actions) {
         return unrun(name, 'skipped', source
             ? `${source.dir} has no src/dtbl_lum_read.f90 or src/actions.f90`
@@ -375,13 +443,16 @@ function decisionTableCheck(
         const run = facts.run.get(action);
         const { names, running, where } = describe(rows);
         const first = rows[0].action.line;
+        const lines = rows.map(row => row.action.line);
+        const at = linesLabel(lines);
         if (!run) {
             issues.push({
                 kind: 'action_never_run',
                 severity: severity(names, 'warning'),
                 file: 'lum.dtl',
                 line: first,
-                message: `lum.dtl line ${first}: no branch of actions.f90 runs the action "${action}", so it never `
+                lines,
+                message: `lum.dtl ${at}: no branch of actions.f90 runs the action "${action}", so it never `
                     + `happens, with no message (${where}).`,
                 action,
                 tables: names,
@@ -392,16 +463,24 @@ function decisionTableCheck(
         const mapped = facts.mapped.get(action);
         if (!mapped && run.readsLookup) {
             const known = run.labels.filter(label => facts.mapped.has(label));
+            // The database the spelling dtbl_lum_read.f90 does map looks up, to name what goes unmapped.
+            const lookup = known.flatMap(label => facts.mapped.get(label) ?? [])
+                .find(item => item.target === 'act_typ');
+            const database = lookup ? context.expectations.paths.get(lookup.path.toLowerCase())?.file : undefined;
+            const what = database ? `${ENTRY_WORDS[database.toLowerCase()] ?? 'entry'} in ${database}` : 'database entry';
             issues.push({
                 kind: 'action_never_mapped',
                 severity: severity(names, 'error'),
                 file: 'lum.dtl',
                 line: first,
-                message: `lum.dtl line ${first}: actions.f90:${run.line} runs the action "${action}", but `
-                    + 'dtbl_lum_read.f90 has no case for that spelling, so its lookup stays 0 and the action uses '
-                    + `entry 0 of its database, not the row the file names (${where}).`
-                    + (known.length ? ` The spelling dtbl_lum_read.f90 maps is "${known.join('", "')}".` : ''),
+                lines,
+                message: `lum.dtl ${at}: action type "${action}" has no case in dtbl_lum_read.f90`
+                    + (known.length ? ` (it maps only "${known.join('", "')}")` : '')
+                    + `, so the ${what} each row names is never mapped: its lookup stays 0. `
+                    + `actions.f90:${run.line} still runs the action, with entry 0 instead of the row the file names `
+                    + `(${where}).`,
                 action,
+                ...(database ? { database } : {}),
                 tables: names,
                 tables_in_use: running,
             });
@@ -429,6 +508,7 @@ function decisionTableCheck(
                 }
                 const about = describe(valueRows);
                 const line = valueRows[0].action.line;
+                const valueLines = valueRows.map(row => row.action.line);
                 // Without its row act_typ leaves the action nothing to do; act_app is an extra it goes on without.
                 const required = lookup.target === 'act_typ';
                 issues.push({
@@ -436,7 +516,8 @@ function decisionTableCheck(
                     severity: severity(about.names, required ? 'error' : 'warning'),
                     file: 'lum.dtl',
                     line,
-                    message: `lum.dtl line ${line}: the ${action} ${lookup.field} "${value}" is not in `
+                    lines: valueLines,
+                    message: `lum.dtl ${linesLabel(valueLines)}: the ${action} ${lookup.field} "${value}" is not in `
                         + (found.names ? found.file : `${found.file}, which the dataset does not have`)
                         + (required
                             ? ', so the action uses entry 0 of that database, not the row the file names'

@@ -54,7 +54,7 @@ import {
     describeCioPreflight,
     preflightCio,
 } from './cioCheck';
-import { InputSourceFacts } from './inputCrossChecks';
+import { InputSourceFacts, resolveSourceTree } from './inputCrossChecks';
 import { CommandSpec, pythonCandidates, tamanduaCommands } from '../schemaSourceCore';
 import {
     INPUT_CHECK_NAMES,
@@ -70,6 +70,8 @@ import {
     InputExpectations,
     InputPreflight,
     describeInputPreflight,
+    compactInputPreflight,
+    InputDetail,
     expectationsFrom,
     inputPreflightError,
     preflightInputs,
@@ -288,7 +290,13 @@ const inputPreflightOutput = z.strictObject({
         commit: z.string().nullable(),
         dtbl_lum_read: cioFileIdentity.nullable(),
         actions: cioFileIdentity.nullable(),
+        problem: z.string().nullable(),
     }).nullable(),
+    detail: z.enum(['summary', 'full']),
+    omitted: z.strictObject({
+        matching_files: z.number().int().nonnegative(),
+        findings: z.number().int().nonnegative(),
+    }),
     coverage: z.strictObject({
         complete: z.boolean(),
         named_files: z.number().int().nonnegative(),
@@ -373,9 +381,10 @@ const inputPreflightOutput = z.strictObject({
     })),
 });
 
-function inputPreflightResult(result: InputPreflight) {
+function inputPreflightResult(full: InputPreflight, detail: InputDetail = 'full') {
+    const result = detail === 'summary' ? compactInputPreflight(full) : full;
     return {
-        content: [{ type: 'text' as const, text: describeInputPreflight(result) }],
+        content: [{ type: 'text' as const, text: describeInputPreflight(result, detail) }],
         structuredContent: { ...result },
         ...(result.status === 'error' ? { isError: true } : {}),
     };
@@ -394,8 +403,18 @@ function sourceCommit(sourceDir: string): string | null {
 
 /** What the decision-table check needs of a source tree, with the bytes read and their commit. */
 function readInputSource(sourceDir: string): InputSourceFacts {
+    const tree = resolveSourceTree(sourceDir, {
+        isFile: file => { try { return fs.statSync(file).isFile(); } catch { return false; } },
+        isDir: dir => { try { return fs.statSync(dir).isDirectory(); } catch { return false; } },
+        join: path.join,
+        dirname: path.dirname,
+        basename: path.basename,
+    });
+    if ('problem' in tree) {
+        return { dir: sourceDir, commit: null, dtblLumRead: null, actions: null, problem: tree.problem };
+    }
     const read = (name: string) => {
-        const file = path.join(sourceDir, 'src', name);
+        const file = path.join(tree.src, name);
         try {
             const bytes = fs.readFileSync(file);
             return { text: bytes.toString('utf-8'), identity: fileIdentity(file, bytes) };
@@ -404,8 +423,8 @@ function readInputSource(sourceDir: string): InputSourceFacts {
         }
     };
     return {
-        dir: sourceDir,
-        commit: sourceCommit(sourceDir),
+        dir: tree.root,
+        commit: sourceCommit(tree.root),
         dtblLumRead: read('dtbl_lum_read.f90'),
         actions: read('actions.f90'),
     };
@@ -785,10 +804,14 @@ function main(): void {
                     + 'from `source`, then its shipped schema'),
             source: z.string().optional()
                 .describe('SWAT+ source tree that will read the dataset, for lum.dtl action names '
-                    + 'and, with no layouts given, the layouts; defaults to the server\'s --source'),
+                    + 'and, with no layouts given, the layouts; the checkout root or its src folder; '
+                    + 'defaults to the server\'s --source'),
+            detail: z.enum(['summary', 'full']).optional()
+                .describe('summary (default): errors first, repeated warnings and notes grouped with '
+                    + 'counts, and only the files that did not match; full: every issue, file and finding'),
         },
         outputSchema: inputPreflightOutput,
-    }, async ({ dataset, layouts, source }) => {
+    }, async ({ dataset, layouts, source, detail }) => {
         const datasetDir = dataset ?? state.datasetDir;
         if (!datasetDir) {
             return inputPreflightResult(inputPreflightError('no_dataset',
@@ -812,7 +835,8 @@ function main(): void {
         const sourceDir = source ?? args.source;
         const sourceFacts = sourceDir ? readInputSource(sourceDir) : undefined;
         // The layouts of the version that will run; the shipped schema is one release, named in the result.
-        const exported = !layouts && !args.layouts && sourceDir ? exportSourceLayouts(sourceDir) : undefined;
+        const exported = !layouts && !args.layouts && sourceFacts && !sourceFacts.problem
+            ? exportSourceLayouts(sourceFacts.dir) : undefined;
         if (sourceFacts && exported && 'why' in exported) {
             sourceFacts.layoutsNote = exported.why;
         }
@@ -832,7 +856,7 @@ function main(): void {
                 expectationFile: { path: path.resolve(expectationPath), sha256: loaded.sha256 },
                 source: sourceFacts,
             },
-        ));
+        ), detail ?? 'summary');
     });
 
     server.registerTool('run_dataset', {
