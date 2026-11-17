@@ -4,6 +4,19 @@ All notable changes to the "swatplus-vscode-dataset-selector" extension will be 
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [Unreleased]
+
+### Changed
+- `check_inputs` takes `source` as the SWAT+ checkout root or its `src` folder. A path
+  that is neither is no longer a quiet "skipped": it is a `source_unusable` issue and the
+  first line after the summary says the decision tables were not checked.
+- `check_inputs` names every `lum.dtl` line of an action type the source's
+  `dtbl_lum_read.f90` has no case for (such as `tillage` on SWAT+ main, which maps
+  only `till`), and says what goes unmapped (the tillage.til implement).
+- `check_inputs` answers with a summary by default: errors first, a warning kind that
+  repeats on one line with a count, notes counted by kind, and only the files that did
+  not match. `detail: "full"` gives the old listing.
+
 ## [0.8.1] - 2026-11-13
 
 ### Fixed

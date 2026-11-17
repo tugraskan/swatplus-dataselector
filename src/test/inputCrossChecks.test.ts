@@ -5,6 +5,8 @@ import {
     DatasetFile,
     InputIssue,
     InputPreflight,
+    compactInputPreflight,
+    describeInputPreflight,
     expectationsFromLayouts,
     expectationsFromSchema,
     judgeFile,
@@ -17,6 +19,7 @@ import {
     parseDecisionTables,
     parsePlantCommunities,
     parseSchedules,
+    resolveSourceTree,
     scanWeather,
     simPeriod,
 } from '../mcp/inputCrossChecks';
@@ -418,9 +421,29 @@ suite('check_inputs - decision tables', () => {
             [issue.severity, issue.action, issue.line, issue.tables, issue.tables_in_use],
             ['error', 'tillage', 9, ['plow'], ['plow']],
         );
-        assert.match(issue.message, /actions\.f90:\d+ runs the action "tillage", but dtbl_lum_read\.f90 has no case/);
-        assert.match(issue.message, /The spelling dtbl_lum_read\.f90 maps is "till"/);
+        assert.match(issue.message, /action type "tillage" has no case in dtbl_lum_read\.f90 \(it maps only "till"\)/);
+        assert.match(issue.message, /the implement in tillage\.til each row names is never mapped/);
+        assert.match(issue.message, /actions\.f90:\d+ still runs the action/);
+        assert.strictEqual(issue.database, 'tillage.til');
         assert.strictEqual(result.status, 'fail');
+    });
+
+    test('every row of an unmapped action is named by its line', () => {
+        const result = check(files(dtl(
+            { name: 'plow', actions: [row('tillage', 'fldcult'), row('till', 'fldcult'), row('tillage', 'mldboard')] },
+            { name: 'plow2', actions: [row('tillage', 'fldcult')] },
+        )), cio, source);
+        const [issue] = issuesOf(result, 'action_never_mapped');
+        assert.deepStrictEqual(issue.lines, [9, 11, 18]);
+        assert.match(issue.message, /^lum\.dtl lines 9, 11, 18: /);
+    });
+
+    test('the labels come from the reader given: a reader that maps both spellings reports nothing', () => {
+        const devReader = READER.replace('case ("till")', 'case ("till", "tillage")');
+        const result = check(files(dtl({ name: 'plow', actions: [row('tillage', 'fldcult')] })), cio,
+            sourceFacts(ACTIONS, devReader));
+        assert.deepStrictEqual(result.issues, []);
+        assert.strictEqual(stateOf(result, 'decision_tables')!.state, 'ran');
     });
 
     test('the mapped spelling of a check passes', () => {
@@ -497,6 +520,111 @@ suite('check_inputs - decision tables', () => {
     test('a source with no such select says so', () => {
         const result = check(files(dtl({ name: 'plow', actions: [row('till', 'fldcult')] })), cio, sourceFacts('x', 'y'));
         assert.strictEqual(stateOf(result, 'decision_tables')!.state, 'skipped');
+    });
+
+    test('a source that is not a SWAT+ tree is an issue that leads the text, not a quiet skip', () => {
+        const unusable: InputSourceFacts = {
+            dir: '/somewhere', commit: null, dtblLumRead: null, actions: null,
+            problem: 'the source "/somewhere" is not a SWAT+ source tree',
+        };
+        const result = check(files(dtl({ name: 'plow', actions: [row('tillage', 'fldcult')] })), cio, unusable);
+        assert.strictEqual(stateOf(result, 'decision_tables')!.state, 'skipped');
+        assert.match(stateOf(result, 'decision_tables')!.reason!, /not a SWAT\+ source tree/);
+        assert.deepStrictEqual(issuesOf(result, 'source_unusable').map(item => item.severity), ['warning']);
+        assert.strictEqual(result.source?.problem, unusable.problem);
+        assert.strictEqual(result.status, 'inconclusive');
+        const lines = describeInputPreflight(result, 'summary').split('\n');
+        assert.match(lines[1], /^!! SOURCE NOT USABLE: .*lum\.dtl were NOT checked/);
+    });
+});
+
+suite('check_inputs - where the source tree is', () => {
+    const tree = (files: string[]) => ({
+        isFile: (file: string) => files.includes(file),
+        isDir: (dir: string) => files.some(file => file.startsWith(`${dir}/`)),
+        join: (...parts: string[]) => path.posix.join(...parts),
+        dirname: path.posix.dirname,
+        basename: path.posix.basename,
+    });
+    const checkout = tree(['/sw/src/dtbl_lum_read.f90', '/sw/src/actions.f90', '/data/file.cio']);
+
+    test('the checkout root is used as it is', () => {
+        assert.deepStrictEqual(resolveSourceTree('/sw', checkout), { root: '/sw', src: '/sw/src' });
+    });
+
+    test('its src folder stands for the same checkout', () => {
+        assert.deepStrictEqual(resolveSourceTree('/sw/src', checkout), { root: '/sw', src: '/sw/src' });
+    });
+
+    test('a flat folder of routines is its own root', () => {
+        const flat = tree(['/flat/dtbl_lum_read.f90', '/flat/actions.f90']);
+        assert.deepStrictEqual(resolveSourceTree('/flat', flat), { root: '/flat', src: '/flat' });
+    });
+
+    test('anything else is a problem that says what to pass', () => {
+        const other = resolveSourceTree('/data', checkout);
+        assert.ok('problem' in other);
+        assert.match(other.problem, /not a SWAT\+ source tree.*Pass the checkout root/);
+        const missing = resolveSourceTree('/nowhere', checkout);
+        assert.ok('problem' in missing);
+        assert.match(missing.problem, /does not exist/);
+    });
+});
+
+suite('check_inputs - the summary view', () => {
+    const many = (count: number) => Array.from({ length: count }, (_, index) => ({
+        kind: 'weather_ends_early' as const, severity: 'warning' as const, file: `w${index}.cli`, line: null,
+        message: `w${index}.cli ends early`,
+    }));
+
+    function withIssues(issues: InputIssue[]): InputPreflight {
+        const result = check({ 'parameters.bsn': ['t', 'h', '1 2 3 4 5'].join('\n') }, 'file.cio: t\nbasin parameters.bsn');
+        return { ...result, status: 'inconclusive', issues };
+    }
+
+    test('errors lead, a lone warning stands alone, repeated warnings are one line with a count', () => {
+        const text = describeInputPreflight(compactInputPreflight(withIssues([
+            { kind: 'action_never_mapped', severity: 'error', file: 'lum.dtl', line: 9, lines: [9, 12], message: 'tillage unmapped' },
+            { kind: 'rain_days_missing', severity: 'warning', file: 'pcp.cli', line: null, message: 'rain missing' },
+            ...many(5),
+        ])), 'summary');
+        const lines = text.split('\n');
+        assert.deepStrictEqual(lines.slice(1, 6), [
+            'Errors (1):',
+            '- tillage unmapped',
+            'Warnings (6):',
+            '- rain missing',
+            '- 5x weather_ends_early: w0.cli; w1.cli; w2.cli; w3.cli; w4.cli. First: w0.cli ends early',
+        ]);
+        assert.match(text, /Pass detail: "full"/);
+    });
+
+    test('notes are counted by kind, with where each is', () => {
+        const text = describeInputPreflight(compactInputPreflight(withIssues([
+            { kind: 'action_never_run', severity: 'note', file: 'lum.dtl', line: 142, lines: [142, 143], message: 'x' },
+            { kind: 'action_never_run', severity: 'note', file: 'lum.dtl', line: 277, message: 'y' },
+            { kind: 'bad_value', severity: 'note', file: 'plants.plt', line: 3, rows: 265, lines: [3, 4, 5], message: 'z' },
+        ])), 'summary');
+        assert.match(text, /^Notes \(3\), by kind:$/m);
+        assert.match(text, /^- 2x action_never_run: lum\.dtl lines 142, 143; lum\.dtl line 277\.$/m);
+        assert.match(text, /^- 1x bad_value: plants\.plt 265 rows from line 3\.$/m);
+        assert.doesNotMatch(text, /^- [xyz]$/m);
+    });
+
+    test('full lists every issue on its own line', () => {
+        const text = describeInputPreflight(withIssues(many(3)), 'full');
+        assert.match(text, /- w0\.cli ends early\n- w1\.cli ends early\n- w2\.cli ends early/);
+        assert.doesNotMatch(text, /3x/);
+    });
+
+    test('the summary drops matching files and says how many, keeping the verdict', () => {
+        const result = check({ 'parameters.bsn': ['t', 'h', '1 2 3 4 5'].join('\n') }, 'file.cio: t\nbasin parameters.bsn\nsim time.sim');
+        const compact = compactInputPreflight(result);
+        assert.deepStrictEqual(result.files.map(item => item.outcome), ['match', 'unchecked']);
+        assert.deepStrictEqual(compact.files.map(item => item.file), ['time.sim']);
+        assert.deepStrictEqual(compact.omitted, { matching_files: 1, findings: 0 });
+        assert.strictEqual(compact.status, result.status);
+        assert.strictEqual(compact.detail, 'summary');
     });
 });
 
@@ -725,7 +853,7 @@ suite('check_inputs - layouts for the version that will run', () => {
         const result = check(files, cio, sourceFacts('', ''));
         assert.deepStrictEqual(result.source, {
             dir: '/swatplus', commit: 'abc123def4567890',
-            dtbl_lum_read: identity('dtbl_lum_read.f90'), actions: identity('actions.f90'),
+            dtbl_lum_read: identity('dtbl_lum_read.f90'), actions: identity('actions.f90'), problem: null,
         });
         assert.strictEqual(check(files, cio).source, null);
     });

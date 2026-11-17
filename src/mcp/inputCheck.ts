@@ -80,10 +80,17 @@ export const INPUT_ISSUE_KINDS = [
     'crop_never_planted',
     // The layouts judged are not those of the source that will run.
     'layouts_not_for_source',
+    // The path given as the SWAT+ source is not a source tree: the checks that need it did not run.
+    'source_unusable',
 ] as const;
 export type InputIssueKind = typeof INPUT_ISSUE_KINDS[number];
 
 /** `error` makes the verdict `fail`; `warning` and `note` never do. */
+export type InputDetail = 'summary' | 'full';
+
+/** Short-row findings a summary lists. */
+export const SUMMARY_FINDINGS = 10;
+
 export const INPUT_ISSUE_SEVERITIES = ['error', 'warning', 'note'] as const;
 export type InputIssueSeverity = typeof INPUT_ISSUE_SEVERITIES[number];
 
@@ -280,7 +287,13 @@ export interface InputPreflight {
         commit: string | null;
         dtbl_lum_read: CioFileIdentity | null;
         actions: CioFileIdentity | null;
+        /** Why the path given is not a SWAT+ source tree. */
+        problem: string | null;
     } | null;
+    /** `summary` lists only the files that did not match, and caps the findings; `full` lists all. */
+    detail: InputDetail;
+    /** What `summary` left out; zeros in `full`. */
+    omitted: { matching_files: number; findings: number };
     coverage: InputPreflightCoverage;
     checks: InputCheckRun[];
     files: InputFileVerdict[];
@@ -878,6 +891,16 @@ export function preflightInputs(
     if (mismatch) {
         issues.push(mismatch);
     }
+    if (context.source?.problem) {
+        issues.push({
+            kind: 'source_unusable',
+            severity: 'warning',
+            file: context.source.dir,
+            line: null,
+            message: `SOURCE NOT USABLE: ${context.source.problem}. The decision tables in lum.dtl were NOT checked `
+                + 'against the actions this SWAT+ reads and runs.',
+        });
+    }
     const order = INPUT_ISSUE_SEVERITIES;
     issues.sort((left, right) => order.indexOf(left.severity) - order.indexOf(right.severity));
     const checked = files.filter(item => item.outcome !== 'unchecked');
@@ -904,7 +927,10 @@ export function preflightInputs(
             commit: source.commit,
             dtbl_lum_read: source.dtblLumRead?.identity ?? null,
             actions: source.actions?.identity ?? null,
+            problem: source.problem ?? null,
         } : null,
+        detail: 'full',
+        omitted: { matching_files: 0, findings: 0 },
         coverage: {
             complete,
             named_files: files.length,
@@ -977,6 +1003,8 @@ export function inputPreflightError(
         dataset: { dir: datasetDir, file_cio: fileCio },
         expectations: null,
         source: null,
+        detail: 'full',
+        omitted: { matching_files: 0, findings: 0 },
         coverage: {
             complete: false,
             named_files: 0,
@@ -992,30 +1020,120 @@ export function inputPreflightError(
     };
 }
 
-/** The text form: the verdict, each short row and issue, and what was not checked. */
-export function describeInputPreflight(result: InputPreflight): string {
+/**
+ * The result with only what an agent acts on: files that did not match, and
+ * the first short-row findings. The verdict, coverage and issues are the full
+ * result's; `omitted` counts what was left out.
+ */
+export function compactInputPreflight(result: InputPreflight): InputPreflight {
+    if (result.status === 'error') {
+        return { ...result, detail: 'summary' };
+    }
+    const files = result.files.filter(item => item.outcome !== 'match');
+    const findings = result.findings.slice(0, SUMMARY_FINDINGS);
+    return {
+        ...result,
+        detail: 'summary',
+        files,
+        findings,
+        omitted: {
+            matching_files: result.files.length - files.length,
+            findings: result.findings.length - findings.length,
+        },
+    };
+}
+
+/** Where an issue is, short: `lum.dtl lines 221, 222`, `pcp.cli`. */
+function issuePlace(item: InputIssue): string {
+    const lines = item.lines?.length ? item.lines : item.line !== null ? [item.line] : [];
+    if (lines.length === 0) {
+        return item.file;
+    }
+    // Rows that fail the same way keep only their first few lines.
+    if (item.rows !== undefined && item.rows > lines.length) {
+        return `${item.file} ${item.rows} rows from line ${lines[0]}`;
+    }
+    const shown = lines.slice(0, 8).join(', ') + (lines.length > 8 ? ` and ${lines.length - 8} more` : '');
+    return `${item.file} line${lines.length > 1 ? 's' : ''} ${shown}`;
+}
+
+/** One line per issue, or per kind where the kind repeats. */
+function groupedIssues(issues: InputIssue[], severity: InputIssueSeverity, groupFrom: number): string[] {
+    const kinds = new Map<InputIssueKind, InputIssue[]>();
+    for (const item of issues.filter(issue => issue.severity === severity)) {
+        kinds.set(item.kind, [...(kinds.get(item.kind) ?? []), item]);
+    }
+    const single: string[] = [];
+    const grouped: string[] = [];
+    for (const [kind, items] of kinds) {
+        if (items.length < groupFrom) {
+            single.push(...items.map(item => `- ${item.message}`));
+        } else {
+            grouped.push(`- ${items.length}x ${kind}: ${items.map(issuePlace).join('; ')}. `
+                + (severity === 'note' ? '' : `First: ${items[0].message}`));
+        }
+    }
+    return [...single, ...grouped].map(line => line.trimEnd());
+}
+
+/**
+ * The text form. `summary`: what stops a pass first -- a source that could not
+ * be used, errors, short rows -- then warnings, repeated ones grouped, and notes
+ * as counts. `full`: every short row and issue on its own line.
+ */
+export function describeInputPreflight(result: InputPreflight, detail: InputDetail = 'full'): string {
     if (result.status === 'error') {
         return result.summary;
     }
     const lines = [result.summary];
+    // A check that did not run changes what every other line means, so it leads.
+    for (const item of result.issues.filter(issue => issue.kind === 'source_unusable')) {
+        lines.push(`!! ${item.message}`);
+    }
+    const unrun = result.checks.filter(item => item.state === 'skipped' || item.state === 'partial');
+    const unusable = result.issues.some(issue => issue.kind === 'source_unusable');
+    for (const item of unrun) {
+        if (!(unusable && item.name === 'decision_tables')) {
+            lines.push(`!! ${item.name} ${item.state === 'skipped' ? 'NOT RUN' : 'ran only in part'}: ${item.reason}`);
+        }
+    }
     if (result.status === 'pass') {
         lines.push('Every file named on file.cio was checked: no data line is short of the values SWAT+ reads.');
     }
-    for (const item of result.findings) {
-        lines.push(`- ${item.message}`);
+    const issues = result.issues.filter(issue => issue.kind !== 'source_unusable');
+    const count = (severity: InputIssueSeverity) => issues.filter(item => item.severity === severity).length;
+    if (count('error')) {
+        lines.push(`Errors (${count('error')}):`);
+        lines.push(...issues.filter(item => item.severity === 'error').map(item => `- ${item.message}`));
     }
-    const listed = result.findings.length;
-    const total = result.files.reduce((sum, item) => sum + item.short_rows, 0);
-    if (total > listed) {
-        lines.push(`- ... and ${total - listed} more short row(s)`);
-    }
-    for (const item of result.issues) {
-        lines.push(`- ${item.severity}: ${item.message}`);
-    }
-    for (const item of result.checks) {
-        if (item.state === 'skipped' || item.state === 'partial') {
-            lines.push(`- ${item.name} ${item.state === 'skipped' ? 'did not run' : 'ran in part'}: ${item.reason}`);
+    const shortRows = result.files.reduce((sum, item) => sum + item.short_rows, 0);
+    if (shortRows) {
+        lines.push(`Short rows (${shortRows}):`);
+        lines.push(...result.findings.map(item => `- ${item.message}`));
+        if (shortRows > result.findings.length) {
+            lines.push(`- ... and ${shortRows - result.findings.length} more short row(s)`);
         }
+    }
+    if (detail === 'full') {
+        for (const severity of ['warning', 'note'] as const) {
+            if (count(severity)) {
+                lines.push(`${severity === 'warning' ? 'Warnings' : 'Notes'} (${count(severity)}):`);
+                lines.push(...issues.filter(item => item.severity === severity).map(item => `- ${item.message}`));
+            }
+        }
+    } else {
+        if (count('warning')) {
+            lines.push(`Warnings (${count('warning')}):`);
+            lines.push(...groupedIssues(issues, 'warning', 2));
+        }
+        if (count('note')) {
+            lines.push(`Notes (${count('note')}), by kind:`);
+            lines.push(...groupedIssues(issues, 'note', 1));
+        }
+        const { matching_files: matching, findings } = result.omitted;
+        lines.push(`Summary view: notes shown by kind${matching ? `, ${matching} matching file(s)` : ''}`
+            + `${findings ? `, ${findings} short-row finding(s)` : ''} left out. `
+            + 'Pass detail: "full" for every issue, file and finding.');
     }
     if (result.status !== 'pass') {
         lines.push('A pass needs every named file checked, every data line counted and every check that applies run; '

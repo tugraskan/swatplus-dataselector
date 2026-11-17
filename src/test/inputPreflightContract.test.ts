@@ -101,7 +101,7 @@ suite('check_inputs over MCP - the input preflight contract', function () {
         fs.writeFileSync(at(relative), text);
     }
 
-    async function check(args: { dataset?: string; layouts?: string; source?: string }) {
+    async function check(args: { dataset?: string; layouts?: string; source?: string; detail?: 'summary' | 'full' }) {
         const result = await client.callTool({ name: 'check_inputs', arguments: args }) as CallToolResult;
         const text = result.content.map((block) => (block.type === 'text' ? block.text : '')).join('');
         return { result, text, structured: result.structuredContent as unknown as InputPreflight };
@@ -142,8 +142,8 @@ suite('check_inputs over MCP - the input preflight contract', function () {
         const { tools } = await client.listTools();
         const schema = tools.find((tool) => tool.name === 'check_inputs')?.outputSchema;
         assert.ok(schema, 'check_inputs has no outputSchema');
-        for (const field of ['check_version', 'status', 'error', 'dataset', 'expectations', 'source', 'coverage',
-            'checks', 'files', 'findings', 'issues']) {
+        for (const field of ['check_version', 'status', 'error', 'dataset', 'expectations', 'source', 'detail',
+            'omitted', 'coverage', 'checks', 'files', 'findings', 'issues']) {
             assert.ok(schema.required?.includes(field), field);
         }
         assert.strictEqual((schema as { additionalProperties?: unknown }).additionalProperties, false);
@@ -199,8 +199,44 @@ suite('check_inputs over MCP - the input preflight contract', function () {
             sha256: createHash('sha256').update(fixture.source['src/actions.f90']).digest('hex'),
             bytes: Buffer.byteLength(fixture.source['src/actions.f90']),
         });
-        assert.match(text, /error: parameters\.bsn line 3 stops at value 3 \(c\)/);
+        assert.match(text, /Errors \(\d+\):\n(- .*\n)*- parameters\.bsn line 3 stops at value 3 \(c\)/);
     });
+
+    test('a source given as its src folder is the same source as its root', async () => {
+        const args = { dataset: at('silent', 'data'), layouts: at('silent', 'layouts.json') };
+        const root = await check({ ...args, source: at('silent', 'source') });
+        const src = await check({ ...args, source: at('silent', 'source', 'src') });
+        assert.strictEqual(src.structured.checks.find(item => item.name === 'decision_tables')?.state, 'ran');
+        assert.strictEqual(src.structured.source?.dir, root.structured.source?.dir);
+        assert.deepStrictEqual(src.structured.issues, root.structured.issues);
+        assert.strictEqual(src.text, root.text);
+    });
+
+    test('a source that is not a SWAT+ tree is said loudly, first, and rules out a pass', async () => {
+        const { structured, text } = await check({
+            dataset: at('silent', 'data'), layouts: at('silent', 'layouts.json'), source: at('silent', 'data'),
+        });
+        assert.strictEqual(structured.checks.find(item => item.name === 'decision_tables')?.state, 'skipped');
+        assert.match(structured.source?.problem ?? '', /is not a SWAT\+ source tree/);
+        const [issue] = structured.issues.filter(item => item.kind === 'source_unusable');
+        assert.strictEqual(issue.severity, 'warning');
+        assert.match(text.split('\n')[1], /^!! SOURCE NOT USABLE: .*Pass the checkout root/);
+        assert.notStrictEqual(structured.status, 'pass');
+    });
+
+    test('the default is a summary; detail full lists every file', async () => {
+        const args = { dataset: at('silent', 'data'), layouts: at('silent', 'layouts.json'), source: at('silent', 'source') };
+        const summary = await check(args);
+        const full = await check({ ...args, detail: 'full' });
+        assert.strictEqual(summary.structured.detail, 'summary');
+        assert.strictEqual(full.structured.detail, 'full');
+        assert.ok(summary.structured.files.every(item => item.outcome !== 'match'));
+        assert.strictEqual(summary.structured.files.length + summary.structured.omitted.matching_files,
+            full.structured.files.length);
+        assert.deepStrictEqual(summary.structured.issues, full.structured.issues);
+        assert.strictEqual(summary.structured.status, full.structured.status);
+        assert.match(summary.text, /Pass detail: "full"/);
+        assert.doesNotMatch(full.text, /Pass detail/);    });
 
     test('with no source, the action check says it did not run', async () => {
         const { structured, text } = await check({
@@ -208,7 +244,7 @@ suite('check_inputs over MCP - the input preflight contract', function () {
         });
         assert.strictEqual(structured.source, null);
         assert.deepStrictEqual(structured.checks.find(item => item.name === 'decision_tables')?.state, 'skipped');
-        assert.match(text, /decision_tables did not run: no SWAT\+ source was given/);
+        assert.match(text, /^!! decision_tables NOT RUN: no SWAT\+ source was given/m);
     });
 
     test('a check that cannot run is an error result with its code', async () => {
