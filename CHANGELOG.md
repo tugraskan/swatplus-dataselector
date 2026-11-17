@@ -4,7 +4,7 @@ All notable changes to the "swatplus-vscode-dataset-selector" extension will be 
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
-## [Unreleased]
+## [0.8.2] - 2026-11-17
 
 ### Changed
 - `check_inputs` takes `source` as the SWAT+ checkout root or its `src` folder. A path
